@@ -1,6 +1,6 @@
-"""Documents router — upload endpoint."""
+"""Documents router — upload endpoint with background processing."""
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.document import DocumentOut
@@ -8,6 +8,7 @@ from src.core.config import settings
 from src.core.database import AsyncSessionLocal
 from src.core.deps import get_current_user_id
 from src.services.knowledge_service import KnowledgeService
+from src.services.document_processor import DocumentProcessor
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -22,6 +23,7 @@ async def get_db():
 
 @router.post("/upload", response_model=DocumentOut, status_code=201)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     knowledge_base_id: int = Form(...),
     user_id: int = Depends(get_current_user_id),
@@ -35,7 +37,7 @@ async def upload_document(
             detail=f"File too large. Max size: {settings.MAX_UPLOAD_SIZE} bytes",
         )
 
-    # Save file to disk (stub — in production use object storage)
+    # Save file to disk
     import os, uuid as uuid_mod
     ext = os.path.splitext(file.filename or "")[1]
     file_id = str(uuid_mod.uuid4())
@@ -53,5 +55,11 @@ async def upload_document(
     await session.commit()
     await session.refresh(doc)
 
-    # TODO: In Fase 6, trigger async document processing (parse + embed to Qdrant)
+    # Trigger background processing (parse → chunk → embed → Qdrant)
+    background_tasks.add_task(
+        DocumentProcessor().process_document,
+        doc.id,
+        knowledge_base_id,
+    )
+
     return DocumentOut.model_validate(doc)

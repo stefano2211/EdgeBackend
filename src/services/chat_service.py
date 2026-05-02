@@ -87,9 +87,17 @@ class ChatService:
         # Current query (with RAG context if applicable)
         query = request.query
         if request.knowledge_base_id:
-            context = await rag_retrieve(request.knowledge_base_id, request.query)
+            context = await rag_retrieve(
+                request.knowledge_base_id,
+                request.query,
+                top_k=5,
+            )
             if context:
-                query = f"Context:\n{context}\n\nQuestion: {request.query}"
+                query = (
+                    f"{context}\n\n"
+                    f"Answer the question using ONLY the sources above. "
+                    f"If no relevant source is found, say you do not know."
+                )
 
         messages.append({"role": "user", "content": query})
         return messages
