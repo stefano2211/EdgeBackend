@@ -4,7 +4,7 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-from src.persistencia.models.base import Base
+from src.persistencia.models import Base
 from src.core.config import settings
 
 # ── Alembic Config ──

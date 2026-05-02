@@ -43,9 +43,8 @@ def create_app() -> FastAPI:
     async def health_check():
         return {"status": "ok"}
 
-    # ── Routers will be mounted here in Phase 2 ──
-    # from src.api.v1.routers import router as api_v1_router
-    # app.include_router(api_v1_router, prefix="/api/v1")
+    from src.api.v1.router import router as api_v1_router
+    app.include_router(api_v1_router)
 
     return app
 
