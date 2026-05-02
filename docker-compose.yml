@@ -1,0 +1,285 @@
+services:
+  # ── PostgreSQL ─────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: edge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-edge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edge}
+      POSTGRES_DB: ${POSTGRES_DB:-edgebackend}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql/data/pgdata
+      - ./docker/init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - max_connections=200
+      - -c
+      - log_min_duration_statement=1000
+    networks:
+      - edge-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ── Qdrant ─────────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: edge-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__LOG_LEVEL: INFO
+      QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS: 8
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - ./docker/qdrant/config.yaml:/qdrant/config/production.yaml:ro
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - edge-network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # ── Redis ──────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: edge-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - edge-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ── vLLM ─────────────────────────────────────────────────────────
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: edge-vllm
+    restart: unless-stopped
+    ipc: host
+    shm_size: 16gb
+    profiles:
+      - vllm
+      - gpu
+    ports:
+      - "8001:8000"
+    volumes:
+      - vllm-hf-cache:/root/.cache/huggingface
+      - vllm-vllm-cache:/root/.cache/vllm
+      - ./models/lora-adapters:/models/lora:ro
+    environment:
+      VLLM_MODEL_NAME: ${VLLM_MODEL_NAME:-Qwen/Qwen3.5-9B-Instruct}
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      HF_HOME: /root/.cache/huggingface
+      NVIDIA_VISIBLE_DEVICES: "0"
+      CUDA_VISIBLE_DEVICES: "0"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    command: >
+      --model ${VLLM_MODEL_NAME:-Qwen/Qwen3.5-9B-Instruct}
+      --dtype auto
+      --max-model-len 131072
+      --gpu-memory-utilization 0.88
+      --enable-prefix-caching
+      --enable-chunked-prefill
+      --max-num-batched-tokens 8192
+      --max-num-seqs 8
+      --reasoning-parser qwen3
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --enable-lora
+      --lora-modules historical-expert=/models/lora/historical browser-expert=/models/lora/browser
+      --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
+      --performance-mode interactivity
+      --uvicorn-log-level info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - edge-network
+
+  # ── Ollama ────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: edge-ollama
+    restart: unless-stopped
+    profiles:
+      - ollama
+      - gpu
+    ipc: host
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama/models
+      - ./docker/ollama/entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      OLLAMA_KEEP_ALIVE: "24h"
+      OLLAMA_NUM_PARALLEL: "4"
+      OLLAMA_MAX_LOADED_MODELS: "2"
+      OLLAMA_HOST: "0.0.0.0"
+      OLLAMA_PORT: "11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - edge-network
+
+  # ── Backend FastAPI ────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: edge-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-edge}:${POSTGRES_PASSWORD:-edge}@postgres:5432/${POSTGRES_DB:-edgebackend}
+      DATABASE_POOL_SIZE: 20
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      # vLLM
+      VLLM_ENABLED: ${VLLM_ENABLED:-True}
+      VLLM_BASE_URL: http://vllm:8000/v1
+      VLLM_API_KEY: ${VLLM_API_KEY:-}
+      VLLM_MODEL: ${VLLM_MODEL_NAME:-Qwen/Qwen3.5-9B-Instruct}
+      VLLM_MAX_TOKENS: 8192
+      # Ollama
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-False}
+      OLLAMA_BASE_URL: http://ollama:11434/v1
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      OLLAMA_MAX_TOKENS: 8192
+      # Default provider
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-vllm}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_SIZE: 104857600
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - edge-network
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+  # ── Nginx Reverse Proxy (opcional) ─────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: edge-nginx
+    restart: unless-stopped
+    profiles:
+      - nginx
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - edge-network
+
+# ── Volúmenes ──────────────────────────────────────────────────
+volumes:
+  pgdata:
+    driver: local
+  qdrant_data:
+    driver: local
+  vllm-hf-cache:
+    driver: local
+  vllm-vllm-cache:
+    driver: local
+  ollama-models:
+    driver: local
+  redis_data:
+    driver: local
+  uploads:
+    driver: local
+
+# ── Red ──────────────────────────────────────────────────────────
+networks:
+  edge-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
