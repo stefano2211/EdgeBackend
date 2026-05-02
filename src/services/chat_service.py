@@ -1,8 +1,7 @@
-"""Chat service: conversation management + streaming responses (mock in Fase 3)."""
+"""Chat service: conversation management + LLM streaming responses."""
 
 import asyncio
 import json
-import uuid
 from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +13,9 @@ from src.persistencia.models.message import Message
 from src.persistencia.repositories.conversation_repository import ConversationRepository
 from src.persistencia.repositories.message_repository import MessageRepository
 from src.ia.system1 import system1_route
+from src.ia.llm_client import get_llm_client
+from src.ia.rag_tool import rag_retrieve
+from src.ia.agent_orchestrator import AgentOrchestrator
 
 
 class ChatService:
@@ -63,6 +65,35 @@ class ChatService:
             return []
         return await self.msg_repo.list_by_conversation(conv.id)
 
+    async def _build_messages(
+        self, request: ChatRequest, conversation_id: int
+    ) -> list[dict[str, str]]:
+        """Build OpenAI-compatible message list: system + history + user query."""
+        messages: list[dict[str, str]] = []
+
+        # System prompt
+        system_prompt = "You are a helpful assistant."
+        if request.model_id:
+            # Try to load custom system prompt from ModelConfig (optional)
+            pass
+        messages.append({"role": "system", "content": system_prompt})
+
+        # History (last 10 messages)
+        history = await self.msg_repo.list_by_conversation(conversation_id)
+        for msg in history[-10:]:
+            if msg.role in ("user", "assistant"):
+                messages.append({"role": msg.role, "content": msg.content})
+
+        # Current query (with RAG context if applicable)
+        query = request.query
+        if request.knowledge_base_id:
+            context = await rag_retrieve(request.knowledge_base_id, request.query)
+            if context:
+                query = f"Context:\n{context}\n\nQuestion: {request.query}"
+
+        messages.append({"role": "user", "content": query})
+        return messages
+
     async def process_stream(
         self, request: ChatRequest, user_id: int
     ) -> AsyncIterator[dict]:
@@ -90,34 +121,62 @@ class ChatService:
         full_content = ""
         reasoning_content = ""
 
-        if route == "simple":
-            # Mock simple response for Fase 3
-            response_text = f"Echo: {request.query}"
-            for word in response_text.split():
-                token = word + " "
-                full_content += token
-                yield {"type": "token", "content": token}
-                await asyncio.sleep(0.02)  # simulate streaming
-        else:
-            # Complex route — subagent events (stub)
-            yield {
-                "type": "subagent",
-                "name": "rag-mcp-expert",
-                "status": "running",
-                "input": {"query": request.query},
-            }
-            await asyncio.sleep(0.1)
-            response_text = "[Complex analysis stub — Sistema 2 orchestrator will handle this in Fase 4]"
+        # Try to use real LLM; fallback to mock if not available
+        try:
+            llm = get_llm_client()
+        except RuntimeError:
+            llm = None
+
+        if llm is None:
+            # Fallback: mock response when no LLM is available
+            response_text = f"[LLM unavailable — Echo: {request.query}]"
             for word in response_text.split():
                 token = word + " "
                 full_content += token
                 yield {"type": "token", "content": token}
                 await asyncio.sleep(0.02)
-            yield {
-                "type": "subagent",
-                "name": "rag-mcp-expert",
-                "status": "complete",
-            }
+        else:
+            messages = await self._build_messages(request, conv.id)
+
+            if route == "complex":
+                # Emit subagent event before orchestration (stub)
+                yield {
+                    "type": "subagent",
+                    "name": "rag-mcp-expert",
+                    "status": "running",
+                    "input": {"query": request.query},
+                }
+
+            # Call LLM with streaming
+            params = request.params or {}
+            stream = await llm.chat_completion(
+                messages=messages,
+                temperature=params.get("temperature", 0.7),
+                max_tokens=params.get("max_tokens"),
+                stream=True,
+            )
+
+            async for chunk in stream:
+                choices = chunk.get("choices", [])
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {})
+
+                if "content" in delta and delta["content"]:
+                    token = delta["content"]
+                    full_content += token
+                    yield {"type": "token", "content": token}
+
+                if "reasoning_content" in delta and delta["reasoning_content"]:
+                    reasoning_content += delta["reasoning_content"]
+                    yield {"type": "reasoning", "content": delta["reasoning_content"]}
+
+            if route == "complex":
+                yield {
+                    "type": "subagent",
+                    "name": "rag-mcp-expert",
+                    "status": "complete",
+                }
 
         yield {"type": "done", "full_content": full_content.strip()}
 
@@ -128,7 +187,7 @@ class ChatService:
             content=full_content.strip(),
             reasoning_content=reasoning_content or None,
             meta={
-                "model": settings.VLLM_MODEL if settings.VLLM_ENABLED else settings.OLLAMA_MODEL,
+                "model": llm.model if llm else "mock",
                 "provider": settings.DEFAULT_LLM_PROVIDER,
                 "route": route,
             },
@@ -151,17 +210,34 @@ class ChatService:
         history = await self.msg_repo.list_by_conversation(conv.id)
         route = system1_route(request, history)
 
-        if route == "simple":
-            content = f"Echo: {request.query}"
+        # Try to use real LLM; fallback to mock
+        try:
+            llm = get_llm_client()
+        except RuntimeError:
+            llm = None
+
+        if llm is None:
+            content = f"[LLM unavailable — Echo: {request.query}]"
+            reasoning = None
         else:
-            content = "[Complex analysis stub — Sistema 2 orchestrator will handle this in Fase 4]"
+            messages = await self._build_messages(request, conv.id)
+            params = request.params or {}
+            resp = await llm.chat_completion(
+                messages=messages,
+                temperature=params.get("temperature", 0.7),
+                max_tokens=params.get("max_tokens"),
+                stream=False,
+            )
+            content = resp["choices"][0]["message"]["content"]
+            reasoning = resp["choices"][0]["message"].get("reasoning_content")
 
         await self.msg_repo.create_message(
             conversation_id=conv.id,
             role="assistant",
             content=content,
+            reasoning_content=reasoning,
             meta={
-                "model": settings.VLLM_MODEL if settings.VLLM_ENABLED else settings.OLLAMA_MODEL,
+                "model": llm.model if llm else "mock",
                 "provider": settings.DEFAULT_LLM_PROVIDER,
                 "route": route,
             },
@@ -171,6 +247,6 @@ class ChatService:
         return {
             "thread_id": conv.thread_id,
             "content": content,
-            "reasoning_content": None,
-            "model": settings.DEFAULT_LLM_PROVIDER,
+            "reasoning_content": reasoning,
+            "model": llm.model if llm else "mock",
         }

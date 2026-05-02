@@ -10,6 +10,13 @@ class ModelConfigCreate(BaseModel):
     tags: list[str] | None = None
     system_prompt: str | None = None
     params: dict | None = None
+    knowledge_ids: list[str] | None = None
+    tool_ids: list[str] | None = None
+    skill_ids: list[str] | None = None
+    capabilities: dict | None = None
+    default_features: dict | None = None
+    builtin_tools: dict | None = None
+    tts_voice: str | None = None
 
 
 class ModelConfigUpdate(BaseModel):
@@ -19,6 +26,13 @@ class ModelConfigUpdate(BaseModel):
     tags: list[str] | None = None
     system_prompt: str | None = None
     params: dict | None = None
+    knowledge_ids: list[str] | None = None
+    tool_ids: list[str] | None = None
+    skill_ids: list[str] | None = None
+    capabilities: dict | None = None
+    default_features: dict | None = None
+    builtin_tools: dict | None = None
+    tts_voice: str | None = None
     is_enabled: bool | None = None
 
 
@@ -32,7 +46,11 @@ class ModelConfigOut(BaseModel):
     params: dict | None = None
     knowledge_ids: list[str] | None = None
     tool_ids: list[str] | None = None
-    capabilities: list[str] | None = None
+    skill_ids: list[str] | None = None
+    capabilities: dict | None = None
+    default_features: dict | None = None
+    builtin_tools: dict | None = None
+    tts_voice: str | None = None
     is_enabled: bool
     created_at: datetime
     updated_at: datetime

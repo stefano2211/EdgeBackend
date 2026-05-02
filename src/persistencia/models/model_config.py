@@ -20,7 +20,11 @@ class ModelConfig(Base):
     params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     knowledge_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     tool_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
-    capabilities: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    skill_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    capabilities: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    default_features: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    builtin_tools: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    tts_voice: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
