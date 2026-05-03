@@ -77,6 +77,6 @@ async def get_settings():
         "vllm_enabled": settings.VLLM_ENABLED,
         "ollama_enabled": settings.OLLAMA_ENABLED,
         "embeddings_model": settings.EMBEDDINGS_MODEL,
-        "upload_dir": settings.UPLOAD_DIR,
+        "minio_bucket": settings.MINIO_BUCKET,
         "max_upload_size": settings.MAX_UPLOAD_SIZE,
     }

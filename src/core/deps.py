@@ -14,6 +14,18 @@ from src.persistencia.repositories.user_repository import UserRepository
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
+# ── Storage dependency ──
+
+def get_storage():
+    """Yield a MinIO storage repository instance.
+
+    Can be swapped for a mock in tests by overriding this dependency.
+    Lazy import prevents startup failure when minio is not installed.
+    """
+    from src.persistencia.storage import MinioStorageRepository
+    return MinioStorageRepository()
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:

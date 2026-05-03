@@ -49,8 +49,15 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    # ── Upload ──
-    UPLOAD_DIR: str = "./uploads"
+    # ── MinIO / S3 Object Storage ──
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
+    MINIO_BUCKET: str = "documents"
+    MINIO_SECURE: bool = False
+    MINIO_REGION: str = "us-east-1"
+
+    # ── Upload limits ──
     MAX_UPLOAD_SIZE: int = 104_857_600  # 100 MB
 
     # ── Embeddings ──

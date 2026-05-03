@@ -1,17 +1,16 @@
-"""Background document processing: parse → chunk → embed → index in Qdrant."""
+"""Background document processing: download from MinIO → parse → chunk → embed → index in Qdrant."""
 
-import asyncio
-import os
+from __future__ import annotations
 
-from src.core.config import settings
 from src.core.logging import logging
 from src.core.database import AsyncSessionLocal
-from src.services.document_parser import parse_document, ParsedDocument
+from src.services.document_parser import parse_document_bytes, ParsedDocument
 from src.services.chunking_service import chunk_documents, Chunk
 from src.services.embedding_service import embed_texts
 from src.persistencia.vector import VectorRepository
 from src.persistencia.vector.vector_store_port import VectorStorePort
 from src.persistencia.repositories.document_repository import DocumentRepository
+from src.persistencia.storage.storage_port import StoragePort
 
 logger = logging.getLogger(__name__)
 
@@ -21,15 +20,21 @@ class DocumentProcessor:
     End-to-end document processing pipeline.
 
     Pipeline:
-    1. Parse document (PDF/TXT/CSV/JSON → text + per-page metadata)
-    2. Chunk with metadata preservation (RecursiveCharacterTextSplitter)
-    3. Generate embeddings (batch_size=64, normalized)
-    4. Upsert chunks + metadata to Qdrant
-    5. Update document status
+    1. Download bytes from MinIO/S3 (file_id is the full S3 key)
+    2. Parse document bytes (PDF/TXT/CSV/JSON → text + per-page metadata)
+    3. Chunk with metadata preservation (RecursiveCharacterTextSplitter)
+    4. Generate embeddings (batch_size=64, normalized)
+    5. Upsert chunks + metadata to Qdrant
+    6. Update document status
     """
 
-    def __init__(self, vector_repo: VectorStorePort | None = None) -> None:
+    def __init__(
+        self,
+        vector_repo: VectorStorePort | None = None,
+        storage: StoragePort | None = None,
+    ) -> None:
         self._vector_repo = vector_repo
+        self._storage = storage
 
     @property
     def vector_repo(self) -> VectorStorePort:
@@ -37,20 +42,16 @@ class DocumentProcessor:
             self._vector_repo = VectorRepository()
         return self._vector_repo
 
-    async def _resolve_file_path(self, file_id: str) -> str | None:
-        """Resolve file path on disk (non-blocking via thread)."""
-        base_path = os.path.join(settings.UPLOAD_DIR, file_id)
-        if await asyncio.to_thread(os.path.exists, base_path):
-            return base_path
-        files = await asyncio.to_thread(os.listdir, settings.UPLOAD_DIR)
-        for f in files:
-            if f.startswith(file_id):
-                return os.path.join(settings.UPLOAD_DIR, f)
-        return None
+    async def _download(self, s3_key: str) -> bytes:
+        """Download document bytes from object storage."""
+        if self._storage is None:
+            from src.persistencia.storage import MinioStorageRepository
+            self._storage = MinioStorageRepository()
+        return await self._storage.download(s3_key)
 
-    async def _parse(self, file_path: str) -> ParsedDocument:
-        """Parse document asynchronously."""
-        return await parse_document(file_path)
+    async def _parse(self, data: bytes, filename: str) -> ParsedDocument:
+        """Parse document bytes asynchronously."""
+        return await parse_document_bytes(data, filename=filename)
 
     async def _chunk(
         self,
@@ -114,13 +115,13 @@ class DocumentProcessor:
                 doc.status = "processing"
                 await session.commit()
 
-                # 1. Resolve file path
-                file_path = await self._resolve_file_path(doc.file_id)
-                if not file_path:
-                    raise FileNotFoundError(f"File not found for document {doc_id}")
+                # 1. Download from MinIO/S3 (file_id is the full S3 key)
+                data = await self._download(doc.file_id)
+                if not data:
+                    raise ValueError(f"Empty file downloaded for document {doc_id}")
 
                 # 2. Parse
-                parsed = await self._parse(file_path)
+                parsed = await self._parse(data, doc.filename)
                 if not parsed.text.strip():
                     raise ValueError("No text extracted from document")
 

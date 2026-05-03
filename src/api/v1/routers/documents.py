@@ -1,11 +1,15 @@
-"""Documents router — upload endpoint with background processing."""
+"""Documents router — upload endpoint with MinIO/S3 storage and background processing."""
+
+import os
+import uuid as uuid_mod
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.document import DocumentOut
 from src.core.config import settings
-from src.core.deps import get_db, get_current_user_id
+from src.core.deps import get_db, get_current_user_id, get_storage
+from src.persistencia.storage.storage_port import StoragePort
 from src.services.document_service import DocumentService
 from src.services.document_processor import DocumentProcessor
 
@@ -19,7 +23,10 @@ async def upload_document(
     knowledge_base_id: int = Form(...),
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
+    storage: StoragePort = Depends(get_storage),
 ):
+    """Upload a document into a KnowledgeBase (stored in MinIO/S3, processed asynchronously)."""
+
     # Validate file size
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
@@ -28,27 +35,28 @@ async def upload_document(
             detail=f"File too large. Max size: {settings.MAX_UPLOAD_SIZE} bytes",
         )
 
-    # Save file to disk
-    import os, uuid as uuid_mod
+    # Build S3 key: kb/{knowledge_base_id}/{uuid}.{ext}
     ext = os.path.splitext(file.filename or "")[1]
     file_id = str(uuid_mod.uuid4())
-    upload_path = os.path.join(settings.UPLOAD_DIR, f"{file_id}{ext}")
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    with open(upload_path, "wb") as f:
-        f.write(content)
+    s3_key = f"kb/{knowledge_base_id}/{file_id}{ext}"
 
-    # Create document record
-    service = DocumentService(session)
-    doc = await service.create_document(knowledge_base_id, user_id, file.filename or "unknown")
+    # Upload to MinIO/S3
+    content_type = file.content_type or "application/octet-stream"
+    await storage.upload(s3_key, content, content_type=content_type)
 
-    # Update file_id to match our generated UUID
-    doc.file_id = file_id
-    await session.commit()
-    await session.refresh(doc)
+    # Create document record with S3 key as file_id
+    service = DocumentService(session, storage=storage)
+    doc = await service.create_document(
+        knowledge_base_id,
+        user_id,
+        file.filename or "unknown",
+        s3_key=s3_key,
+        content_type=content_type,
+    )
 
     # Trigger background processing (parse → chunk → embed → Qdrant)
     background_tasks.add_task(
-        DocumentProcessor().process_document,
+        DocumentProcessor(storage=storage).process_document,
         doc.id,
         knowledge_base_id,
     )
