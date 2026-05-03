@@ -15,10 +15,8 @@ class VectorStorePort(Protocol):
         knowledge_base_id: int | str,
         chunks: list[str],
         embeddings: list[list[float]],
-        metadata: dict[str, Any],
+        metadata: list[dict[str, Any]] | dict[str, Any],
         doc_id: int | str,
-        chunk_size: int = 1000,
-        overlap: int = 200,
     ) -> None:
         ...
 
@@ -28,6 +26,7 @@ class VectorStorePort(Protocol):
         query_embedding: list[float],
         top_k: int = 5,
         filter_doc_ids: list[int | str] | None = None,
+        hnsw_ef: int = 128,
     ) -> list[dict[str, Any]]:
         ...
 

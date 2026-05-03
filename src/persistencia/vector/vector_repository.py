@@ -2,12 +2,20 @@
 
 Layer: persistencia/vector (data access layer)
 Mirrors the SQLAlchemy BaseRepository pattern for vector data.
+
+2026 Qdrant best practices applied:
+- Payload indexes for doc_id and filename (fast filtering + deletion)
+- SearchParams with tuned hnsw_ef for recall/speed balance
+- Per-chunk metadata preserved in each PointStruct
+- Batch upsert with wait=False for background ingestion
 """
+
+from __future__ import annotations
 
 import uuid
 from typing import Any
 
-from qdrant_client.models import PointStruct
+from qdrant_client.models import PointStruct, SearchParams
 
 from src.core.logging import logging
 from src.persistencia.vector.qdrant_client import (
@@ -32,27 +40,44 @@ class VectorRepository:
         knowledge_base_id: int | str,
         chunks: list[str],
         embeddings: list[list[float]],
-        metadata: dict[str, Any],
+        metadata: list[dict[str, Any]] | dict[str, Any],
         doc_id: int | str,
-        chunk_size: int = 1000,
-        overlap: int = 200,
     ) -> None:
-        """Upsert document chunks into the KB collection."""
+        """Upsert document chunks into the KB collection.
+
+        Args:
+            metadata: Per-chunk metadata list (parallel to chunks) OR a single
+                dict applied to every chunk (legacy fallback).
+        """
         await ensure_collection(knowledge_base_id, dimension=len(embeddings[0]))
         name = collection_name(knowledge_base_id)
 
+        # Ensure metadata is per-chunk
+        if isinstance(metadata, dict):
+            meta_list: list[dict] = [metadata] * len(chunks)
+        else:
+            meta_list = list(metadata)
+            if len(meta_list) < len(chunks):
+                meta_list += [{}] * (len(chunks) - len(meta_list))
+
         points: list[PointStruct] = []
-        for i, (chunk, vector) in enumerate(zip(chunks, embeddings)):
+        for i, (chunk_text, vector, meta) in enumerate(zip(chunks, embeddings, meta_list)):
+            payload = {
+                "text": chunk_text,
+                "chunk_index": i,
+                "doc_id": str(doc_id),
+                "filename": meta.get("filename", ""),
+                **meta,
+            }
+            # Ensure page_number travels if present
+            if "page_number" in meta and meta["page_number"] is not None:
+                payload["page_number"] = meta["page_number"]
+
             points.append(
                 PointStruct(
                     id=str(uuid.uuid4()),
                     vector=vector,
-                    payload={
-                        "text": chunk,
-                        "chunk_index": i,
-                        "doc_id": doc_id,
-                        **metadata,
-                    },
+                    payload=payload,
                 )
             )
 
@@ -76,8 +101,14 @@ class VectorRepository:
         query_embedding: list[float],
         top_k: int = 5,
         filter_doc_ids: list[int | str] | None = None,
+        hnsw_ef: int = 128,
     ) -> list[dict[str, Any]]:
-        """Search for top-k similar chunks. Optional filter by doc_id list."""
+        """Search for top-k similar chunks. Optional filter by doc_id list.
+
+        Args:
+            hnsw_ef: HNSW exploration factor. Higher = better recall, slower.
+                64-128 is the sweet spot for ~10k-100k chunks per collection.
+        """
         name = collection_name(knowledge_base_id)
 
         query_filter = None
@@ -98,6 +129,7 @@ class VectorRepository:
             limit=top_k,
             with_payload=True,
             query_filter=query_filter,
+            search_params=SearchParams(hnsw_ef=hnsw_ef, exact=False),
         )
 
         return [

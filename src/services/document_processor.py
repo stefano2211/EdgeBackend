@@ -80,19 +80,14 @@ class DocumentProcessor:
         doc_id: int,
     ) -> None:
         """Upsert chunks with per-chunk metadata to vector store."""
-        # Build per-chunk payloads so page numbers etc. travel with each vector
         chunk_texts = [c.text for c in chunks]
-        # The repository already handles bulk upsert; metadata is global per call.
-        # For per-chunk metadata we need to enrich the payload.
-        # We merge chunk-specific metadata into the global metadata dict.
-        # This is a design trade-off: Qdrant PointStruct has a single payload per point.
-        # We pass the first chunk's metadata as base and let the repo handle it.
-        base_meta = chunks[0].metadata if chunks else {}
+        # Each chunk carries its own metadata (chunk_index, filename, page_number, etc.)
+        meta_list = [c.metadata for c in chunks]
         await self.vector_repo.upsert_chunks(
             knowledge_base_id=knowledge_base_id,
             chunks=chunk_texts,
             embeddings=embeddings,
-            metadata=base_meta,
+            metadata=meta_list,
             doc_id=doc_id,
         )
 
