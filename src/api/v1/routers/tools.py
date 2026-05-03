@@ -1,6 +1,6 @@
 """Tools router — functional CRUD for ToolConfig and MCPSource."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.tool import (
@@ -114,7 +114,7 @@ async def delete_source(
     return None
 
 
-# ── Discovery (stubs) ──
+# ── Discovery (real MCP Service) ──
 
 @router.get("/mcp/discover")
 async def discover_tools(
@@ -124,29 +124,46 @@ async def discover_tools(
     method: str = Query("GET"),
     user_id: int = Depends(get_current_user_id),
 ):
-    """Stub: discover available tools from an MCP endpoint."""
-    return [
-        {
-            "name": "get_items",
-            "description": f"Retrieve items from {url}",
-            "inputSchema": {"type": "object", "properties": {}},
-        }
-    ]
+    """Dynamically discover tools from an MCP server or REST API endpoint."""
+    from src.services.mcp_service import MCPService
+
+    service = MCPService()
+    try:
+        return await service.discover_tools(url, is_stdio=is_stdio, is_resource=is_resource, method=method)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/sources/{source_id}/discover")
 async def discover_source_tools(
     source_id: int,
+    method: str = Query("GET"),
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    """Stub: discover tools from a registered MCP source."""
+    """Discover tools from a registered MCP source."""
+    from src.services.mcp_service import MCPService
+
     service = MCPSourceService(session)
     source = await service.get_source(source_id)
-    return [
-        {
-            "name": f"tool_from_{source.name}",
-            "description": f"Auto-discovered tool from {source.url}",
-            "inputSchema": {"type": "object", "properties": {}},
-        }
-    ]
+    mcp_service = MCPService()
+    try:
+        return await mcp_service.discover_tools(
+            source.url, is_stdio=(source.type == "stdio"), method=method
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/sources/{source_id}/sync")
+async def sync_source_tools(
+    source_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_db),
+):
+    """Connect to an MCP source, discover tools, and auto-register them."""
+    service = MCPSourceService(session)
+    try:
+        return await service.sync_source_tools(source_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
