@@ -24,22 +24,22 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: Optional[str] = None
 
     # ── vLLM ──
-    VLLM_ENABLED: bool = True
+    VLLM_ENABLED: bool = False
     VLLM_BASE_URL: str = "http://vllm:8000/v1"
     VLLM_API_KEY: Optional[str] = None
     VLLM_MODEL: str = "Qwen/Qwen3.5-9B-Instruct"
     VLLM_MAX_TOKENS: int = 8192
 
     # ── Ollama ──
-    OLLAMA_ENABLED: bool = False
-    OLLAMA_BASE_URL: str = "http://ollama:11434/v1"
-    OLLAMA_MODEL: str = "qwen3.5:9b"
+    OLLAMA_ENABLED: bool = True
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    OLLAMA_MODEL: str = "qwen3.5:4b"
     OLLAMA_MAX_TOKENS: int = 8192
 
     # ── LLM Provider Selection ──
     # "auto" = detect which backend is available (vllm first, then ollama)
     # "vllm" | "ollama" = force a specific provider
-    DEFAULT_LLM_PROVIDER: str = "auto"
+    DEFAULT_LLM_PROVIDER: str = "ollama"
 
     # ── Redis ──
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    EVENT_INGEST_API_KEY: str = "change-me-event-ingest-key"
+
+    # ── CORS ──
+    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # ── MinIO / S3 Object Storage ──
     MINIO_ENDPOINT: str = "localhost:9000"

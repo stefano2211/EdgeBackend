@@ -34,6 +34,15 @@ class ManualEventPayload(BaseModel):
     raw_payload: dict | None = None
 
 
+class EventIngestPayload(BaseModel):
+    tenant_id: str = "default"
+    source_type: EventSourceType = EventSourceType.sensor
+    severity: EventSeverity
+    title: str
+    description: str
+    raw_payload: dict | None = None
+
+
 class EventOut(BaseModel):
     id: int
     tenant_id: str

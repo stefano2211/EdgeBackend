@@ -14,12 +14,6 @@ services:
       - ./docker/init-scripts:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
     command:
       - postgres
       - -c
@@ -57,12 +51,6 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     networks:
       - edge-network
     deploy:
@@ -80,11 +68,6 @@ services:
       - redis_data:/data
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
     networks:
       - edge-network
     deploy:
@@ -106,12 +89,6 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     networks:
       - edge-network
     deploy:
@@ -165,12 +142,6 @@ services:
       --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
       --performance-mode interactivity
       --uvicorn-log-level info
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
     networks:
       - edge-network
 
@@ -201,12 +172,6 @@ services:
             - driver: nvidia
               device_ids: ['0']
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
     networks:
       - edge-network
 
@@ -219,14 +184,10 @@ services:
     container_name: edge-backend
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
+      - postgres
+      - qdrant
+      - redis
+      - minio
     ports:
       - "8000:8000"
     environment:
@@ -237,18 +198,18 @@ services:
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       # vLLM
-      VLLM_ENABLED: ${VLLM_ENABLED:-True}
+      VLLM_ENABLED: ${VLLM_ENABLED:-False}
       VLLM_BASE_URL: http://vllm:8000/v1
       VLLM_API_KEY: ${VLLM_API_KEY:-}
       VLLM_MODEL: ${VLLM_MODEL_NAME:-Qwen/Qwen3.5-9B-Instruct}
       VLLM_MAX_TOKENS: 8192
       # Ollama
-      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-False}
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-True}
       OLLAMA_BASE_URL: http://ollama:11434/v1
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
       OLLAMA_MAX_TOKENS: 8192
       # Default provider
-      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-vllm}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-ollama}
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY}
       JWT_ALGORITHM: HS256
@@ -262,12 +223,6 @@ services:
       MINIO_REGION: us-east-1
       MAX_UPLOAD_SIZE: 104857600
     volumes: []
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
     networks:
       - edge-network
     deploy:
@@ -283,8 +238,7 @@ services:
     profiles:
       - nginx
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     ports:
       - "80:80"
       - "443:443"

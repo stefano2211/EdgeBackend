@@ -48,6 +48,14 @@ class DocumentService:
         await commit_and_refresh(self.session, doc)
         return doc
 
+    async def list_documents(
+        self, knowledge_base_id: int | None = None
+    ) -> list[Document]:
+        """List documents, optionally filtered by knowledge base."""
+        if knowledge_base_id is not None:
+            return await self.repo.list_by_knowledge_base(knowledge_base_id)
+        return await self.repo.list()
+
     async def delete_document(self, doc_id: int) -> None:
         """Delete document from DB and remove its object from MinIO."""
         doc = await self.repo.get_by_id(doc_id)

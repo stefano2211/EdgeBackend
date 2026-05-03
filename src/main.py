@@ -1,6 +1,7 @@
 """FastAPI application factory."""
 
 import asyncio
+import logging as std_logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -16,7 +17,6 @@ from src.services.event_broadcast import get_event_broadcast
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
-    import logging as std_logging
     logger = std_logging.getLogger(__name__)
     try:
         client = await init_llm_client()
@@ -48,17 +48,20 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    origins = settings.CORS_ORIGINS if hasattr(settings, "CORS_ORIGINS") else []
     if settings.is_dev:
         logger = std_logging.getLogger(__name__)
-        logger.warning("CORS is open in development mode (allow_origins=[*])")
+    # ── CORS ──
+    # In dev, allow common frontend ports; in prod, use configured origins only.
+    origins = settings.CORS_ORIGINS
+    if settings.is_dev:
         origins = ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_credentials=True,
+        allow_credentials=not settings.is_dev,  # wildcard + credentials is a browser violation
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Authorization", "X-Request-ID"],
     )
 
     @app.get("/health", tags=["health"])

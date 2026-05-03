@@ -3,10 +3,10 @@
 import os
 import uuid as uuid_mod
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.v1.schemas.document import DocumentOut
+from src.api.v1.schemas.document import DocumentOut, DocumentListResponse
 from src.core.config import settings
 from src.core.deps import get_db, get_current_user_id, get_storage
 from src.persistencia.storage.storage_port import StoragePort
@@ -62,3 +62,31 @@ async def upload_document(
     )
 
     return DocumentOut.model_validate(doc)
+
+
+@router.get("", response_model=DocumentListResponse)
+async def list_documents(
+    knowledge_base_id: int | None = Query(None),
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_db),
+):
+    """List uploaded documents, optionally filtered by knowledge base."""
+    service = DocumentService(session)
+    docs = await service.list_documents(knowledge_base_id=knowledge_base_id)
+    return DocumentListResponse(
+        items=[DocumentOut.model_validate(d) for d in docs],
+        total=len(docs),
+    )
+
+
+@router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    doc_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_db),
+    storage: StoragePort = Depends(get_storage),
+):
+    """Delete a document (DB record + MinIO object + Qdrant vectors)."""
+    service = DocumentService(session, storage=storage)
+    await service.delete_document(doc_id)
+    return None

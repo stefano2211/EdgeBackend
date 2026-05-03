@@ -80,5 +80,5 @@ async def list_provider_models(
     if provider == "vllm":
         return [{"id": "Qwen/Qwen3.5-9B-Instruct", "name": "Qwen 3.5 9B"}]
     if provider == "ollama":
-        return [{"id": "qwen3.5:9b", "name": "Qwen 3.5 9B"}]
+        return [{"id": "qwen3.5:4b", "name": "Qwen 3.5 4B"}]
     return []

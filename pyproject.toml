@@ -39,6 +39,7 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.0.0",
     "pgvector>=0.3.0",
     "mcp>=1.0.0",
+    "minio>=7.2.0",
 ]
 
 [tool.setuptools.packages.find]

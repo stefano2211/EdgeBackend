@@ -2,7 +2,7 @@
 
 from typing import AsyncGenerator, Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,3 +53,13 @@ async def require_admin(
     user = await repo.get_by_id(user_id)
     if not user or getattr(user, "role", None) != "admin":
         raise PermissionDenied("Admin access required")
+
+
+def verify_api_key(x_api_key: str | None = Header(None, alias="X-API-Key")) -> str:
+    """Dependency for external event ingestion via API key."""
+    if not x_api_key or x_api_key != settings.EVENT_INGEST_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing X-API-Key",
+        )
+    return x_api_key

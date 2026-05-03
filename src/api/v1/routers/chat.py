@@ -36,6 +36,9 @@ async def chat_stream(
     async def event_generator():
         try:
             async for event in service.process_stream(request, user_id):
+                # Handle both dicts and Pydantic models
+                if hasattr(event, "model_dump"):
+                    event = event.model_dump()
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
             logging.getLogger(__name__).exception("Chat stream error: %s", exc)

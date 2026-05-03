@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.exceptions import NotFoundError, ValidationError
 from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
-from src.api.v1.schemas.event import ManualEventPayload, ApprovalPayload
+from src.api.v1.schemas.event import ManualEventPayload, EventIngestPayload, ApprovalPayload
 from src.services.event_broadcast import get_event_broadcast
 from src.services._helpers import commit_and_refresh
 
@@ -52,6 +52,23 @@ class EventService:
             description=payload.description,
             raw_payload=payload.raw_payload,
             triggered_by_user_id=triggered_by_user_id,
+        )
+        await self.repo.create(event)
+        await commit_and_refresh(self.session, event)
+        await self._broadcast_event_update(event)
+        return event
+
+    async def ingest_event(self, payload: EventIngestPayload) -> Event:
+        """Ingest an external event (sensor/webhook) without requiring a user."""
+        event = Event(
+            tenant_id=payload.tenant_id,
+            source_type=payload.source_type.value,
+            severity=payload.severity.value,
+            status="pending",
+            title=payload.title,
+            description=payload.description,
+            raw_payload=payload.raw_payload,
+            triggered_by_user_id=None,
         )
         await self.repo.create(event)
         await commit_and_refresh(self.session, event)

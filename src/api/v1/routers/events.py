@@ -10,9 +10,10 @@ from src.api.v1.schemas.event import (
     EventListResponse,
     EventOut,
     ManualEventPayload,
+    EventIngestPayload,
     ApprovalPayload,
 )
-from src.core.deps import get_db, get_current_user_id
+from src.core.deps import get_db, get_current_user_id, verify_api_key
 from src.services.event_service import EventService
 from src.services.event_broadcast import get_event_broadcast
 
@@ -51,6 +52,19 @@ async def get_event(
 ):
     service = EventService(session)
     event = await service.get_event(event_id)
+    return EventOut.model_validate(event)
+
+
+@router.post("/ingest", response_model=EventOut, status_code=201)
+async def ingest_external_event(
+    payload: EventIngestPayload,
+    api_key: str = Depends(verify_api_key),
+    session: AsyncSession = Depends(get_db),
+):
+    """Ingest an event from external sensor/webhook (X-API-Key required)."""
+    service = EventService(session)
+    event = await service.ingest_event(payload)
+    await service.start_analysis(event.id)
     return EventOut.model_validate(event)
 
 
@@ -100,7 +114,12 @@ async def event_stream(user_id: int = Depends(get_current_user_id)):
         try:
             while True:
                 data = await queue.get()
-                yield data
+                # Ensure SSE data: prefix if not already formatted
+                if isinstance(data, str) and data.startswith("data:"):
+                    yield data
+                else:
+                    import json
+                    yield f"data: {json.dumps(data)}\n\n"
         except Exception as exc:
             logging.getLogger(__name__).exception("Event SSE stream error: %s", exc)
         finally:
