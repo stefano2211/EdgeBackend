@@ -10,6 +10,7 @@ from src.ia.langchain_models import get_chat_model
 from src.ia.subagents.registry import get_available_subagents, get_subagent_descriptions
 from src.ia.tools import rag_retrieve, mcp_execute, browser_navigate
 from src.ia.memory import get_checkpointer, get_store
+from src.ia.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from src.core.logging import logging
 
 logger = logging.getLogger(__name__)
@@ -39,22 +40,8 @@ def create_orchestrator(
     if system_prompt_override:
         prompt = system_prompt_override
     else:
-        prompt = (
-            "You are an intelligent task orchestrator. "
-            "Your job is to analyze user requests and delegate to the most "
-            "appropriate specialized sub-agent or tool.\n\n"
-            "Available sub-agents (invoke via the built-in task tool):\n"
-            f"{get_subagent_descriptions()}\n\n"
-            "Available direct tools:\n"
-            "- rag_retrieve: Search documents in the knowledge base\n"
-            "- mcp_execute: Execute registered MCP/API tools\n"
-            "- browser_navigate: Navigate to a web URL\n\n"
-            "Guidelines:\n"
-            "1. For document search + API queries, use the industrial-agent\n"
-            "2. For historical analysis and trends, use the historical-agent\n"
-            "3. For web navigation and visual tasks, use the vl-agent\n"
-            "4. For simple tasks, use direct tools instead of sub-agents\n"
-            "5. Always be concise and accurate. Cite sources when possible."
+        prompt = ORCHESTRATOR_SYSTEM_PROMPT.format(
+            subagent_descriptions=get_subagent_descriptions()
         )
 
     logger.info(
