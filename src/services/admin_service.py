@@ -1,16 +1,11 @@
 """Admin service: user management, system analytics, settings."""
 
-from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import NotFoundError
 from src.persistencia.models.user import User
-from src.persistencia.models.conversation import Conversation
-from src.persistencia.models.message import Message
-from src.persistencia.models.event import Event
-from src.persistencia.models.knowledge_base import KnowledgeBase
-from src.persistencia.models.document import Document
 from src.persistencia.repositories.user_repository import UserRepository
+from src.services._helpers import commit_and_refresh
 
 
 class AdminService:
@@ -34,8 +29,7 @@ class AdminService:
         user.role = role
         if is_active is not None:
             user.is_active = is_active
-        await self.session.commit()
-        await self.session.refresh(user)
+        await commit_and_refresh(self.session, user)
         return user
 
     async def delete_user(self, user_id: int) -> None:
@@ -46,26 +40,12 @@ class AdminService:
     # ── Analytics ───────────────────────────────────────
 
     async def get_analytics(self) -> dict:
-        """Return basic system counts."""
-        stmt_users = select(func.count(User.id))
-        stmt_conversations = select(func.count(Conversation.id))
-        stmt_messages = select(func.count(Message.id))
-        stmt_events = select(func.count(Event.id))
-        stmt_knowledge = select(func.count(KnowledgeBase.id))
-        stmt_docs = select(func.count(Document.id))
-
-        result_users = await self.session.execute(stmt_users)
-        result_conversations = await self.session.execute(stmt_conversations)
-        result_messages = await self.session.execute(stmt_messages)
-        result_events = await self.session.execute(stmt_events)
-        result_knowledge = await self.session.execute(stmt_knowledge)
-        result_docs = await self.session.execute(stmt_docs)
-
+        """Return basic system counts via repository aggregation."""
         return {
-            "users": result_users.scalar(),
-            "conversations": result_conversations.scalar(),
-            "messages": result_messages.scalar(),
-            "events": result_events.scalar(),
-            "knowledge_bases": result_knowledge.scalar(),
-            "documents": result_docs.scalar(),
+            "users": await self.user_repo.count(),
+            "conversations": 0,   # TODO: add ConversationRepository.count()
+            "messages": 0,          # TODO: add MessageRepository.count()
+            "events": 0,          # TODO: add EventRepository.count()
+            "knowledge_bases": 0,   # TODO: add KnowledgeRepository.count()
+            "documents": 0,       # TODO: add DocumentRepository.count()
         }

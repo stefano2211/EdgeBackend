@@ -35,9 +35,11 @@ class BaseRepository(Generic[T]):
         return obj
 
     async def update(self, obj: T) -> T:
+        """Merge a detached instance and return the attached version."""
+        merged = await self.session.merge(obj)
         await self.session.flush()
-        await self.session.refresh(obj)
-        return obj
+        await self.session.refresh(merged)
+        return merged
 
     async def delete(self, obj: T) -> None:
         await self.session.delete(obj)

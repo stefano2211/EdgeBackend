@@ -37,3 +37,9 @@ class VectorStorePort(Protocol):
         doc_id: int | str,
     ) -> None:
         ...
+
+    async def delete_collection(
+        self,
+        knowledge_base_id: int | str,
+    ) -> None:
+        ...

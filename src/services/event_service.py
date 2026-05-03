@@ -10,6 +10,7 @@ from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
 from src.api.v1.schemas.event import ManualEventPayload, ApprovalPayload
 from src.services.event_broadcast import get_event_broadcast
+from src.services._helpers import commit_and_refresh
 
 
 class EventService:
@@ -53,7 +54,7 @@ class EventService:
             triggered_by_user_id=triggered_by_user_id,
         )
         await self.repo.create(event)
-        await self.session.commit()
+        await commit_and_refresh(self.session, event)
         await self._broadcast_event_update(event)
         return event
 

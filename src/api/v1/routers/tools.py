@@ -3,9 +3,17 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.v1.schemas.tool import ToolConfigCreate, ToolConfigOut, MCPSourceCreate, MCPSourceOut
+from src.api.v1.schemas.tool import (
+    ToolConfigCreate,
+    ToolConfigUpdate,
+    ToolConfigOut,
+    MCPSourceCreate,
+    MCPSourceUpdate,
+    MCPSourceOut,
+)
 from src.core.deps import get_db, get_current_user_id
-from src.services.tool_service import ToolService
+from src.services.tool_config_service import ToolConfigService
+from src.services.mcp_source_service import MCPSourceService
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 
@@ -17,9 +25,8 @@ async def list_tools(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
-    tools = await service.list_tools()
-    return tools
+    service = ToolConfigService(session)
+    return await service.list_tools()
 
 
 @router.get("/{tool_id}", response_model=ToolConfigOut)
@@ -28,7 +35,7 @@ async def get_tool(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
+    service = ToolConfigService(session)
     return await service.get_tool(tool_id)
 
 
@@ -38,18 +45,18 @@ async def create_tool(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
+    service = ToolConfigService(session)
     return await service.create_tool(data)
 
 
-@router.put("/{tool_id}", response_model=ToolConfigOut)
+@router.patch("/{tool_id}", response_model=ToolConfigOut)
 async def update_tool(
     tool_id: int,
-    data: ToolConfigCreate,
+    data: ToolConfigUpdate,
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
+    service = ToolConfigService(session)
     return await service.update_tool(tool_id, data)
 
 
@@ -59,7 +66,7 @@ async def delete_tool(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
+    service = ToolConfigService(session)
     await service.delete_tool(tool_id)
     return None
 
@@ -71,9 +78,8 @@ async def list_sources(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
-    sources = await service.list_sources()
-    return sources
+    service = MCPSourceService(session)
+    return await service.list_sources()
 
 
 @router.post("/sources/", response_model=MCPSourceOut, status_code=201)
@@ -82,18 +88,18 @@ async def create_source(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
+    service = MCPSourceService(session)
     return await service.create_source(data)
 
 
-@router.put("/sources/{source_id}", response_model=MCPSourceOut)
+@router.patch("/sources/{source_id}", response_model=MCPSourceOut)
 async def update_source(
     source_id: int,
-    data: MCPSourceCreate,
+    data: MCPSourceUpdate,
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
+    service = MCPSourceService(session)
     return await service.update_source(source_id, data)
 
 
@@ -103,7 +109,7 @@ async def delete_source(
     user_id: int = Depends(get_current_user_id),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ToolService(session)
+    service = MCPSourceService(session)
     await service.delete_source(source_id)
     return None
 
@@ -135,7 +141,7 @@ async def discover_source_tools(
     session: AsyncSession = Depends(get_db),
 ):
     """Stub: discover tools from a registered MCP source."""
-    service = ToolService(session)
+    service = MCPSourceService(session)
     source = await service.get_source(source_id)
     return [
         {

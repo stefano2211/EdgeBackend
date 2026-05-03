@@ -6,6 +6,7 @@ from src.core.exceptions import NotFoundError
 from src.persistencia.models.prompt_config import PromptConfig
 from src.persistencia.repositories.prompt_repository import PromptRepository
 from src.api.v1.schemas.prompt import PromptCreate, PromptUpdate
+from src.services._helpers import commit_and_refresh, apply_patch
 
 
 class PromptService:
@@ -23,40 +24,15 @@ class PromptService:
         return prompt
 
     async def create_prompt(self, data: PromptCreate) -> PromptConfig:
-        prompt = PromptConfig(
-            title=data.title,
-            description=data.description,
-            query=data.query,
-            icon=data.icon,
-            system_prompt=data.system_prompt,
-            temperature=data.temperature,
-            max_tokens=data.max_tokens,
-        )
+        prompt = PromptConfig(**data.model_dump())
         await self.repo.create(prompt)
-        await self.session.commit()
-        await self.session.refresh(prompt)
+        await commit_and_refresh(self.session, prompt)
         return prompt
 
     async def update_prompt(self, prompt_id: int, data: PromptUpdate) -> PromptConfig:
         prompt = await self.get_prompt(prompt_id)
-        if data.title is not None:
-            prompt.title = data.title
-        if data.description is not None:
-            prompt.description = data.description
-        if data.query is not None:
-            prompt.query = data.query
-        if data.icon is not None:
-            prompt.icon = data.icon
-        if data.system_prompt is not None:
-            prompt.system_prompt = data.system_prompt
-        if data.temperature is not None:
-            prompt.temperature = data.temperature
-        if data.max_tokens is not None:
-            prompt.max_tokens = data.max_tokens
-        if data.is_enabled is not None:
-            prompt.is_enabled = data.is_enabled
-        await self.session.commit()
-        await self.session.refresh(prompt)
+        apply_patch(prompt, data)
+        await commit_and_refresh(self.session, prompt)
         return prompt
 
     async def delete_prompt(self, prompt_id: int) -> None:

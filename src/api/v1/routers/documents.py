@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.v1.schemas.document import DocumentOut
 from src.core.config import settings
 from src.core.deps import get_db, get_current_user_id
-from src.services.knowledge_service import KnowledgeService
+from src.services.document_service import DocumentService
 from src.services.document_processor import DocumentProcessor
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -38,7 +38,7 @@ async def upload_document(
         f.write(content)
 
     # Create document record
-    service = KnowledgeService(session)
+    service = DocumentService(session)
     doc = await service.create_document(knowledge_base_id, user_id, file.filename or "unknown")
 
     # Update file_id to match our generated UUID

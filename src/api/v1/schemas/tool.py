@@ -10,6 +10,15 @@ class MCPSourceCreate(BaseModel):
     type: str = "rest"
 
 
+class MCPSourceUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    url: str | None = None
+    type: str | None = None
+    is_enabled: bool | None = None
+    context_mode: str | None = None
+
+
 class MCPSourceOut(BaseModel):
     id: int
     name: str
@@ -21,6 +30,16 @@ class MCPSourceOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ToolConfigUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    is_enabled: bool | None = None
+    context_mode: str | None = None
+    config: dict | None = None
+    parameter_schema: dict | None = None
+    source_id: int | None = None
 
 
 class ToolConfigCreate(BaseModel):

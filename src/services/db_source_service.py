@@ -8,6 +8,7 @@ from src.core.exceptions import NotFoundError
 from src.persistencia.models.db_source import DbSource
 from src.persistencia.repositories.db_source_repository import DbSourceRepository
 from src.api.v1.schemas.db_collector import DbSourceCreate, DbSourceUpdate
+from src.services._helpers import commit_and_refresh, apply_patch
 
 
 class DbSourceService:
@@ -25,34 +26,15 @@ class DbSourceService:
         return source
 
     async def create_source(self, data: DbSourceCreate) -> DbSource:
-        source = DbSource(
-            name=data.name,
-            db_type=data.db_type,
-            connection_string=data.connection_string,
-            query=data.query,
-            cron_expression=data.cron_expression,
-        )
+        source = DbSource(**data.model_dump())
         await self.repo.create(source)
-        await self.session.commit()
-        await self.session.refresh(source)
+        await commit_and_refresh(self.session, source)
         return source
 
     async def update_source(self, source_id: int, data: DbSourceUpdate) -> DbSource:
         source = await self.get_source(source_id)
-        if data.name is not None:
-            source.name = data.name
-        if data.db_type is not None:
-            source.db_type = data.db_type
-        if data.connection_string is not None:
-            source.connection_string = data.connection_string
-        if data.query is not None:
-            source.query = data.query
-        if data.cron_expression is not None:
-            source.cron_expression = data.cron_expression
-        if data.is_enabled is not None:
-            source.is_enabled = data.is_enabled
-        await self.session.commit()
-        await self.session.refresh(source)
+        apply_patch(source, data)
+        await commit_and_refresh(self.session, source)
         return source
 
     async def delete_source(self, source_id: int) -> None:
@@ -65,6 +47,5 @@ class DbSourceService:
         source = await self.get_source(source_id)
         source.last_run_at = datetime.now(timezone.utc)
         source.last_run_status = "success"
-        await self.session.commit()
-        await self.session.refresh(source)
+        await commit_and_refresh(self.session, source)
         return source

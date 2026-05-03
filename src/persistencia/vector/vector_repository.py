@@ -135,3 +135,9 @@ class VectorRepository:
             ),
         )
         logger.info("Deleted chunks for doc_id=%s from %s", doc_id, name)
+
+    async def delete_collection(self, knowledge_base_id: int | str) -> None:
+        """Remove an entire Qdrant collection for a knowledge base."""
+        name = collection_name(knowledge_base_id)
+        await self.client.delete_collection(collection_name=name)
+        logger.info("Deleted Qdrant collection %s", name)
