@@ -1,22 +1,18 @@
-"""Production memory layer: Redis Checkpointer + Redis Store.
+"""Production memory layer with resilient fallback chain.
 
-- Redis Checkpointer (AsyncRedisSaver): fast thread-level persistence for
-  conversation checkpoints. Enables pause/resume, crash recovery, HITL.
-- Redis Store (RedisStore): durable long-term memory with semantic search.
-  User-scoped namespaces isolate memories per tenant.
-
-Note: PostgreSQL Store (PostgresStore) is not yet available as a pip package.
-We use Redis for both checkpoint and store — both support semantic search
-and share the same Redis instance.
+Priority:
+1. langgraph-redis (AsyncRedisSaver + AsyncRedisStore) — requires `pip install langgraph-redis`
+2. langgraph.checkpoint.memory.MemorySaver + langgraph.store.memory.InMemoryStore
 
 Initialized once at FastAPI lifespan startup.
 """
 
+from __future__ import annotations
+
 import asyncio
+from typing import Any
 
 from langchain_core.embeddings import Embeddings
-from langgraph.checkpoint.redis.aio import AsyncRedisSaver
-from langgraph.store.redis import RedisStore
 
 from src.core.config import settings
 from src.core.logging import logging
@@ -49,48 +45,66 @@ class SentenceTransformerEmbeddings(Embeddings):
 
 
 # ── Singletons — populated by init_memory() ──
-_checkpointer: AsyncRedisSaver | None = None
-_store: RedisStore | None = None
+_checkpointer: Any | None = None
+_store: Any | None = None
 
 
 async def init_memory() -> None:
-    """Initialize Redis checkpointer and Redis store.
+    """Initialize checkpointer and store with fallback chain.
 
     Call once in FastAPI lifespan startup.
     """
     global _checkpointer, _store
 
-    # ── 1. Redis Checkpointer ──
-    _checkpointer = AsyncRedisSaver.from_conn_string(settings.REDIS_URL)
-    await _checkpointer.asetup()
-    logger.info("Redis checkpointer ready: %s", settings.REDIS_URL)
-
-    # ── 2. Redis Store with semantic search ──
-    embeddings = SentenceTransformerEmbeddings()
-
-    # RedisStore is sync — initialize in thread pool
-    def _init_store() -> RedisStore:
-        store = RedisStore.from_conn_string(
-            settings.REDIS_URL,
-            index_config={
-                "dims": EMBEDDING_DIMENSION,
-                "embed": embeddings,
-            },
+    # ── 1. Checkpointer (Redis → Memory fallback) ──
+    try:
+        from langgraph_redis.checkpoint import AsyncRedisSaver
+        _checkpointer = AsyncRedisSaver.from_conn_string(settings.REDIS_URL)
+        await _checkpointer.asetup()
+        logger.info("Redis checkpointer ready: %s", settings.REDIS_URL)
+    except Exception:
+        logger.warning(
+            "Redis checkpointer unavailable (langgraph-redis not installed or Redis down). "
+            "Falling back to in-memory MemorySaver."
         )
-        return store
+        from langgraph.checkpoint.memory import MemorySaver
+        _checkpointer = MemorySaver()
+        logger.info("In-memory checkpointer ready")
 
-    loop = asyncio.get_running_loop()
-    _store = await loop.run_in_executor(None, _init_store)
-    logger.info("Redis store ready with semantic search (dims=%d)", EMBEDDING_DIMENSION)
+    # ── 2. Store (Redis → InMemory fallback) ──
+    try:
+        from langgraph_redis.store import AsyncRedisStore
+        embeddings = SentenceTransformerEmbeddings()
+
+        def _init_redis_store():
+            return AsyncRedisStore.from_conn_string(
+                settings.REDIS_URL,
+                index_config={
+                    "dims": EMBEDDING_DIMENSION,
+                    "embed": embeddings,
+                },
+            )
+
+        loop = asyncio.get_running_loop()
+        _store = await loop.run_in_executor(None, _init_redis_store)
+        logger.info("Redis store ready with semantic search (dims=%d)", EMBEDDING_DIMENSION)
+    except Exception:
+        logger.warning(
+            "Redis store unavailable (langgraph-redis not installed or Redis down). "
+            "Falling back to in-memory InMemoryStore (no persistence)."
+        )
+        from langgraph.store.memory import InMemoryStore
+        _store = InMemoryStore()
+        logger.info("In-memory store ready")
 
 
-def get_checkpointer() -> AsyncRedisSaver:
+def get_checkpointer() -> Any:
     if _checkpointer is None:
         raise RuntimeError("Memory not initialized. Call init_memory() first.")
     return _checkpointer
 
 
-def get_store() -> RedisStore:
+def get_store() -> Any:
     if _store is None:
         raise RuntimeError("Memory not initialized. Call init_memory() first.")
     return _store
@@ -104,9 +118,19 @@ async def save_user_memory(
     text: str,
     metadata: dict | None = None,
 ) -> None:
-    """Save a user-scoped memory to the Redis store."""
+    """Save a user-scoped memory to the store."""
     store = get_store()
     value: dict = {"text": text, **(metadata or {})}
+
+    # AsyncRedisStore has async put; InMemoryStore is sync
+    if asyncio.iscoroutinefunction(store.put):
+        await store.put(
+            namespace=(user_id, "memories"),
+            key=key,
+            value=value,
+        )
+        return
+
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(
         None,
@@ -125,16 +149,26 @@ async def search_user_memories(
 ) -> list[dict]:
     """Semantic search over user's long-term memories."""
     store = get_store()
-    loop = asyncio.get_running_loop()
 
-    def _search():
-        return store.search(
+    # AsyncRedisStore has async search; InMemoryStore is sync
+    if asyncio.iscoroutinefunction(store.search):
+        results = await store.search(
             namespace=(user_id, "memories"),
             query=query,
             limit=limit,
         )
+    else:
+        loop = asyncio.get_running_loop()
 
-    results = await loop.run_in_executor(None, _search)
+        def _search():
+            return store.search(
+                namespace=(user_id, "memories"),
+                query=query,
+                limit=limit,
+            )
+
+        results = await loop.run_in_executor(None, _search)
+
     return [
         {
             "key": r.key,

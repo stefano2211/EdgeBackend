@@ -19,11 +19,18 @@ from src.services.chat_orchestrator import ChatOrchestrator
 class ChatService:
     """Facade: conversation management + DeepAgents orchestrator streaming."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        conv_service: ConversationService | None = None,
+        msg_service: MessageService | None = None,
+        orchestrator: ChatOrchestrator | None = None,
+    ) -> None:
         self.session = session
-        self.conv_service = ConversationService(session)
-        self.msg_service = MessageService(session)
-        self.orchestrator = ChatOrchestrator()
+        self.conv_service = conv_service or ConversationService(session)
+        self.msg_service = msg_service or MessageService(session)
+        self.orchestrator = orchestrator or ChatOrchestrator()
 
     # ── Conversation delegation ──
 
@@ -52,17 +59,45 @@ class ChatService:
     async def get_messages(self, thread_id: str, user_id: int) -> list[Message]:
         return await self.msg_service.get_messages(thread_id, user_id)
 
-    # ── Streaming / Non-streaming (orchestrates services) ──
+    # ── Internal helpers ──
 
-    async def process_stream(
+    async def _prepare_chat(
         self, request: ChatRequest, user_id: int
-    ) -> AsyncIterator[dict]:
+    ) -> tuple[Conversation, list[dict[str, str]]]:
+        """Create/fetch conversation, persist user message, build LangChain messages."""
         conv = await self.conv_service.get_or_create_conversation(
             request.thread_id, user_id, title=request.query[:50]
         )
         await self.msg_service.create_user_message(conv.id, request.query)
-
         messages = await self.msg_service.build_langchain_messages(request, conv.id)
+        return conv, messages
+
+    async def _persist_assistant_message(
+        self,
+        conv_id: int,
+        content: str,
+        reasoning_content: str | None,
+        agents_used: list[str],
+    ) -> None:
+        """Persist the assistant response and metadata."""
+        await self.msg_service.create_assistant_message(
+            conversation_id=conv_id,
+            content=content,
+            reasoning_content=reasoning_content,
+            meta={
+                "model": "deepagents-orchestrator",
+                "provider": settings.DEFAULT_LLM_PROVIDER,
+                "route": "complex",
+                "agents_used": agents_used,
+            },
+        )
+
+    # ── Streaming / Non-streaming ──
+
+    async def process_stream(
+        self, request: ChatRequest, user_id: int
+    ) -> AsyncIterator[dict]:
+        conv, messages = await self._prepare_chat(request, user_id)
         yield {"type": "meta", "thread_id": conv.thread_id}
 
         full_content = ""
@@ -77,36 +112,18 @@ class ChatService:
                 continue
             yield event
 
-        await self.msg_service.create_assistant_message(
-            conversation_id=conv.id,
-            content=full_content.strip(),
-            reasoning_content=reasoning_content or None,
-            meta={
-                "model": "deepagents-orchestrator",
-                "provider": settings.DEFAULT_LLM_PROVIDER,
-                "route": "complex",
-                "agents_used": agents_used,
-            },
+        await self._persist_assistant_message(
+            conv.id, full_content.strip(), reasoning_content or None, agents_used
         )
 
     async def process_non_stream(self, request: ChatRequest, user_id: int) -> dict:
-        conv = await self.conv_service.get_or_create_conversation(
-            request.thread_id, user_id, title=request.query[:50]
-        )
-        await self.msg_service.create_user_message(conv.id, request.query)
-
-        messages = await self.msg_service.build_langchain_messages(request, conv.id)
+        conv, messages = await self._prepare_chat(request, user_id)
         result = await self.orchestrator.non_stream(request, messages, conv.thread_id)
 
-        await self.msg_service.create_assistant_message(
-            conversation_id=conv.id,
-            content=result["content"],
-            reasoning_content=result.get("reasoning_content"),
-            meta={
-                "model": "deepagents-orchestrator",
-                "provider": settings.DEFAULT_LLM_PROVIDER,
-                "route": "complex",
-                "agents_used": result.get("agents_used", []),
-            },
+        await self._persist_assistant_message(
+            conv.id,
+            result["content"],
+            result.get("reasoning_content"),
+            result.get("agents_used", []),
         )
         return result

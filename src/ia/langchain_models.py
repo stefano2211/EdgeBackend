@@ -1,17 +1,44 @@
 """Factory de LangChain ChatModels con soporte para vLLM, Ollama, y LoRA adapters.
 
-Separa la creación de modelos LangChain (para DeepAgents) del LLM HTTP client
-que usamos para embeddings y otros usos.
+Provides:
+- BaseChatModel instances for DeepAgents (full control over base_url, adapters, etc.)
+- Provider-string shorthand for simple cases ("openai:model", "ollama:model")
+
+DeepAgents accepts either BaseChatModel instances or "provider:model" strings.
+
+Lazy imports prevent startup failures when optional dependencies are missing.
 """
 
+from __future__ import annotations
+
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_openai import ChatOpenAI
-from langchain_ollama import ChatOllama
 
 from src.core.config import settings
 from src.core.logging import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _import_chat_openai() -> type[BaseChatModel]:
+    try:
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI
+    except ModuleNotFoundError as e:
+        raise RuntimeError(
+            "langchain-openai is required for vLLM support. "
+            "Install it: pip install langchain-openai"
+        ) from e
+
+
+def _import_chat_ollama() -> type[BaseChatModel]:
+    try:
+        from langchain_ollama import ChatOllama
+        return ChatOllama
+    except ModuleNotFoundError as e:
+        raise RuntimeError(
+            "langchain-ollama is required for Ollama support. "
+            "Install it: pip install langchain-ollama"
+        ) from e
 
 
 def create_vllm_chat_model(
@@ -21,12 +48,13 @@ def create_vllm_chat_model(
     adapter: str | None = None,
     temperature: float = 0.7,
     streaming: bool = True,
-) -> ChatOpenAI:
+) -> BaseChatModel:
     """Create a ChatOpenAI pointing to our vLLM OpenAI-compatible server.
 
     For LoRA adapters, vLLM exposes them via the model name field.
     Format: "base_model:adapter_name" (vLLM 0.5+).
     """
+    ChatOpenAI = _import_chat_openai()
     model = model_name or settings.VLLM_MODEL
     base_url = base_url or settings.VLLM_BASE_URL
 
@@ -50,8 +78,9 @@ def create_ollama_chat_model(
     adapter: str | None = None,
     temperature: float = 0.7,
     streaming: bool = True,
-) -> ChatOllama:
+) -> BaseChatModel:
     """Create a ChatOllama pointing to our Ollama server."""
+    ChatOllama = _import_chat_ollama()
     model = model_name or settings.OLLAMA_MODEL
     base_url = base_url or settings.OLLAMA_BASE_URL.replace("/v1", "")
 
@@ -102,6 +131,51 @@ def get_chat_model(
                 logger.exception("vLLM unreachable, trying Ollama")
         if settings.OLLAMA_ENABLED:
             return create_ollama_chat_model(adapter=adapter, **kwargs)
+        raise RuntimeError("No LLM provider available")
+
+    raise ValueError(f"Unknown LLM provider: {provider}")
+
+
+def get_chat_model_string(
+    provider: str | None = None,
+    adapter: str | None = None,
+) -> str:
+    """Return a "provider:model" string for DeepAgents simple model selection.
+
+    DeepAgents calls init_chat_model() internally when given a string,
+    which reads env vars for base_url / api_key. Use this when you want
+    DeepAgents to manage model instantiation, or get_chat_model() when
+    you need explicit control over base_url and other parameters.
+
+    Returns:
+        Provider:model string (e.g., "openai:my-model", "ollama:llama3").
+    """
+    provider = (provider or settings.DEFAULT_LLM_PROVIDER).lower()
+
+    if provider == "vllm":
+        model = settings.VLLM_MODEL
+        if adapter:
+            model = f"{model}:{adapter}"
+        # vLLM uses OpenAI-compatible API; expose as openai provider
+        return f"openai:{model}"
+
+    elif provider == "ollama":
+        model = settings.OLLAMA_MODEL
+        if adapter:
+            model = f"{model}:{adapter}"
+        return f"ollama:{model}"
+
+    elif provider == "auto":
+        if settings.VLLM_ENABLED:
+            model = settings.VLLM_MODEL
+            if adapter:
+                model = f"{model}:{adapter}"
+            return f"openai:{model}"
+        if settings.OLLAMA_ENABLED:
+            model = settings.OLLAMA_MODEL
+            if adapter:
+                model = f"{model}:{adapter}"
+            return f"ollama:{model}"
         raise RuntimeError("No LLM provider available")
 
     raise ValueError(f"Unknown LLM provider: {provider}")

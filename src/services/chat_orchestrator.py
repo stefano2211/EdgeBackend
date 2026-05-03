@@ -1,4 +1,16 @@
-"""Chat orchestrator: DeepAgents interaction only (streaming + non-streaming)."""
+"""Chat orchestrator: DeepAgents interaction only (streaming + non-streaming).
+
+DeepAgents v2 streaming format (stream_mode="messages", version="v2", subgraphs=True):
+- chunk["type"] == "messages" → chunk["data"] is (token, metadata)
+  * token.content       : str | None  (AI message text)
+  * token.type          : "ai" | "tool" | ...
+  * token.tool_call_chunks: list[dict] | None
+  * metadata["lc_agent_name"]: str | None  (subagent name)
+- chunk["type"] == "updates" → chunk["data"] is dict[node_name, node_output]
+- chunk["ns"]           : tuple[str, ...] | ()  (namespace; contains "tools:..." for subagents)
+
+See: https://docs.langchain.com/oss/python/deepagents/streaming
+"""
 
 import asyncio
 from typing import AsyncIterator
@@ -10,36 +22,67 @@ from src.core.logging import logging
 logger = logging.getLogger(__name__)
 
 
+def _detect_agent_name(chunk: dict, metadata: dict) -> str:
+    """Return the semantic agent name from DeepAgents metadata / namespace.
+
+    Priority:
+    1. metadata["lc_agent_name"]  (official DeepAgents subagent name)
+    2. Extract from chunk["ns"]   (fallback: "tools:<id>" → "subagent")
+    3. "orchestrator"            (default main agent)
+    """
+    agent_name = metadata.get("lc_agent_name")
+    if agent_name:
+        return agent_name
+
+    ns = chunk.get("ns") or ()
+    for segment in ns:
+        if segment.startswith("tools:"):
+            return f"subagent:{segment.split(':', 1)[1]}"
+
+    return "orchestrator"
+
+
 def _extract_chunk_payload(
     chunk: dict,
     *,
     current_agent: str,
     agents_used: set[str],
 ) -> tuple[str, str, str, set[str], list[dict]]:
-    """Parse a single LangGraph chunk and return updated state + events.
+    """Parse a single DeepAgents v2 chunk and return updated state + events.
 
     Returns: (new_agent, text, reasoning_text, updated_agents, extra_events)
     """
-    if chunk.get("type") != "messages":
-        # Handle tool response updates separately
+    chunk_type = chunk.get("type")
+
+    # ── Updates mode (subagent lifecycle / tool results) ──
+    if chunk_type == "updates":
         extra_events: list[dict] = []
-        if chunk.get("type") == "updates":
-            for source, update in chunk["data"].items():
-                if source == "tools":
-                    msgs = update.get("messages", [])
-                    if msgs:
-                        content = str(msgs[-1].get("content", ""))[:200]
-                        extra_events.append({
-                            "type": "tool_response",
-                            "source": source,
-                            "content": content,
-                        })
+        ns = chunk.get("ns") or ()
+        is_subagent = any(s.startswith("tools:") for s in ns)
+
+        for node_name, node_output in chunk["data"].items():
+            # Tool results from subagents
+            if node_name == "tools" and isinstance(node_output, dict):
+                msgs = node_output.get("messages", [])
+                if msgs:
+                    last = msgs[-1]
+                    content = str(getattr(last, "content", last) or "")[:200]
+                    extra_events.append({
+                        "type": "tool_response",
+                        "source": "subagent" if is_subagent else "orchestrator",
+                        "content": content,
+                    })
         return current_agent, "", "", agents_used, extra_events
 
+    # ── Messages mode (tokens / tool-call chunks) ──
+    if chunk_type != "messages":
+        return current_agent, "", "", agents_used, []
+
     token, metadata = chunk["data"]
-    agent_name = metadata.get("lc_agent_name", "orchestrator")
+    agent_name = _detect_agent_name(chunk, metadata)
     events: list[dict] = []
 
+    # Subagent lifecycle events
     if agent_name != current_agent:
         if current_agent:
             events.append({"type": "subagent", "name": current_agent, "status": "complete"})
@@ -47,9 +90,24 @@ def _extract_chunk_payload(
         agents_used.add(agent_name)
         events.append({"type": "subagent", "name": agent_name, "status": "running"})
 
-    text = getattr(token, "text", "") or ""
-    reasoning_text = getattr(token, "reasoning_content", "") or ""
+    # DeepAgents token attributes (LangChain message chunks)
+    text = ""
+    reasoning_text = ""
+    if getattr(token, "type", None) == "ai":
+        text = getattr(token, "content", None) or ""
+        # Anthropic / DeepSeek extended-thinking support (optional)
+        reasoning_text = getattr(token, "reasoning_content", None) or ""
+    elif getattr(token, "type", None) == "tool":
+        # Tool result content — stream as an event rather than raw text
+        tool_content = getattr(token, "content", None) or ""
+        if tool_content:
+            events.append({
+                "type": "tool_result",
+                "agent": agent_name,
+                "content": str(tool_content)[:200],
+            })
 
+    # Tool-call invocations (streaming function calls)
     tool_chunks = getattr(token, "tool_call_chunks", None)
     if tool_chunks:
         for tc in tool_chunks:

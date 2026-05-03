@@ -2,6 +2,12 @@
 
 Permite crear orquestadores con diferentes combinaciones de sub-agentes
 y tools según el contexto (usuario, knowledge base, etc.).
+
+DeepAgents best practices applied:
+- Explicit task() delegation in system prompt
+- Checkpointer & store with graceful fallback
+- Subagent descriptions explain WHEN to delegate
+- Tools registered via StructuredTool.from_function(coroutine=...)
 """
 
 from deepagents import create_deep_agent
@@ -50,11 +56,28 @@ def create_orchestrator(
         len(tools),
     )
 
-    return create_deep_agent(
-        model=get_chat_model(),
-        system_prompt=prompt,
-        subagents=subagents,
-        tools=tools,
-        checkpointer=get_checkpointer(),
-        store=get_store(),
-    )
+    # Resolve checkpointer & store with graceful fallback
+    try:
+        checkpointer = get_checkpointer()
+    except RuntimeError:
+        logger.warning("Checkpointer not initialized; DeepAgents will use default")
+        checkpointer = None
+
+    try:
+        store = get_store()
+    except RuntimeError:
+        logger.warning("Store not initialized; DeepAgents will use default")
+        store = None
+
+    kwargs: dict = {
+        "model": get_chat_model(),
+        "system_prompt": prompt,
+        "subagents": subagents,
+        "tools": tools,
+    }
+    if checkpointer is not None:
+        kwargs["checkpointer"] = checkpointer
+    if store is not None:
+        kwargs["store"] = store
+
+    return create_deep_agent(**kwargs)
