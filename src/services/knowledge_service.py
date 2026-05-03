@@ -4,10 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.knowledge import KnowledgeBaseCreate, KnowledgeBaseUpdate
 from src.core.exceptions import NotFoundError, ConflictError
+from src.core.logging import logging
 from src.persistencia.models.knowledge_base import KnowledgeBase
 from src.persistencia.models.document import Document
 from src.persistencia.repositories.knowledge_repository import KnowledgeRepository
 from src.persistencia.repositories.document_repository import DocumentRepository
+from src.persistencia.vector import VectorRepository
+
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeService:
@@ -51,6 +55,15 @@ class KnowledgeService:
 
     async def delete_knowledge_base(self, kb_id: int, user_id: int) -> None:
         kb = await self.get_knowledge_base(kb_id, user_id)
+        # Cleanup Qdrant collection for this KB
+        try:
+            vector_repo = VectorRepository()
+            from src.persistencia.vector.qdrant_client import get_qdrant_client
+            client = get_qdrant_client()
+            await client.delete_collection(collection_name=f"kb_{kb_id}")
+            logger.info("Deleted Qdrant collection kb_%d", kb_id)
+        except Exception:
+            logger.warning("Qdrant collection kb_%d not found or already deleted", kb_id)
         await self.kb_repo.delete(kb)
         await self.session.commit()
 

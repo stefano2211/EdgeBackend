@@ -147,44 +147,71 @@ class ChatService:
             messages = await self._build_messages(request, conv.id)
 
             if route == "complex":
-                # Emit subagent event before orchestration (stub)
-                yield {
-                    "type": "subagent",
-                    "name": "rag-mcp-expert",
-                    "status": "running",
-                    "input": {"query": request.query},
-                }
+                # System 2: Orchestrator handles multi-step reasoning
+                orchestrator = AgentOrchestrator()
+                plan = await orchestrator.analyze(
+                    query=request.query,
+                    history=history,
+                    available_knowledge=[request.knowledge_base_id] if request.knowledge_base_id else None,
+                )
 
-            # Call LLM with streaming
-            params = request.params or {}
-            stream = await llm.chat_completion(
-                messages=messages,
-                temperature=params.get("temperature", 0.7),
-                max_tokens=params.get("max_tokens"),
-                stream=True,
-            )
+                # Emit subagent events for each step
+                for subagent in plan.get("subagents", []):
+                    yield {
+                        "type": "subagent",
+                        "name": subagent,
+                        "status": "running",
+                        "input": {"query": request.query},
+                    }
 
-            async for chunk in stream:
-                choices = chunk.get("choices", [])
-                if not choices:
-                    continue
-                delta = choices[0].get("delta", {})
-
-                if "content" in delta and delta["content"]:
-                    token = delta["content"]
+                async def _stream_cb(token: str) -> None:
+                    # Callback for orchestrator streaming
+                    nonlocal full_content
                     full_content += token
+                    # Note: cannot yield from callback; tokens accumulate in full_content
+
+                full_content = await orchestrator.execute_plan(
+                    plan=plan,
+                    messages=messages,
+                    llm_stream_callback=_stream_cb,
+                )
+
+                # Stream accumulated tokens (orchestrator runs non-stream for now)
+                # TODO: yield tokens as they arrive from execute_plan streaming
+                for word in full_content.split():
+                    token = word + " "
                     yield {"type": "token", "content": token}
 
-                if "reasoning_content" in delta and delta["reasoning_content"]:
-                    reasoning_content += delta["reasoning_content"]
-                    yield {"type": "reasoning", "content": delta["reasoning_content"]}
+                for subagent in plan.get("subagents", []):
+                    yield {
+                        "type": "subagent",
+                        "name": subagent,
+                        "status": "complete",
+                    }
+            else:
+                # System 1: Direct LLM call
+                params = request.params or {}
+                stream = await llm.chat_completion(
+                    messages=messages,
+                    temperature=params.get("temperature", 0.7),
+                    max_tokens=params.get("max_tokens"),
+                    stream=True,
+                )
 
-            if route == "complex":
-                yield {
-                    "type": "subagent",
-                    "name": "rag-mcp-expert",
-                    "status": "complete",
-                }
+                async for chunk in stream:
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {})
+
+                    if "content" in delta and delta["content"]:
+                        token = delta["content"]
+                        full_content += token
+                        yield {"type": "token", "content": token}
+
+                    if "reasoning_content" in delta and delta["reasoning_content"]:
+                        reasoning_content += delta["reasoning_content"]
+                        yield {"type": "reasoning", "content": delta["reasoning_content"]}
 
         yield {"type": "done", "full_content": full_content.strip()}
 
@@ -229,15 +256,32 @@ class ChatService:
             reasoning = None
         else:
             messages = await self._build_messages(request, conv.id)
-            params = request.params or {}
-            resp = await llm.chat_completion(
-                messages=messages,
-                temperature=params.get("temperature", 0.7),
-                max_tokens=params.get("max_tokens"),
-                stream=False,
-            )
-            content = resp["choices"][0]["message"]["content"]
-            reasoning = resp["choices"][0]["message"].get("reasoning_content")
+
+            if route == "complex":
+                # System 2: Orchestrator
+                orchestrator = AgentOrchestrator()
+                plan = await orchestrator.analyze(
+                    query=request.query,
+                    history=history,
+                    available_knowledge=[request.knowledge_base_id] if request.knowledge_base_id else None,
+                )
+                content = await orchestrator.execute_plan(
+                    plan=plan,
+                    messages=messages,
+                    llm_stream_callback=None,
+                )
+                reasoning = None
+            else:
+                # System 1: Direct LLM
+                params = request.params or {}
+                resp = await llm.chat_completion(
+                    messages=messages,
+                    temperature=params.get("temperature", 0.7),
+                    max_tokens=params.get("max_tokens"),
+                    stream=False,
+                )
+                content = resp["choices"][0]["message"]["content"]
+                reasoning = resp["choices"][0]["message"].get("reasoning_content")
 
         await self.msg_repo.create_message(
             conversation_id=conv.id,

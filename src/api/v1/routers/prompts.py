@@ -1,37 +1,59 @@
-"""Prompts router — stub (Fase 7)."""
+"""Prompts router — functional CRUD."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.api.v1.schemas.prompt import PromptCreate, PromptUpdate, PromptOut
+from src.core.database import AsyncSessionLocal
+from src.core.deps import get_current_user_id
+from src.core.exceptions import NotFoundError
+from src.services.prompt_service import PromptService
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
 
 
-@router.get("")
-async def list_prompts():
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Prompt endpoints will be implemented in Fase 7",
-    )
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 
 
-@router.post("")
-async def create_prompt():
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Prompt endpoints will be implemented in Fase 7",
-    )
+@router.get("", response_model=list[PromptOut])
+async def list_prompts(
+    session: AsyncSession = Depends(get_db),
+):
+    service = PromptService(session)
+    return await service.list_prompts()
 
 
-@router.patch("/{prompt_id}")
-async def update_prompt(prompt_id: int):
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Prompt endpoints will be implemented in Fase 7",
-    )
+@router.post("", response_model=PromptOut, status_code=201)
+async def create_prompt(
+    data: PromptCreate,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_db),
+):
+    service = PromptService(session)
+    return await service.create_prompt(data)
 
 
-@router.delete("/{prompt_id}")
-async def delete_prompt(prompt_id: int):
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Prompt endpoints will be implemented in Fase 7",
-    )
+@router.patch("/{prompt_id}", response_model=PromptOut)
+async def update_prompt(
+    prompt_id: int,
+    data: PromptUpdate,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_db),
+):
+    service = PromptService(session)
+    return await service.update_prompt(prompt_id, data)
+
+
+@router.delete("/{prompt_id}", status_code=204)
+async def delete_prompt(
+    prompt_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_db),
+):
+    service = PromptService(session)
+    await service.delete_prompt(prompt_id)
