@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.core.config import settings
 from src.core.logging import configure_logging
 from src.ia.llm_client import init_llm_client
+from src.ia.memory import init_memory
 
 
 @asynccontextmanager
@@ -20,6 +21,11 @@ async def lifespan(app: FastAPI):
         # Log but don't crash — backend can start without LLM if needed
         import logging
         logging.getLogger(__name__).warning("LLM client not available: %s", exc)
+    try:
+        await init_memory()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Memory layer not available: %s", exc)
     yield
 
 

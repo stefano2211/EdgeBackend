@@ -1,30 +1,24 @@
-"""System 1 — Fast Intuition Routing (Stub).
+"""DEPRECATED — Routing is now handled by the DeepAgents orchestrator.
 
-Decides whether a chat request is simple (direct response) or complex
-(requires Sistema 2 orchestration with subagents/tools/RAG).
+System 1 routing has been replaced by DeepAgents' built-in planning
+and task delegation (TodoListMiddleware + SubAgentMiddleware).
 
-Fase 3: heuristic stub.
-Fase 4: LLM-based routing with prompt classification.
+This module is kept for backward compatibility only.
 """
 
-from src.api.v1.schemas.chat import ChatRequest
-from src.persistencia.models.message import Message
+from src.core.logging import logging
+
+logger = logging.getLogger(__name__)
+logger.warning(
+    "src.ia.system1 is deprecated. "
+    "DeepAgents orchestrator handles routing and planning automatically."
+)
 
 
-def system1_route(request: ChatRequest, history: list[Message]) -> str:
-    """
-    Returns: 'simple' | 'complex'
-
-    Heuristic stub for Fase 3:
-    - use_generalist=True  -> simple (direct response, no tools)
-    - knowledge_base_id or mcp_source_id present -> complex (needs RAG/MCP)
-    - history length > 10 -> complex (context heavy)
-    - Otherwise -> simple
-    """
-    if request.use_generalist:
-        return "simple"
-    if request.knowledge_base_id or request.mcp_source_id:
-        return "complex"
-    if len(history) > 10:
-        return "complex"
-    return "simple"
+def system1_route(request, history) -> str:
+    """DEPRECATED — DeepAgents orchestrator handles all routing."""
+    logger.warning(
+        "system1_route is deprecated and always returns 'complex'. "
+        "Use the DeepAgents orchestrator in orchestrator_factory instead."
+    )
+    return "complex"

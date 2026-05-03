@@ -1,21 +1,20 @@
-"""Chat service: conversation management + LLM streaming responses."""
+"""Chat service: conversation management + DeepAgents orchestrator streaming."""
 
 import asyncio
-import json
 from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.chat import ChatRequest
 from src.core.config import settings
+from src.core.logging import logging
 from src.persistencia.models.conversation import Conversation
 from src.persistencia.models.message import Message
 from src.persistencia.repositories.conversation_repository import ConversationRepository
 from src.persistencia.repositories.message_repository import MessageRepository
-from src.ia.system1 import system1_route
-from src.ia.llm_client import get_llm_client
-from src.ia.rag_tool import rag_retrieve
-from src.ia.agent_orchestrator import AgentOrchestrator
+from src.ia.orchestrator_factory import create_orchestrator
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -68,163 +67,166 @@ class ChatService:
     async def _build_messages(
         self, request: ChatRequest, conversation_id: int
     ) -> list[dict[str, str]]:
-        """Build OpenAI-compatible message list: system + history + user query."""
+        """Build LangChain-compatible message list: system + history + user query."""
         messages: list[dict[str, str]] = []
 
         # System prompt
         system_prompt = "You are a helpful assistant."
-        if request.model_id:
-            # Try to load custom system prompt from ModelConfig (optional)
-            pass
         messages.append({"role": "system", "content": system_prompt})
 
-        # History (last 10 messages)
+        # History (last 20 messages — DeepAgents handles summarization if needed)
         history = await self.msg_repo.list_by_conversation(conversation_id)
-        for msg in history[-10:]:
+        for msg in history[-20:]:
             if msg.role in ("user", "assistant"):
                 messages.append({"role": msg.role, "content": msg.content})
 
-        # Current query (with RAG context if applicable)
-        query = request.query
-        if request.knowledge_base_id:
-            context = await rag_retrieve(
-                request.knowledge_base_id,
-                request.query,
-                top_k=5,
-            )
-            if context:
-                query = (
-                    f"{context}\n\n"
-                    f"Answer the question using ONLY the sources above. "
-                    f"If no relevant source is found, say you do not know."
-                )
-
-        messages.append({"role": "user", "content": query})
+        messages.append({"role": "user", "content": request.query})
         return messages
 
     async def process_stream(
         self, request: ChatRequest, user_id: int
     ) -> AsyncIterator[dict]:
-        """Yields SSE event dicts."""
-        # 1. Get or create conversation
+        """Process chat through DeepAgents orchestrator with real-time SSE streaming.
+
+        Yields: meta, subagent, token, tool_call, tool_response, done events.
+        """
+        # 1. Conversation management
         conv = await self.get_or_create_conversation(
             request.thread_id, user_id, title=request.query[:50]
         )
-
-        # 2. Save user message
         await self.msg_repo.create_message(
             conversation_id=conv.id, role="user", content=request.query
         )
         await self.session.commit()
 
-        # 3. Load history
-        history = await self.msg_repo.list_by_conversation(conv.id)
+        # 2. Load history and build messages
+        messages = await self._build_messages(request, conv.id)
 
-        # 4. System 1 routing
-        route = system1_route(request, history)
-
-        # 5. Emit meta event
+        # 3. Emit meta event
         yield {"type": "meta", "thread_id": conv.thread_id}
 
         full_content = ""
         reasoning_content = ""
+        current_agent = "orchestrator"
+        agents_used: set[str] = set()
 
-        # Try to use real LLM; fallback to mock if not available
+        # 4. Create and stream through DeepAgents orchestrator
         try:
-            llm = get_llm_client()
-        except RuntimeError:
-            llm = None
-
-        if llm is None:
-            # Fallback: mock response when no LLM is available
-            response_text = f"[LLM unavailable — Echo: {request.query}]"
+            orchestrator = create_orchestrator(
+                knowledge_base_id=request.knowledge_base_id,
+            )
+        except Exception as e:
+            logger.exception("Failed to create orchestrator: %s", e)
+            # Fallback: mock response
+            response_text = f"[Orchestrator unavailable — Echo: {request.query}]"
             for word in response_text.split():
                 token = word + " "
                 full_content += token
                 yield {"type": "token", "content": token}
                 await asyncio.sleep(0.02)
-        else:
-            messages = await self._build_messages(request, conv.id)
+            yield {"type": "done", "full_content": full_content.strip()}
+            return
 
-            if route == "complex":
-                # System 2: Orchestrator handles multi-step reasoning
-                orchestrator = AgentOrchestrator()
-                plan = await orchestrator.analyze(
-                    query=request.query,
-                    history=history,
-                    available_knowledge=[request.knowledge_base_id] if request.knowledge_base_id else None,
-                )
+        # Config enables checkpoint persistence via Redis per conversation thread
+        config = {"configurable": {"thread_id": conv.thread_id}}
 
-                # Emit subagent events for each step
-                for subagent in plan.get("subagents", []):
-                    yield {
-                        "type": "subagent",
-                        "name": subagent,
-                        "status": "running",
-                        "input": {"query": request.query},
-                    }
+        try:
+            async for chunk in orchestrator.astream(
+                {"messages": messages},
+                config=config,
+                stream_mode="messages",
+                subgraphs=True,
+                version="v2",
+            ):
+                if chunk.get("type") == "messages":
+                    token, metadata = chunk["data"]
 
-                async def _stream_cb(token: str) -> None:
-                    # Callback for orchestrator streaming
-                    nonlocal full_content
-                    full_content += token
-                    # Note: cannot yield from callback; tokens accumulate in full_content
+                    # Detect agent change from LangGraph metadata
+                    agent_name = metadata.get("lc_agent_name", "orchestrator")
+                    if agent_name != current_agent:
+                        if current_agent:
+                            yield {
+                                "type": "subagent",
+                                "name": current_agent,
+                                "status": "complete",
+                            }
+                        current_agent = agent_name
+                        agents_used.add(agent_name)
+                        yield {
+                            "type": "subagent",
+                            "name": agent_name,
+                            "status": "running",
+                        }
 
-                full_content = await orchestrator.execute_plan(
-                    plan=plan,
-                    messages=messages,
-                    llm_stream_callback=_stream_cb,
-                )
+                    # Extract text token
+                    text = getattr(token, "text", None)
+                    if text:
+                        full_content += text
+                        yield {
+                            "type": "token",
+                            "content": text,
+                            "agent": agent_name,
+                        }
 
-                # Stream accumulated tokens (orchestrator runs non-stream for now)
-                # TODO: yield tokens as they arrive from execute_plan streaming
-                for word in full_content.split():
-                    token = word + " "
-                    yield {"type": "token", "content": token}
+                    # Extract reasoning content if present
+                    reasoning_text = getattr(token, "reasoning_content", None)
+                    if reasoning_text:
+                        reasoning_content += reasoning_text
+                        yield {
+                            "type": "reasoning",
+                            "content": reasoning_text,
+                            "agent": agent_name,
+                        }
 
-                for subagent in plan.get("subagents", []):
-                    yield {
-                        "type": "subagent",
-                        "name": subagent,
-                        "status": "complete",
-                    }
-            else:
-                # System 1: Direct LLM call
-                params = request.params or {}
-                stream = await llm.chat_completion(
-                    messages=messages,
-                    temperature=params.get("temperature", 0.7),
-                    max_tokens=params.get("max_tokens"),
-                    stream=True,
-                )
+                    # Extract tool calls
+                    tool_chunks = getattr(token, "tool_call_chunks", None)
+                    if tool_chunks:
+                        for tc in tool_chunks:
+                            if tc.get("name"):
+                                yield {
+                                    "type": "tool_call",
+                                    "name": tc["name"],
+                                    "args": tc.get("args", ""),
+                                    "agent": agent_name,
+                                }
 
-                async for chunk in stream:
-                    choices = chunk.get("choices", [])
-                    if not choices:
-                        continue
-                    delta = choices[0].get("delta", {})
+                elif chunk.get("type") == "updates":
+                    # Tool responses, state changes
+                    for source, update in chunk["data"].items():
+                        if source == "tools":
+                            msgs = update.get("messages", [])
+                            if msgs:
+                                content = str(msgs[-1].get("content", ""))[:200]
+                                yield {
+                                    "type": "tool_response",
+                                    "source": source,
+                                    "content": content,
+                                }
 
-                    if "content" in delta and delta["content"]:
-                        token = delta["content"]
-                        full_content += token
-                        yield {"type": "token", "content": token}
+        except Exception as e:
+            logger.exception("Orchestrator streaming failed: %s", e)
+            error_msg = f"\n\n[System error during processing: {e}]"
+            full_content += error_msg
+            yield {"type": "token", "content": error_msg}
 
-                    if "reasoning_content" in delta and delta["reasoning_content"]:
-                        reasoning_content += delta["reasoning_content"]
-                        yield {"type": "reasoning", "content": delta["reasoning_content"]}
+        # Mark last agent complete
+        if current_agent:
+            yield {"type": "subagent", "name": current_agent, "status": "complete"}
 
+        # Done
         yield {"type": "done", "full_content": full_content.strip()}
 
-        # 6. Save assistant message
+        # Save assistant message
         await self.msg_repo.create_message(
             conversation_id=conv.id,
             role="assistant",
             content=full_content.strip(),
             reasoning_content=reasoning_content or None,
             meta={
-                "model": llm.model if llm else "mock",
+                "model": "deepagents-orchestrator",
                 "provider": settings.DEFAULT_LLM_PROVIDER,
-                "route": route,
+                "route": "complex",
+                "agents_used": list(agents_used),
             },
         )
         await self.session.commit()
@@ -232,7 +234,7 @@ class ChatService:
     async def process_non_stream(
         self, request: ChatRequest, user_id: int
     ) -> dict:
-        """Non-streaming fallback. Returns ChatResponse-like dict."""
+        """Non-streaming fallback using DeepAgents orchestrator."""
         conv = await self.get_or_create_conversation(
             request.thread_id, user_id, title=request.query[:50]
         )
@@ -242,63 +244,74 @@ class ChatService:
         )
         await self.session.commit()
 
-        history = await self.msg_repo.list_by_conversation(conv.id)
-        route = system1_route(request, history)
+        messages = await self._build_messages(request, conv.id)
+        agents_used: set[str] = set()
 
-        # Try to use real LLM; fallback to mock
         try:
-            llm = get_llm_client()
-        except RuntimeError:
-            llm = None
+            orchestrator = create_orchestrator(
+                knowledge_base_id=request.knowledge_base_id,
+            )
+        except Exception as e:
+            logger.exception("Failed to create orchestrator: %s", e)
+            return {
+                "thread_id": conv.thread_id,
+                "content": f"[Orchestrator unavailable — Echo: {request.query}]",
+                "reasoning_content": None,
+                "model": "mock",
+            }
 
-        if llm is None:
-            content = f"[LLM unavailable — Echo: {request.query}]"
-            reasoning = None
-        else:
-            messages = await self._build_messages(request, conv.id)
+        full_content = ""
+        reasoning_content = ""
+        current_agent = "orchestrator"
 
-            if route == "complex":
-                # System 2: Orchestrator
-                orchestrator = AgentOrchestrator()
-                plan = await orchestrator.analyze(
-                    query=request.query,
-                    history=history,
-                    available_knowledge=[request.knowledge_base_id] if request.knowledge_base_id else None,
-                )
-                content = await orchestrator.execute_plan(
-                    plan=plan,
-                    messages=messages,
-                    llm_stream_callback=None,
-                )
-                reasoning = None
-            else:
-                # System 1: Direct LLM
-                params = request.params or {}
-                resp = await llm.chat_completion(
-                    messages=messages,
-                    temperature=params.get("temperature", 0.7),
-                    max_tokens=params.get("max_tokens"),
-                    stream=False,
-                )
-                content = resp["choices"][0]["message"]["content"]
-                reasoning = resp["choices"][0]["message"].get("reasoning_content")
+        # Config enables checkpoint persistence via Redis per conversation thread
+        config = {"configurable": {"thread_id": conv.thread_id}}
+
+        try:
+            # Use sync stream and collect all tokens
+            for chunk in orchestrator.stream(
+                {"messages": messages},
+                config=config,
+                stream_mode="messages",
+                subgraphs=True,
+                version="v2",
+            ):
+                if chunk.get("type") == "messages":
+                    token, metadata = chunk["data"]
+                    agent_name = metadata.get("lc_agent_name", "orchestrator")
+                    if agent_name != current_agent:
+                        current_agent = agent_name
+                        agents_used.add(agent_name)
+
+                    text = getattr(token, "text", None)
+                    if text:
+                        full_content += text
+
+                    reasoning_text = getattr(token, "reasoning_content", None)
+                    if reasoning_text:
+                        reasoning_content += reasoning_text
+
+        except Exception as e:
+            logger.exception("Orchestrator non-stream failed: %s", e)
+            full_content += f"\n\n[System error: {e}]"
 
         await self.msg_repo.create_message(
             conversation_id=conv.id,
             role="assistant",
-            content=content,
-            reasoning_content=reasoning,
+            content=full_content.strip(),
+            reasoning_content=reasoning_content or None,
             meta={
-                "model": llm.model if llm else "mock",
+                "model": "deepagents-orchestrator",
                 "provider": settings.DEFAULT_LLM_PROVIDER,
-                "route": route,
+                "route": "complex",
+                "agents_used": list(agents_used),
             },
         )
         await self.session.commit()
 
         return {
             "thread_id": conv.thread_id,
-            "content": content,
-            "reasoning_content": reasoning,
-            "model": llm.model if llm else "mock",
+            "content": full_content.strip(),
+            "reasoning_content": reasoning_content or None,
+            "model": "deepagents-orchestrator",
         }
