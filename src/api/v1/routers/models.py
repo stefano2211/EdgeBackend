@@ -4,19 +4,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.model import ModelConfigCreate, ModelConfigOut
-from src.core.database import AsyncSessionLocal
-from src.core.deps import get_current_user_id
+from src.core.deps import get_db, get_current_user_id
 from src.services.model_service import ModelService
 
 router = APIRouter(prefix="/models", tags=["models"])
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 @router.get("", response_model=list[ModelConfigOut])

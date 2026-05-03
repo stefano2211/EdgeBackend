@@ -10,19 +10,10 @@ from src.api.v1.schemas.knowledge import (
     KnowledgeBaseDetailOut,
     KnowledgeDocumentOut,
 )
-from src.core.database import AsyncSessionLocal
-from src.core.deps import get_current_user_id
+from src.core.deps import get_db, get_current_user_id
 from src.services.knowledge_service import KnowledgeService
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 @router.get("", response_model=list[KnowledgeBaseOut])

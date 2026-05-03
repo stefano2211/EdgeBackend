@@ -3,6 +3,7 @@
 Layer: services (business logic / domain orchestration)
 """
 
+import asyncio
 from pathlib import Path
 from typing import TypedDict
 
@@ -58,14 +59,14 @@ def parse_csv(file_path: str) -> ParsedDocument:
 
 
 async def parse_document(file_path: str) -> ParsedDocument:
-    """Dispatch to appropriate parser based on file extension."""
+    """Dispatch to appropriate parser based on file extension (non-blocking)."""
     ext = Path(file_path).suffix.lower()
     if ext == ".pdf":
-        return parse_pdf(file_path)
+        return await asyncio.to_thread(parse_pdf, file_path)
     elif ext in (".txt", ".md", ".json"):
-        return parse_text_file(file_path)
+        return await asyncio.to_thread(parse_text_file, file_path)
     elif ext == ".csv":
-        return parse_csv(file_path)
+        return await asyncio.to_thread(parse_csv, file_path)
     else:
         # Fallback: try to read as text
-        return parse_text_file(file_path)
+        return await asyncio.to_thread(parse_text_file, file_path)

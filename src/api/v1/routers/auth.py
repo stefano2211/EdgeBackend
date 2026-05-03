@@ -4,18 +4,10 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.auth import UserLogin, UserRegister, TokenResponse
-from src.core.database import AsyncSessionLocal
+from src.core.deps import get_db
 from src.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 @router.post("/login", response_model=TokenResponse)

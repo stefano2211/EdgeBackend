@@ -10,15 +10,27 @@ from src.persistencia.models.document import Document
 from src.persistencia.repositories.knowledge_repository import KnowledgeRepository
 from src.persistencia.repositories.document_repository import DocumentRepository
 from src.persistencia.vector import VectorRepository
+from src.persistencia.vector.vector_store_port import VectorStorePort
 
 logger = logging.getLogger(__name__)
 
 
 class KnowledgeService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        vector_repo: VectorStorePort | None = None,
+    ) -> None:
         self.session = session
         self.kb_repo = KnowledgeRepository(session)
         self.doc_repo = DocumentRepository(session)
+        self._vector_repo = vector_repo
+
+    @property
+    def vector_repo(self) -> VectorStorePort:
+        if self._vector_repo is None:
+            self._vector_repo = VectorRepository()
+        return self._vector_repo
 
     async def list_knowledge_bases(self, user_id: int, context_mode: str | None = None) -> list[KnowledgeBase]:
         return await self.kb_repo.list_by_user(user_id, context_mode)
@@ -57,10 +69,9 @@ class KnowledgeService:
         kb = await self.get_knowledge_base(kb_id, user_id)
         # Cleanup Qdrant collection for this KB
         try:
-            vector_repo = VectorRepository()
-            from src.persistencia.vector.qdrant_client import get_qdrant_client
-            client = get_qdrant_client()
-            await client.delete_collection(collection_name=f"kb_{kb_id}")
+            await self.vector_repo.delete_by_doc_id(
+                knowledge_base_id=kb_id, doc_id="*"
+            )
             logger.info("Deleted Qdrant collection kb_%d", kb_id)
         except Exception:
             logger.warning("Qdrant collection kb_%d not found or already deleted", kb_id)

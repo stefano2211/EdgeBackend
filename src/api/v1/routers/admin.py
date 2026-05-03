@@ -3,34 +3,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.database import AsyncSessionLocal
-from src.core.deps import get_current_user_id
+from src.core.deps import get_db, get_current_user_id, require_admin
 from src.core.exceptions import NotFoundError
 from src.services.admin_service import AdminService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
-
-
-def _require_admin(service: AdminService, user_id: int):
-    """Stub: in production, check JWT claims or DB role."""
-    pass
-
-
 @router.get("/users")
 async def list_users(
-    user_id: int = Depends(get_current_user_id),
+    _admin: None = Depends(require_admin),
     session: AsyncSession = Depends(get_db),
 ):
     service = AdminService(session)
-    _require_admin(service, user_id)
     users = await service.list_users()
     return [
         {
@@ -50,11 +35,10 @@ async def update_user(
     user_id_path: int,
     role: str,
     is_active: bool | None = None,
-    user_id: int = Depends(get_current_user_id),
+    _admin: None = Depends(require_admin),
     session: AsyncSession = Depends(get_db),
 ):
     service = AdminService(session)
-    _require_admin(service, user_id)
     user = await service.update_user_role(user_id_path, role, is_active)
     return {
         "id": user.id,
@@ -67,21 +51,19 @@ async def update_user(
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(
     user_id_path: int,
-    user_id: int = Depends(get_current_user_id),
+    _admin: None = Depends(require_admin),
     session: AsyncSession = Depends(get_db),
 ):
     service = AdminService(session)
-    _require_admin(service, user_id)
     await service.delete_user(user_id_path)
 
 
 @router.get("/analytics")
 async def get_analytics(
-    user_id: int = Depends(get_current_user_id),
+    _admin: None = Depends(require_admin),
     session: AsyncSession = Depends(get_db),
 ):
     service = AdminService(session)
-    _require_admin(service, user_id)
     return await service.get_analytics()
 
 

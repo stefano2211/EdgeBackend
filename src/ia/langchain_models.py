@@ -99,7 +99,7 @@ def get_chat_model(
             try:
                 return create_vllm_chat_model(adapter=adapter, **kwargs)
             except Exception:
-                logger.warning("vLLM unreachable, trying Ollama")
+                logger.exception("vLLM unreachable, trying Ollama")
         if settings.OLLAMA_ENABLED:
             return create_ollama_chat_model(adapter=adapter, **kwargs)
         raise RuntimeError("No LLM provider available")

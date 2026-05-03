@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,24 +10,34 @@ from src.core.config import settings
 from src.core.logging import configure_logging
 from src.ia.llm_client import init_llm_client
 from src.ia.memory import init_memory
+from src.services.event_broadcast import get_event_broadcast
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
+    import logging as std_logging
+    logger = std_logging.getLogger(__name__)
     try:
         client = await init_llm_client()
         app.state.llm_client = client
     except RuntimeError as exc:
-        # Log but don't crash — backend can start without LLM if needed
-        import logging
-        logging.getLogger(__name__).warning("LLM client not available: %s", exc)
+        logger.warning("LLM client not available: %s", exc)
     try:
         await init_memory()
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Memory layer not available: %s", exc)
+        logger.warning("Memory layer not available: %s", exc)
+    # Start Redis-backed SSE subscriber for multi-worker broadcast
+    try:
+        broadcast = get_event_broadcast()
+        asyncio.create_task(broadcast.start_subscriber())
+    except Exception as exc:
+        logger.warning("SSE broadcast subscriber not started: %s", exc)
     yield
+    try:
+        await get_event_broadcast().stop_subscriber()
+    except Exception:
+        pass
 
 
 def create_app() -> FastAPI:
@@ -37,9 +48,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    origins = settings.CORS_ORIGINS if hasattr(settings, "CORS_ORIGINS") else []
+    if settings.is_dev:
+        logger = std_logging.getLogger(__name__)
+        logger.warning("CORS is open in development mode (allow_origins=[*])")
+        origins = ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.is_dev else [],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

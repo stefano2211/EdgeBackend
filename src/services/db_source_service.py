@@ -1,6 +1,6 @@
 """DB Source service: CRUD for database connection configurations."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,7 +63,7 @@ class DbSourceService:
     async def run_source(self, source_id: int) -> DbSource:
         """Mark a DB source as run (stub — real implementation connects and fetches)."""
         source = await self.get_source(source_id)
-        source.last_run_at = datetime.utcnow()
+        source.last_run_at = datetime.now(timezone.utc)
         source.last_run_status = "success"
         await self.session.commit()
         await self.session.refresh(source)

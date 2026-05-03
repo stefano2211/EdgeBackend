@@ -1,25 +1,17 @@
 """Chat router — non-streaming + SSE streaming."""
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.chat import ChatRequest, ChatResponse
-from src.core.database import AsyncSessionLocal
-from src.core.deps import get_current_user_id
+from src.core.deps import get_db, get_current_user_id
 from src.services.chat_service import ChatService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -46,6 +38,7 @@ async def chat_stream(
             async for event in service.process_stream(request, user_id):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
+            logging.getLogger(__name__).exception("Chat stream error: %s", exc)
             yield f"data: {json.dumps({'type': 'error', 'detail': str(exc)})}\n\n"
 
     return StreamingResponse(

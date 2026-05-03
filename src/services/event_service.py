@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import NotFoundError
+from src.core.exceptions import NotFoundError, ValidationError
 from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
 from src.api.v1.schemas.event import ManualEventPayload, ApprovalPayload
@@ -62,7 +62,7 @@ class EventService:
     async def approve_event(self, event_id: int, payload: ApprovalPayload | None = None) -> Event:
         event = await self.get_event(event_id)
         if event.status != "awaiting_approval":
-            raise ValueError(f"Event is not awaiting approval (current: {event.status})")
+            raise ValidationError(f"Event is not awaiting approval (current: {event.status})")
 
         event.status = "executing"
         event.agent_plan = (event.agent_plan or "") + f"\nApproved. Notes: {payload.notes or 'none'}"
@@ -77,7 +77,7 @@ class EventService:
     async def reject_event(self, event_id: int, payload: ApprovalPayload | None = None) -> Event:
         event = await self.get_event(event_id)
         if event.status != "awaiting_approval":
-            raise ValueError(f"Event is not awaiting approval (current: {event.status})")
+            raise ValidationError(f"Event is not awaiting approval (current: {event.status})")
 
         event.status = "failed"
         event.resolved_at = datetime.now(timezone.utc)
@@ -90,7 +90,7 @@ class EventService:
         """Transition from pending -> analyzing. Stub for System 2 integration."""
         event = await self.get_event(event_id)
         if event.status != "pending":
-            raise ValueError(f"Event is not pending (current: {event.status})")
+            raise ValidationError(f"Event is not pending (current: {event.status})")
 
         event.status = "analyzing"
         await self.session.commit()

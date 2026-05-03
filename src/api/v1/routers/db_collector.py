@@ -4,20 +4,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.db_collector import DbSourceCreate, DbSourceUpdate, DbSourceOut
-from src.core.database import AsyncSessionLocal
-from src.core.deps import get_current_user_id
+from src.core.deps import get_db, get_current_user_id
 from src.core.exceptions import NotFoundError
 from src.services.db_source_service import DbSourceService
 
 router = APIRouter(prefix="/db-sources", tags=["db-collector"])
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 @router.get("", response_model=list[DbSourceOut])

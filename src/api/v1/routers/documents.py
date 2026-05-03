@@ -5,20 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.document import DocumentOut
 from src.core.config import settings
-from src.core.database import AsyncSessionLocal
-from src.core.deps import get_current_user_id
+from src.core.deps import get_db, get_current_user_id
 from src.services.knowledge_service import KnowledgeService
 from src.services.document_processor import DocumentProcessor
 
 router = APIRouter(prefix="/documents", tags=["documents"])
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 @router.post("/upload", response_model=DocumentOut, status_code=201)

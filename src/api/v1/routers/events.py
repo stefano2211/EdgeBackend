@@ -1,5 +1,7 @@
 """Events router — CRUD + SSE streaming + approval pipeline."""
 
+import logging
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,20 +12,11 @@ from src.api.v1.schemas.event import (
     ManualEventPayload,
     ApprovalPayload,
 )
-from src.core.database import AsyncSessionLocal
-from src.core.deps import get_current_user_id
+from src.core.deps import get_db, get_current_user_id
 from src.services.event_service import EventService
 from src.services.event_broadcast import get_event_broadcast
 
 router = APIRouter(prefix="/events", tags=["events"])
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 @router.get("", response_model=EventListResponse)
@@ -108,8 +101,8 @@ async def event_stream(user_id: int = Depends(get_current_user_id)):
             while True:
                 data = await queue.get()
                 yield data
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.getLogger(__name__).exception("Event SSE stream error: %s", exc)
         finally:
             broadcast.disconnect(queue)
 

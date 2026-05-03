@@ -6,6 +6,7 @@ Orchestrates: embed query → search vectors → format context for LLM.
 from src.core.logging import logging
 from src.services.embedding_service import embed_query
 from src.persistencia.vector import VectorRepository
+from src.persistencia.vector.vector_store_port import VectorStorePort
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ async def rag_retrieve(
     query: str,
     top_k: int = 5,
     filter_doc_ids: list[int | str] | None = None,
+    vector_repo: VectorStorePort | None = None,
 ) -> str | None:
     """
     Search Qdrant for relevant document chunks and return formatted context.
@@ -22,12 +24,12 @@ async def rag_retrieve(
     Returns None if no knowledge base or no results.
     Never raises — returns None on any error to avoid breaking the chat.
     """
+    repo = vector_repo if vector_repo is not None else VectorRepository()
     try:
         # Embed the query
         query_embedding = await embed_query(query)
 
         # Search vectors via repository
-        repo = VectorRepository()
         results = await repo.search_chunks(
             knowledge_base_id=knowledge_base_id,
             query_embedding=query_embedding,

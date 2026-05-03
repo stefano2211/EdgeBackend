@@ -4,19 +4,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.tool import ToolConfigCreate, ToolConfigOut, MCPSourceCreate, MCPSourceOut
-from src.core.database import AsyncSessionLocal
-from src.core.deps import get_current_user_id
+from src.core.deps import get_db, get_current_user_id
 from src.services.tool_service import ToolService
 
 router = APIRouter(prefix="/tools", tags=["tools"])
-
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 # ── ToolConfig ──

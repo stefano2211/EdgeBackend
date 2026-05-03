@@ -9,9 +9,11 @@ from src.persistencia.repositories.user_repository import UserRepository
 
 
 class AuthService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, user_repo: UserRepository | None = None
+    ) -> None:
         self.session = session
-        self.user_repo = UserRepository(session)
+        self.user_repo = user_repo or UserRepository(session)
 
     async def register(
         self, username: str, email: str, password: str
