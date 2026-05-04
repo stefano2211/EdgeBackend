@@ -18,6 +18,7 @@ from src.services.event_broadcast import get_event_broadcast
 async def lifespan(app: FastAPI):
     configure_logging()
     logger = std_logging.getLogger(__name__)
+
     try:
         client = await init_llm_client()
         app.state.llm_client = client
@@ -51,14 +52,11 @@ def create_app() -> FastAPI:
     if settings.is_dev:
         logger = std_logging.getLogger(__name__)
     # ── CORS ──
-    # In dev, allow common frontend ports; in prod, use configured origins only.
-    origins = settings.CORS_ORIGINS
-    if settings.is_dev:
-        origins = ["*"]
+    # Allow all origins unconditionally.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=not settings.is_dev,  # wildcard + credentials is a browser violation
+        allow_origins=["*"],
+        allow_credentials=False,  # wildcard + credentials is a browser violation
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["Authorization", "X-Request-ID"],

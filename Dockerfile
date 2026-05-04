@@ -33,11 +33,13 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy app code
 COPY src/ ./src/
-COPY alembic/ ./alembic/
-COPY alembic.ini .
 
 # Create uploads dir
 RUN mkdir -p /app/uploads && chown -R edge:edge /app
+
+# Copy and make entrypoint executable
+COPY docker/backend-entrypoint.sh /app/docker/backend-entrypoint.sh
+RUN chmod +x /app/docker/backend-entrypoint.sh && chown edge:edge /app/docker/backend-entrypoint.sh
 
 USER edge
 
@@ -46,5 +48,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "4", "--loop", "uvloop", "--http", "httptools"]
+CMD ["/app/docker/backend-entrypoint.sh"]

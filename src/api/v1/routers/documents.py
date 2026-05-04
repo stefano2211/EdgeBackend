@@ -64,6 +64,21 @@ async def upload_document(
     return DocumentOut.model_validate(doc)
 
 
+@router.get("/{doc_id}", response_model=DocumentOut)
+async def get_document(
+    doc_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: AsyncSession = Depends(get_db),
+):
+    """Get a single document by ID."""
+    from src.persistencia.repositories.document_repository import DocumentRepository
+    repo = DocumentRepository(session)
+    doc = await repo.get_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return DocumentOut.model_validate(doc)
+
+
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(
     knowledge_base_id: int | None = Query(None),

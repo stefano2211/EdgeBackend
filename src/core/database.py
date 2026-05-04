@@ -1,7 +1,6 @@
 """Async SQLAlchemy engine and session factory."""
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
 
 from src.core.config import settings
 
@@ -10,7 +9,7 @@ engine = create_async_engine(
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=10,
     pool_pre_ping=True,
-    echo=settings.is_dev,
+    echo=False,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -20,10 +19,6 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
     autocommit=False,
 )
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 async def get_db():
