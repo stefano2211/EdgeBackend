@@ -127,10 +127,33 @@ def _extract_chunk_payload(
 class ChatOrchestrator:
     """Handles interaction with DeepAgents orchestrator, isolated from persistence."""
 
-    async def _create_orchestrator(self, knowledge_base_id: str | None):
+    async def _create_orchestrator(self, request: ChatRequest):
+        """Create a DeepAgents orchestrator respecting user RAG/MCP toggles.
+
+        Toggle logic (matches IndustrialBackend AgentService pattern):
+        - knowledge_base_id is None → enable_knowledge=False (no RAG tool)
+        - knowledge_base_id is a UUID → enable_knowledge=True
+        - mcp_source_id is "none" → enable_mcp=False (no MCP tool)
+        - mcp_source_id is None or UUID → enable_mcp=True
+        """
         try:
             from src.ia.orchestrator_factory import create_orchestrator
-            return create_orchestrator(knowledge_base_id=knowledge_base_id)
+
+            enable_knowledge = bool(request.knowledge_base_id)
+            enable_mcp = request.mcp_source_id != "none"
+
+            logger.info(
+                "Creating orchestrator | enable_knowledge=%s enable_mcp=%s "
+                "kb_id=%s mcp_source_id=%s",
+                enable_knowledge, enable_mcp,
+                request.knowledge_base_id, request.mcp_source_id,
+            )
+
+            return create_orchestrator(
+                knowledge_base_id=request.knowledge_base_id,
+                enable_knowledge=enable_knowledge,
+                enable_mcp=enable_mcp,
+            )
         except Exception as e:
             logger.exception("Failed to create orchestrator: %s", e)
             return None
@@ -142,7 +165,7 @@ class ChatOrchestrator:
         thread_id: str,
     ) -> AsyncIterator[dict]:
         """Yield SSE events from DeepAgents streaming."""
-        orchestrator = await self._create_orchestrator(request.knowledge_base_id)
+        orchestrator = await self._create_orchestrator(request)
         if orchestrator is None:
             response_text = f"[Orchestrator unavailable — Echo: {request.query}]"
             full_content = ""
@@ -205,7 +228,7 @@ class ChatOrchestrator:
         thread_id: str,
     ) -> dict:
         """Non-streaming chat via DeepAgents."""
-        orchestrator = await self._create_orchestrator(request.knowledge_base_id)
+        orchestrator = await self._create_orchestrator(request)
         if orchestrator is None:
             return {
                 "thread_id": thread_id,

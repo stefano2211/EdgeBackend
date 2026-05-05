@@ -3,7 +3,7 @@
 All system prompts live here as plain strings — easy to edit, version, and reuse.
 """
 
-from src.ia.prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT
+from src.ia.prompts.orchestrator import ORCHESTRATOR_SYSTEM_PROMPT, build_orchestrator_prompt
 from src.ia.prompts.subagents import (
     INDUSTRIAL_AGENT_DESCRIPTION,
     INDUSTRIAL_AGENT_SYSTEM_PROMPT,

@@ -57,11 +57,21 @@ class DocumentService:
         return await self.repo.list()
 
     async def delete_document(self, doc_id: int) -> None:
-        """Delete document from DB and remove its object from MinIO."""
+        """Delete document from DB, remove its object from MinIO, and delete its vectors from Qdrant."""
         doc = await self.repo.get_by_id(doc_id)
         if not doc:
             raise NotFoundError(f"Document {doc_id} not found")
 
+        # 1. Delete from Qdrant vector database
+        from src.persistencia.vector import VectorRepository
+        vector_repo = VectorRepository()
+        try:
+            await vector_repo.delete_by_doc_id(doc.knowledge_base_id, doc.id)
+            logger.info("Deleted vectors for document %d from Qdrant", doc.id)
+        except Exception:
+            logger.exception("Failed to delete vectors for document %d", doc.id)
+
+        # 2. Delete from MinIO storage
         if self._storage is not None:
             try:
                 await self._storage.delete(doc.file_id)
@@ -71,6 +81,7 @@ class DocumentService:
             except Exception:
                 logger.exception("Failed to delete object from MinIO: %s", doc.file_id)
 
+        # 3. Delete from Relational DB
         await self.repo.delete(doc)
         await self.session.commit()
 

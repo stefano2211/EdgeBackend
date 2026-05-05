@@ -4,7 +4,9 @@ import asyncio
 import logging as std_logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
@@ -61,6 +63,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["Authorization", "X-Request-ID"],
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        logger = std_logging.getLogger(__name__)
+        body = await request.body()
+        logger.error(f"422 Validation Error: {exc.errors()} - Body: {body}")
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     @app.get("/health", tags=["health"])
     async def health_check():
