@@ -78,13 +78,13 @@ async def ensure_collection(
     await client.create_payload_index(
         collection_name=name,
         field_name="doc_id",
-        field_schema=KeywordIndexParams(),
+        field_schema=KeywordIndexParams(type="keyword"),
         wait=True,
     )
     await client.create_payload_index(
         collection_name=name,
         field_name="filename",
-        field_schema=TextIndexParams(),
+        field_schema=TextIndexParams(type="text"),
         wait=True,
     )
 

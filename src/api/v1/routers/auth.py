@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.auth import UserLogin, UserRegister, TokenResponse, UserOut
-from src.core.deps import get_db, get_current_user_id
+from src.core.deps import get_db, get_current_user
 from src.services.auth_service import AuthService
+from src.persistencia.models.user import User
 from src.persistencia.repositories.user_repository import UserRepository
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -33,11 +34,6 @@ async def register(
 
 @router.get("/me", response_model=UserOut)
 async def get_current_auth_user(
-    user_id: int = Depends(get_current_user_id),
-    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> UserOut:
-    repo = UserRepository(session)
-    user = await repo.get_by_id(user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return UserOut.model_validate(user)
+    return UserOut.model_validate(current_user)

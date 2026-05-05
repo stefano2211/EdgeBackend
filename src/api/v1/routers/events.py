@@ -13,7 +13,8 @@ from src.api.v1.schemas.event import (
     EventIngestPayload,
     ApprovalPayload,
 )
-from src.core.deps import get_db, get_current_user_id, verify_api_key
+from src.core.deps import get_db, get_current_user, get_current_user_flexible, verify_api_key
+from src.persistencia.models.user import User
 from src.services.event_service import EventService
 from src.services.event_broadcast import get_event_broadcast
 
@@ -27,7 +28,7 @@ async def list_events(
     source_type: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = EventService(session)
@@ -44,69 +45,10 @@ async def list_events(
     )
 
 
-@router.get("/{event_id}", response_model=EventOut)
-async def get_event(
-    event_id: int,
-    user_id: int = Depends(get_current_user_id),
-    session: AsyncSession = Depends(get_db),
-):
-    service = EventService(session)
-    event = await service.get_event(event_id)
-    return EventOut.model_validate(event)
-
-
-@router.post("/ingest", response_model=EventOut, status_code=201)
-async def ingest_external_event(
-    payload: EventIngestPayload,
-    api_key: str = Depends(verify_api_key),
-    session: AsyncSession = Depends(get_db),
-):
-    """Ingest an event from external sensor/webhook (X-API-Key required)."""
-    service = EventService(session)
-    event = await service.ingest_event(payload)
-    await service.start_analysis(event.id)
-    return EventOut.model_validate(event)
-
-
-@router.post("/manual", response_model=EventOut, status_code=201)
-async def create_manual_event(
-    payload: ManualEventPayload,
-    user_id: int = Depends(get_current_user_id),
-    session: AsyncSession = Depends(get_db),
-):
-    service = EventService(session)
-    event = await service.create_manual_event(payload, triggered_by_user_id=user_id)
-    # Auto-start analysis in background
-    await service.start_analysis(event.id)
-    return EventOut.model_validate(event)
-
-
-@router.post("/{event_id}/approve", response_model=EventOut)
-async def approve_event(
-    event_id: int,
-    payload: ApprovalPayload | None = None,
-    user_id: int = Depends(get_current_user_id),
-    session: AsyncSession = Depends(get_db),
-):
-    service = EventService(session)
-    event = await service.approve_event(event_id, payload)
-    return EventOut.model_validate(event)
-
-
-@router.post("/{event_id}/reject", response_model=EventOut)
-async def reject_event(
-    event_id: int,
-    payload: ApprovalPayload | None = None,
-    user_id: int = Depends(get_current_user_id),
-    session: AsyncSession = Depends(get_db),
-):
-    service = EventService(session)
-    event = await service.reject_event(event_id, payload)
-    return EventOut.model_validate(event)
-
+# ── SSE stream (MUST be before /{event_id} to avoid path param capture) ──
 
 @router.get("/stream")
-async def event_stream(user_id: int = Depends(get_current_user_id)):
+async def event_stream(current_user: User = Depends(get_current_user_flexible)):
     broadcast = get_event_broadcast()
     queue = broadcast.connect()
 
@@ -130,3 +72,66 @@ async def event_stream(user_id: int = Depends(get_current_user_id)):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
+
+
+# ── CRUD (path-param routes AFTER static routes) ──
+
+@router.get("/{event_id}", response_model=EventOut)
+async def get_event(
+    event_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = EventService(session)
+    event = await service.get_event(event_id)
+    return EventOut.model_validate(event)
+
+
+@router.post("/ingest", response_model=EventOut, status_code=201)
+async def ingest_external_event(
+    payload: EventIngestPayload,
+    api_key: str = Depends(verify_api_key),
+    session: AsyncSession = Depends(get_db),
+):
+    """Ingest an event from external sensor/webhook (X-API-Key required)."""
+    service = EventService(session)
+    event = await service.ingest_event(payload)
+    await service.start_analysis(event.id)
+    return EventOut.model_validate(event)
+
+
+@router.post("/manual", response_model=EventOut, status_code=201)
+async def create_manual_event(
+    payload: ManualEventPayload,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = EventService(session)
+    event = await service.create_manual_event(payload, triggered_by_user_id=current_user.id)
+    # Auto-start analysis in background
+    await service.start_analysis(event.id)
+    return EventOut.model_validate(event)
+
+
+@router.post("/{event_id}/approve", response_model=EventOut)
+async def approve_event(
+    event_id: int,
+    payload: ApprovalPayload | None = None,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = EventService(session)
+    event = await service.approve_event(event_id, payload)
+    return EventOut.model_validate(event)
+
+
+@router.post("/{event_id}/reject", response_model=EventOut)
+async def reject_event(
+    event_id: int,
+    payload: ApprovalPayload | None = None,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = EventService(session)
+    event = await service.reject_event(event_id, payload)
+    return EventOut.model_validate(event)

@@ -92,32 +92,19 @@ async def _rag_retrieve_impl(
         return f"[Document retrieval error: {e}]"
 
 
-async def _rag_retrieve(
-    knowledge_base_id: str,
-    query: str,
-    top_k: int = 5,
-) -> str:
-    """Search Qdrant for relevant document chunks and return formatted context.
+def create_rag_tool(knowledge_base_id: str) -> StructuredTool:
+    """Create a RAG tool bound to a specific knowledge base ID."""
+    
+    async def _bound_rag_retrieve(query: str, top_k: int = 5) -> str:
+        """Search the Qdrant knowledge base for relevant document chunks."""
+        return await _rag_retrieve_impl(knowledge_base_id, query, top_k, vector_repo=None)
 
-    Args:
-        knowledge_base_id: Target knowledge base / Qdrant collection.
-        query: User query string.
-        top_k: Number of chunks to retrieve.
-
-    Returns:
-        Formatted context string, or a note if no relevant chunks found.
-        Never raises — returns a fallback message on any error.
-    """
-    return await _rag_retrieve_impl(knowledge_base_id, query, top_k, vector_repo=None)
-
-
-# Register as a LangChain tool usable by DeepAgents
-rag_retrieve = StructuredTool.from_function(
-    coroutine=_rag_retrieve,
-    name="rag_retrieve",
-    description=(
-        "Search the Qdrant knowledge base for relevant document chunks. "
-        "Returns formatted context with source citations including rank, score, "
-        "filename, and page number. Use when the user query requires document retrieval or RAG."
-    ),
-)
+    return StructuredTool.from_function(
+        coroutine=_bound_rag_retrieve,
+        name="rag_retrieve",
+        description=(
+            "Search the Qdrant knowledge base for relevant document chunks. "
+            "Returns formatted context with source citations including rank, score, "
+            "filename, and page number. Use when the user query requires document retrieval or RAG."
+        ),
+    )

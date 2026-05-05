@@ -8,7 +8,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.chat import ChatRequest, ChatResponse
-from src.core.deps import get_db, get_current_user_id
+from src.core.deps import get_db, get_current_user
+from src.persistencia.models.user import User
 from src.services.chat_service import ChatService
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -17,25 +18,25 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ChatService(session)
-    result = await service.process_non_stream(request, user_id)
+    result = await service.process_non_stream(request, current_user.id)
     return ChatResponse(**result)
 
 
 @router.post("/chat/stream")
 async def chat_stream(
     request: ChatRequest,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ChatService(session)
 
     async def event_generator():
         try:
-            async for event in service.process_stream(request, user_id):
+            async for event in service.process_stream(request, current_user.id):
                 # Handle both dicts and Pydantic models
                 if hasattr(event, "model_dump"):
                     event = event.model_dump()

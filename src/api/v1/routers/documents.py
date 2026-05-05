@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.document import DocumentOut, DocumentListResponse
 from src.core.config import settings
-from src.core.deps import get_db, get_current_user_id, get_storage
+from src.core.deps import get_db, get_current_user, get_storage
+from src.persistencia.models.user import User
 from src.persistencia.storage.storage_port import StoragePort
 from src.services.document_service import DocumentService
 from src.services.document_processor import DocumentProcessor
@@ -21,7 +22,7 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     knowledge_base_id: int = Form(...),
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
     storage: StoragePort = Depends(get_storage),
 ):
@@ -48,7 +49,7 @@ async def upload_document(
     service = DocumentService(session, storage=storage)
     doc = await service.create_document(
         knowledge_base_id,
-        user_id,
+        current_user.id,
         file.filename or "unknown",
         s3_key=s3_key,
         content_type=content_type,
@@ -67,7 +68,7 @@ async def upload_document(
 @router.get("/{doc_id}", response_model=DocumentOut)
 async def get_document(
     doc_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     """Get a single document by ID."""
@@ -82,7 +83,7 @@ async def get_document(
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(
     knowledge_base_id: int | None = Query(None),
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     """List uploaded documents, optionally filtered by knowledge base."""
@@ -97,7 +98,7 @@ async def list_documents(
 @router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     doc_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
     storage: StoragePort = Depends(get_storage),
 ):

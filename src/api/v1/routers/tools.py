@@ -11,7 +11,8 @@ from src.api.v1.schemas.tool import (
     MCPSourceUpdate,
     MCPSourceOut,
 )
-from src.core.deps import get_db, get_current_user_id
+from src.core.deps import get_db, get_current_user
+from src.persistencia.models.user import User
 from src.services.tool_config_service import ToolConfigService
 from src.services.mcp_source_service import MCPSourceService
 
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/tools", tags=["tools"])
 
 @router.get("", response_model=list[ToolConfigOut])
 async def list_tools(
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
@@ -32,7 +33,7 @@ async def list_tools(
 @router.get("/{tool_id}", response_model=ToolConfigOut)
 async def get_tool(
     tool_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
@@ -42,7 +43,7 @@ async def get_tool(
 @router.post("", response_model=ToolConfigOut, status_code=201)
 async def create_tool(
     data: ToolConfigCreate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
@@ -53,7 +54,7 @@ async def create_tool(
 async def update_tool(
     tool_id: int,
     data: ToolConfigUpdate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
@@ -63,7 +64,7 @@ async def update_tool(
 @router.delete("/{tool_id}", status_code=204)
 async def delete_tool(
     tool_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
@@ -75,7 +76,7 @@ async def delete_tool(
 
 @router.get("/sources/", response_model=list[MCPSourceOut])
 async def list_sources(
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
@@ -85,7 +86,7 @@ async def list_sources(
 @router.post("/sources/", response_model=MCPSourceOut, status_code=201)
 async def create_source(
     data: MCPSourceCreate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
@@ -96,7 +97,7 @@ async def create_source(
 async def update_source(
     source_id: int,
     data: MCPSourceUpdate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
@@ -106,7 +107,7 @@ async def update_source(
 @router.delete("/sources/{source_id}", status_code=204)
 async def delete_source(
     source_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
@@ -122,7 +123,7 @@ async def discover_tools(
     is_stdio: bool = Query(False),
     is_resource: bool = Query(False),
     method: str = Query("GET"),
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
 ):
     """Dynamically discover tools from an MCP server or REST API endpoint."""
     from src.services.mcp_service import MCPService
@@ -138,7 +139,7 @@ async def discover_tools(
 async def discover_source_tools(
     source_id: int,
     method: str = Query("GET"),
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     """Discover tools from a registered MCP source."""
@@ -158,7 +159,7 @@ async def discover_source_tools(
 @router.post("/sources/{source_id}/sync")
 async def sync_source_tools(
     source_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     """Connect to an MCP source, discover tools, and auto-register them."""

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.db_collector import DbSourceCreate, DbSourceUpdate, DbSourceOut
-from src.core.deps import get_db, get_current_user_id
+from src.core.deps import get_db, get_current_user
+from src.persistencia.models.user import User
 from src.core.exceptions import NotFoundError
 from src.services.db_source_service import DbSourceService
 
@@ -22,7 +23,7 @@ async def list_db_sources(
 @router.post("", response_model=DbSourceOut, status_code=201)
 async def create_db_source(
     data: DbSourceCreate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = DbSourceService(session)
@@ -32,7 +33,7 @@ async def create_db_source(
 @router.post("/{source_id}/run", response_model=DbSourceOut)
 async def run_db_source(
     source_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = DbSourceService(session)
@@ -42,7 +43,7 @@ async def run_db_source(
 @router.delete("/{source_id}", status_code=204)
 async def delete_db_source(
     source_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = DbSourceService(session)

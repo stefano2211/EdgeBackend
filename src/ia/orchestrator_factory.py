@@ -14,7 +14,7 @@ from deepagents import create_deep_agent
 
 from src.ia.langchain_models import get_chat_model
 from src.ia.subagents.registry import get_available_subagents, get_subagent_descriptions
-from src.ia.tools import rag_retrieve, mcp_execute, browser_navigate
+from src.ia.tools import create_rag_tool, mcp_execute, browser_navigate
 from src.ia.memory import get_checkpointer, get_store
 from src.ia.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from src.core.logging import logging
@@ -40,7 +40,10 @@ def create_orchestrator(
     subagents = get_available_subagents(subagent_names)
 
     # Build tools list (orchestrator has direct access + sub-agents have their own)
-    tools = [rag_retrieve, mcp_execute, browser_navigate]
+    tools = [mcp_execute, browser_navigate]
+    
+    if knowledge_base_id:
+        tools.append(create_rag_tool(knowledge_base_id))
 
     # Default system prompt with sub-agent descriptions injected
     if system_prompt_override:

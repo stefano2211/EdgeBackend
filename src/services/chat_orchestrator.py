@@ -93,11 +93,13 @@ def _extract_chunk_payload(
     # DeepAgents token attributes (LangChain message chunks)
     text = ""
     reasoning_text = ""
-    if getattr(token, "type", None) == "ai":
+    token_type = getattr(token, "type", None)
+    
+    if token_type in ("ai", "AIMessageChunk"):
         text = getattr(token, "content", None) or ""
         # Anthropic / DeepSeek extended-thinking support (optional)
         reasoning_text = getattr(token, "reasoning_content", None) or ""
-    elif getattr(token, "type", None) == "tool":
+    elif token_type in ("tool", "ToolMessageChunk"):
         # Tool result content — stream as an event rather than raw text
         tool_content = getattr(token, "content", None) or ""
         if tool_content:

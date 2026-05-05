@@ -16,7 +16,7 @@ from src.ia.prompts.subagents import (
     VL_AGENT_DESCRIPTION,
     VL_AGENT_SYSTEM_PROMPT,
 )
-from src.ia.tools import rag_retrieve, mcp_execute, browser_navigate, browser_click, browser_screenshot, browser_extract_text
+from src.ia.tools import rag_retrieve, mcp_execute, browser_navigate, browser_click, browser_type, browser_screenshot, browser_extract_text
 
 
 def _build_industrial_subagent() -> dict:

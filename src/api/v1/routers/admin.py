@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.deps import get_db, get_current_user_id, require_admin
+from src.core.deps import get_db, require_admin
 from src.core.exceptions import NotFoundError
 from src.services.admin_service import AdminService
 

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.prompt import PromptCreate, PromptUpdate, PromptOut
-from src.core.deps import get_db, get_current_user_id
+from src.core.deps import get_db, get_current_user
+from src.persistencia.models.user import User
 from src.core.exceptions import NotFoundError
 from src.services.prompt_service import PromptService
 
@@ -22,7 +23,7 @@ async def list_prompts(
 @router.post("", response_model=PromptOut, status_code=201)
 async def create_prompt(
     data: PromptCreate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = PromptService(session)
@@ -33,7 +34,7 @@ async def create_prompt(
 async def update_prompt(
     prompt_id: int,
     data: PromptUpdate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = PromptService(session)
@@ -43,7 +44,7 @@ async def update_prompt(
 @router.delete("/{prompt_id}", status_code=204)
 async def delete_prompt(
     prompt_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = PromptService(session)

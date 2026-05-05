@@ -1,0 +1,50 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE / Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Docker (don't send docker-compose into the build context)
+docker-compose.yml
+docker-compose.*.yml
+
+# Env files
+.env
+.env.*
+
+# Docs, tests, misc
+*.md
+LICENSE
+tests/
+docs/
+notebooks/
+*.ipynb
+
+# OS artifacts
+Thumbs.db
+.DS_Store
+
+# Gemini / local tooling
+.gemini/
+.antigravityignore
+
+# Models / large files (these are mounted as volumes, not copied)
+models/

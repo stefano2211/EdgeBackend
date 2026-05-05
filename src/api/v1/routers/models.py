@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.model import ModelConfigCreate, ModelConfigOut
-from src.core.deps import get_db, get_current_user_id
+from src.core.deps import get_db, get_current_user
+from src.persistencia.models.user import User
 from src.services.model_service import ModelService
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/models", tags=["models"])
 
 @router.get("", response_model=list[ModelConfigOut])
 async def list_models(
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
@@ -23,7 +24,7 @@ async def list_models(
 @router.get("/{model_id}", response_model=ModelConfigOut)
 async def get_model(
     model_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
@@ -34,7 +35,7 @@ async def get_model(
 @router.post("", response_model=ModelConfigOut, status_code=201)
 async def create_model(
     data: ModelConfigCreate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
@@ -46,7 +47,7 @@ async def create_model(
 async def update_model(
     model_id: int,
     data: ModelConfigCreate,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
@@ -57,7 +58,7 @@ async def update_model(
 @router.delete("/{model_id}", status_code=204)
 async def delete_model(
     model_id: int,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
@@ -67,7 +68,7 @@ async def delete_model(
 
 @router.get("/discovery/providers")
 async def list_providers(
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
 ):
     return [{"id": "vllm", "name": "vLLM"}, {"id": "ollama", "name": "Ollama"}]
 
@@ -75,7 +76,7 @@ async def list_providers(
 @router.get("/discovery/models/{provider}")
 async def list_provider_models(
     provider: str,
-    user_id: int = Depends(get_current_user_id),
+    current_user: User = Depends(get_current_user),
 ):
     if provider == "vllm":
         return [{"id": "Qwen/Qwen3.5-9B-Instruct", "name": "Qwen 3.5 9B"}]
