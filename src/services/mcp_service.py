@@ -386,14 +386,24 @@ class MCPService:
     # ------------------------------------------------------------------
 
     async def _analyze_with_llm(self, prompt: str) -> Optional[dict]:
-        """Call a local LLM via LangChain for REST API analysis. Returns parsed JSON or None."""
+        """Call a local LLM via LLMClient for REST API analysis. Returns parsed JSON or None."""
         try:
-            from src.ia.langchain_models import get_chat_model
-            from langchain_core.messages import HumanMessage
+            from src.ia.llm_client import get_llm_client
 
-            model = get_chat_model(temperature=0)
-            res = await model.ainvoke([HumanMessage(content=prompt)])
-            raw = res.content.strip() if hasattr(res, "content") else str(res).strip()
+            client = get_llm_client()
+            response = await client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                stream=False,
+                temperature=0,
+                max_tokens=1000,
+                response_format={"type": "json_object"},
+            )
+
+            # Parse OpenAI-compatible response format
+            choices = response.get("choices", [])
+            raw = ""
+            if choices:
+                raw = choices[0].get("message", {}).get("content", "").strip()
 
             # Strip think tags and markdown fences
             raw = re.sub(r"\s*<think>.*?</think>\s*", "", raw, flags=re.DOTALL)
