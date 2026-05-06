@@ -123,9 +123,9 @@ class VectorRepository:
                 ]
             )
 
-        results = await self.client.search(
+        response = await self.client.query_points(
             collection_name=name,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=top_k,
             with_payload=True,
             query_filter=query_filter,
@@ -142,7 +142,7 @@ class VectorRepository:
                 "filename": r.payload.get("filename"),
                 "page_number": r.payload.get("page_number"),
             }
-            for r in results
+            for r in response.points
         ]
 
     # ── Delete ───────────────────────────────────────────
