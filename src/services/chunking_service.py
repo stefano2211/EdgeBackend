@@ -1,19 +1,25 @@
-"""Text chunking with overlap for RAG.
+"""Text chunking with overlap and contextual enrichment for RAG.
 
 Uses LangChain RecursiveCharacterTextSplitter — the industry-standard default.
 Hierarchical separators preserve paragraphs → sentences → words.
-Supports semantic chunking (embedding-based) and metadata-preserving chunking.
+
+Contextual Chunking (Anthropic technique, 2024):
+- Prepends a short document-level context to each chunk before embedding.
+- Reduces retrieval failure rates by 35% on isolated chunk queries.
+- Applied at indexing time (no runtime latency cost).
 
 Layer: services (business logic / domain orchestration)
 """
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Callable
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from src.core.config import settings
 from src.core.logging import logging
 
 logger = logging.getLogger(__name__)
@@ -118,6 +124,104 @@ def chunk_documents(
 
     logger.debug("Split %s into %d chunks (size=%d, overlap=%d)", filename, len(result), chunk_size, overlap)
     return result
+
+
+# ── Contextual Chunking (Anthropic technique) ──
+
+_CONTEXT_PROMPT = """\
+<document>
+{doc_summary}
+</document>
+
+Here is the chunk we want to situate within the whole document:
+<chunk>
+{chunk_text}
+</chunk>
+
+Please give a short succinct context (2-3 sentences, max 80 words) to situate \
+this chunk within the overall document for the purpose of improving search \
+retrieval of the chunk. Answer ONLY with the context, no preamble."""
+
+
+async def _generate_chunk_context(
+    doc_summary: str,
+    chunk_text: str,
+) -> str:
+    """Use the local LLM to generate situating context for a chunk.
+
+    This context is prepended to the chunk before embedding, improving
+    retrieval accuracy by 35% (Anthropic Contextual Retrieval, 2024).
+    """
+    try:
+        from src.ia.llm_client import get_llm_client
+
+        prompt = _CONTEXT_PROMPT.format(
+            doc_summary=doc_summary,
+            chunk_text=chunk_text[:500],  # Limit chunk preview for efficiency
+        )
+        client = get_llm_client()
+        response = await client.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            stream=False,
+            max_tokens=120,
+            temperature=0.3,  # Low temp for factual context generation
+        )
+        # Parse OpenAI-compatible response format
+        choices = response.get("choices", [])
+        if choices:
+            context = choices[0].get("message", {}).get("content", "").strip()
+            return context
+        return ""
+    except Exception as e:
+        logger.warning("Chunk contextualization failed: %s", e)
+        return ""
+
+
+async def contextualize_chunks(
+    chunks: list[Chunk],
+    full_document_text: str,
+    *,
+    max_concurrent: int = 5,
+) -> list[Chunk]:
+    """Prepend document-level context to each chunk (Anthropic technique).
+
+    Uses the local LLM to generate a brief situating summary for each chunk.
+    Processes chunks in parallel with bounded concurrency to balance speed
+    and resource usage.
+
+    Args:
+        chunks: List of Chunk objects from the splitter.
+        full_document_text: The full document text (first 4K chars used).
+        max_concurrent: Max parallel LLM calls.
+
+    Returns:
+        List of Chunk objects with contextualized text.
+    """
+    if not chunks:
+        return chunks
+
+    # Use first 4K chars as document summary for efficiency
+    doc_summary = full_document_text[:4000]
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def _contextualize_one(chunk: Chunk) -> Chunk:
+        async with semaphore:
+            context = await _generate_chunk_context(doc_summary, chunk.text)
+            if context:
+                enriched_text = f"[Context: {context}]\n\n{chunk.text}"
+            else:
+                enriched_text = chunk.text
+            return Chunk(text=enriched_text, metadata=chunk.metadata, index=chunk.index)
+
+    tasks = [asyncio.create_task(_contextualize_one(c)) for c in chunks]
+    contextualized = await asyncio.gather(*tasks)
+
+    logger.info(
+        "Contextualized %d/%d chunks successfully",
+        sum(1 for c in contextualized if c.text.startswith("[Context:")),
+        len(chunks),
+    )
+    return list(contextualized)
 
 
 def chunk_text_semantic(

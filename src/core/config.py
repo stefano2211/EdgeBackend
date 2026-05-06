@@ -66,6 +66,23 @@ class Settings(BaseSettings):
 
     # ── Embeddings ──
     EMBEDDINGS_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    SPARSE_EMBEDDINGS_MODEL: str = "Qdrant/bm25"
+
+    # ── RAG Pipeline ──
+    HYBRID_SEARCH_ENABLED: bool = True
+    RAG_PREFETCH_LIMIT: int = 50
+    RAG_RERANK_TOP_K: int = 5
+    RAG_MIN_RELEVANCE_SCORE: float = 0.35
+
+    # ── Reranker ──
+    RERANKER_ENABLED: bool = True
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+
+    # ── Contextual Chunking ──
+    CONTEXTUAL_CHUNKING_ENABLED: bool = True
+
+    # ── Query Enhancement ──
+    QUERY_ENHANCEMENT_ENABLED: bool = True
 
     @property
     def is_dev(self) -> bool:
