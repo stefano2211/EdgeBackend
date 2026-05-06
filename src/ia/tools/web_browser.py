@@ -82,7 +82,7 @@ browser_dom = StructuredTool.from_function(
     ),
 )
 
-computer = StructuredTool.from_args_schema(
+computer = StructuredTool.from_function(
     coroutine=_async_computer,
     name="computer",
     description=(
