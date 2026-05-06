@@ -16,7 +16,7 @@ from src.ia.prompts.subagents import (
     VL_AGENT_DESCRIPTION,
     VL_AGENT_SYSTEM_PROMPT,
 )
-from src.ia.tools import create_rag_tool, mcp_execute, browser_navigate, browser_click, browser_type, browser_screenshot, browser_extract_text
+from src.ia.tools import create_rag_tool, mcp_execute, browser_navigate, browser_dom, computer
 
 
 def _build_industrial_subagent(
@@ -63,10 +63,8 @@ def _build_vl_subagent(knowledge_base_id: str | None = None) -> dict:
         "system_prompt": VL_AGENT_SYSTEM_PROMPT,
         "tools": [
             browser_navigate,
-            browser_click,
-            browser_type,
-            browser_screenshot,
-            browser_extract_text,
+            browser_dom,
+            computer,
         ],
         "model": get_chat_model(adapter="vl"),  # Vision LoRA adapter
     }

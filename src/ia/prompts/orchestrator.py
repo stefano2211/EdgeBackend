@@ -26,12 +26,7 @@ _TOOL_DESCRIPTIONS: dict[str, str] = {
         '- mcp_execute(tool_name: str, arguments: dict) → Execute a registered MCP/API tool. '
         "Use for one-off external API calls (sensor data, system status) that do NOT require "
         "document context or deep specialist knowledge."
-    ),
-    "browser_navigate": (
-        '- browser_navigate(url: str) → Navigate to a web URL and return page content. '
-        "Use only for quick read-only web checks. For UI interaction or screenshots, "
-        "delegate to vl-agent instead."
-    ),
+    )
 }
 
 

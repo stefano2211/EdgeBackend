@@ -178,21 +178,39 @@ class ChatOrchestrator:
             return
 
         config = {"configurable": {"thread_id": thread_id}}
+        
+        from src.core.context import chat_stream_queue
+        q: asyncio.Queue = asyncio.Queue()
+        chat_stream_queue.set(q)
+        
         full_content = ""
         reasoning_content = ""
         current_agent = "orchestrator"
         agents_used: set[str] = set()
 
-        try:
-            async for chunk in orchestrator.astream(
-                {"messages": messages},
-                config=config,
-                stream_mode="messages",
-                subgraphs=True,
-                version="v2",
-            ):
+        async def _run_astream():
+            try:
+                async for chunk in orchestrator.astream(
+                    {"messages": messages},
+                    config=config,
+                    stream_mode="messages",
+                    subgraphs=True,
+                    version="v2",
+                ):
+                    await q.put({"chunk": chunk})
+            except Exception as e:
+                await q.put({"error": e})
+            finally:
+                await q.put({"done": True})
+
+        task = asyncio.create_task(_run_astream())
+
+        while True:
+            item = await q.get()
+            
+            if "chunk" in item:
                 agent_name, text, reasoning, agents_used, events = _extract_chunk_payload(
-                    chunk, current_agent=current_agent, agents_used=agents_used
+                    item["chunk"], current_agent=current_agent, agents_used=agents_used
                 )
                 current_agent = agent_name
                 if text:
@@ -203,12 +221,18 @@ class ChatOrchestrator:
                     yield {"type": "reasoning", "content": reasoning, "agent": agent_name}
                 for ev in events:
                     yield ev
-
-        except Exception as e:
-            logger.exception("Orchestrator streaming failed: %s", e)
-            error_msg = f"\n\n[System error during processing: {e}]"
-            full_content += error_msg
-            yield {"type": "token", "content": error_msg}
+                    
+            elif "screenshot" in item:
+                yield {"type": "screenshot", "data": item["screenshot"]}
+                
+            elif "error" in item:
+                logger.exception("Orchestrator streaming failed: %s", item["error"])
+                error_msg = f"\n\n[System error during processing: {item['error']}]"
+                full_content += error_msg
+                yield {"type": "token", "content": error_msg}
+                
+            elif "done" in item:
+                break
 
         if current_agent:
             yield {"type": "subagent", "name": current_agent, "status": "complete"}

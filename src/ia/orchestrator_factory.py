@@ -15,7 +15,7 @@ from deepagents import create_deep_agent
 
 from src.ia.langchain_models import get_chat_model
 from src.ia.subagents.registry import get_available_subagents, get_subagent_descriptions
-from src.ia.tools import create_rag_tool, mcp_execute, browser_navigate
+from src.ia.tools import create_rag_tool, mcp_execute
 from src.ia.memory import get_checkpointer, get_store
 from src.ia.prompts.orchestrator import build_orchestrator_prompt
 from src.core.logging import logging
@@ -50,7 +50,7 @@ def create_orchestrator(
 
     # Build tools list — only register tools that the user has enabled.
     # The orchestrator has direct access to these; sub-agents have their own.
-    tools = [browser_navigate]  # browser always available
+    tools = []  # browser tools delegated to vl-agent
 
     if enable_mcp:
         tools.append(mcp_execute)
