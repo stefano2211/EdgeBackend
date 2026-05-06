@@ -37,3 +37,15 @@ async def get_current_auth_user(
     current_user: User = Depends(get_current_user),
 ) -> UserOut:
     return UserOut.model_validate(current_user)
+
+
+@router.post("/logout")
+async def logout(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Logout the current user.
+    Since the application uses stateless JWTs, the server doesn't invalidate
+    the token. The client is responsible for discarding it.
+    """
+    return {"message": "Successfully logged out"}
