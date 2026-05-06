@@ -150,6 +150,7 @@ services:
     image: ollama/ollama:latest
     container_name: edge-ollama
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     profiles:
       - ollama
       - gpu
@@ -165,6 +166,7 @@ services:
       OLLAMA_MAX_LOADED_MODELS: "2"
       OLLAMA_HOST: "0.0.0.0"
       OLLAMA_PORT: "11434"
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
     deploy:
       resources:
         reservations:
@@ -206,7 +208,7 @@ services:
       # Ollama
       OLLAMA_ENABLED: ${OLLAMA_ENABLED:-True}
       OLLAMA_BASE_URL: http://ollama:11434/v1
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
       OLLAMA_MAX_TOKENS: 8192
       # Default provider
       DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-ollama}
