@@ -25,5 +25,8 @@ class KnowledgeBase(Base):
         "User", back_populates="knowledge_bases", lazy="selectin"
     )
     documents: Mapped[list["Document"]] = relationship(
-        "Document", back_populates="knowledge_base", lazy="selectin"
+        "Document", 
+        back_populates="knowledge_base", 
+        lazy="selectin",
+        cascade="all, delete-orphan"
     )
