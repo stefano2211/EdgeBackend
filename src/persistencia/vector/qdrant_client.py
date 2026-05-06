@@ -12,7 +12,6 @@ from qdrant_client.models import (
     VectorParams,
     HnswConfigDiff,
     KeywordIndexParams,
-    TextIndexParams,
 )
 
 from src.core.config import settings
@@ -84,7 +83,7 @@ async def ensure_collection(
     await client.create_payload_index(
         collection_name=name,
         field_name="filename",
-        field_schema=TextIndexParams(type="text"),
+        field_schema=KeywordIndexParams(type="keyword"),
         wait=True,
     )
 
