@@ -84,9 +84,10 @@ def create_ollama_chat_model(
     model = model_name or settings.OLLAMA_MODEL
     base_url = base_url or settings.OLLAMA_BASE_URL.replace("/v1", "")
 
+    # NOTE: Ollama does not support vLLM-style "base:adapter" dynamic loading.
+    # We only use the base model unless the user specifically overrides it.
     if adapter:
-        model = f"{model}:{adapter}"
-        logger.info("Using Ollama adapter: %s", model)
+        logger.debug("Ollama provider does not support dynamic LoRA adapters; using base model: %s", model)
 
     return ChatOllama(
         model=model,
@@ -161,8 +162,6 @@ def get_chat_model_string(
 
     elif provider == "ollama":
         model = settings.OLLAMA_MODEL
-        if adapter:
-            model = f"{model}:{adapter}"
         return f"ollama:{model}"
 
     elif provider == "auto":
@@ -173,8 +172,6 @@ def get_chat_model_string(
             return f"openai:{model}"
         if settings.OLLAMA_ENABLED:
             model = settings.OLLAMA_MODEL
-            if adapter:
-                model = f"{model}:{adapter}"
             return f"ollama:{model}"
         raise RuntimeError("No LLM provider available")
 
