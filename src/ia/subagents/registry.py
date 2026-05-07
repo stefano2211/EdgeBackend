@@ -9,6 +9,8 @@ from collections.abc import Callable
 
 from src.core.logging import logging
 from src.ia.langchain_models import get_chat_model, get_multimodal_chat_model
+
+logger = logging.getLogger(__name__)
 from src.ia.prompts.subagents import (
     INDUSTRIAL_AGENT_DESCRIPTION,
     INDUSTRIAL_AGENT_SYSTEM_PROMPT,
