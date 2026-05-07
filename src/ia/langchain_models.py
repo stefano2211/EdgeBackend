@@ -176,3 +176,39 @@ def get_chat_model_string(
         raise RuntimeError("No LLM provider available")
 
     raise ValueError(f"Unknown LLM provider: {provider}")
+
+
+def get_multimodal_chat_model(
+    model_name: str | None = None,
+    base_url: str | None = None,
+    temperature: float = 0.3,
+    streaming: bool = True,
+) -> BaseChatModel:
+    """Create a multimodal ChatOllama for vision-language tasks.
+
+    Uses a vision-capable model (e.g., qwen3.5:9b) WITHOUT LoRA adapters,
+    since Qwen3.5 is natively multimodal.
+
+    Args:
+        model_name: Vision model name. Defaults to settings.OLLAMA_MODEL.
+        base_url: Ollama base URL. Defaults to settings.OLLAMA_BASE_URL.
+        temperature: Lower temp for deterministic agent behavior.
+        streaming: Whether to stream tokens.
+
+    Returns:
+        BaseChatModel instance ready for multimodal (image + text) inference.
+    """
+    ChatOllama = _import_chat_ollama()
+    model = model_name or settings.OLLAMA_MODEL
+    base_url = base_url or settings.OLLAMA_BASE_URL.replace("/v1", "")
+
+    logger.info("[Multimodal] Using vision model: %s at %s", model, base_url)
+
+    return ChatOllama(
+        model=model,
+        base_url=base_url,
+        temperature=temperature,
+        streaming=streaming,
+        # Qwen3.5:9b supports up to 256K context
+        num_ctx=32000,
+    )

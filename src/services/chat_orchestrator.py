@@ -179,9 +179,10 @@ class ChatOrchestrator:
 
         config = {"configurable": {"thread_id": thread_id}}
         
-        from src.core.context import chat_stream_queue
+        from src.core.context import chat_stream_queue, active_thread_id
         q: asyncio.Queue = asyncio.Queue()
         chat_stream_queue.set(q)
+        active_thread_id.set(thread_id)
         
         full_content = ""
         reasoning_content = ""
@@ -224,6 +225,14 @@ class ChatOrchestrator:
                     
             elif "screenshot" in item:
                 yield {"type": "screenshot", "data": item["screenshot"]}
+
+            elif "type" in item and item["type"] == "takeover":
+                # Human-in-the-loop: reenviar evento takeover tal cual al frontend
+                yield item
+
+            elif "thought" in item:
+                # Modo Cinema: pensamiento del agente
+                yield {"type": "thought", "content": item["thought"]}
                 
             elif "error" in item:
                 logger.exception("Orchestrator streaming failed: %s", item["error"])

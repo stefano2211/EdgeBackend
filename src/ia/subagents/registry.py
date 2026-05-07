@@ -7,7 +7,7 @@ via el built-in `task` tool de DeepAgents.
 
 from collections.abc import Callable
 
-from src.ia.langchain_models import get_chat_model
+from src.ia.langchain_models import get_chat_model, get_multimodal_chat_model
 from src.ia.prompts.subagents import (
     INDUSTRIAL_AGENT_DESCRIPTION,
     INDUSTRIAL_AGENT_SYSTEM_PROMPT,
@@ -56,7 +56,7 @@ def _build_historical_subagent(knowledge_base_id: str | None = None) -> dict:
 
 
 def _build_vl_subagent(knowledge_base_id: str | None = None) -> dict:
-    """Sub-agente VL: navegación web, screenshots, visión."""
+    """Sub-agente VL: navegación web, screenshots, visión multimodal."""
     return {
         "name": "vl-agent",
         "description": VL_AGENT_DESCRIPTION,
@@ -66,7 +66,7 @@ def _build_vl_subagent(knowledge_base_id: str | None = None) -> dict:
             browser_dom,
             computer,
         ],
-        "model": get_chat_model(adapter="vl"),  # Vision LoRA adapter
+        "model": get_multimodal_chat_model(),  # Qwen3.5:9b natively multimodal
     }
 
 

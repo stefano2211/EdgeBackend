@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # ── Ollama ──
     OLLAMA_ENABLED: bool = True
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
-    OLLAMA_MODEL: str = "qwen3.5:4b"
+    OLLAMA_MODEL: str = "qwen3.5:9b"
     OLLAMA_MAX_TOKENS: int = 8192
 
     # ── LLM Provider Selection ──

@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.v1.schemas.chat import ChatRequest, ChatResponse
+from src.api.v1.schemas.chat import ChatRequest, ChatResponse, ChatResumeRequest
 from src.core.deps import get_db, get_current_user
 from src.persistencia.models.user import User
 from src.services.chat_service import ChatService
+from src.ia.browser import TakeoverResponse
+from src.ia.tools.web_browser import _controller
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -50,3 +52,17 @@ async def chat_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
+
+
+@router.post("/chat/resume")
+async def chat_resume(
+    request: ChatResumeRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Resume a paused agent execution with human input (human-in-the-loop)."""
+    response = TakeoverResponse(
+        thread_id=request.thread_id,
+        response=request.user_response,
+    )
+    await _controller.human_loop.resume(response)
+    return {"status": "ok", "message": "Resume signal sent"}

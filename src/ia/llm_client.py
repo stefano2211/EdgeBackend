@@ -169,17 +169,34 @@ class LLMClient:
         max_tokens: int | None = None,
         stream: bool = False,
         tools: list[dict[str, Any]] | None = None,
+        images: list[str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
         """
         Send a chat completion request to the active backend.
 
+        Args:
+            images: List of base64-encoded image strings. For Ollama multimodal models,
+                    these are attached to the last user message.
+
         Returns the full response dict if stream=False,
         or an async iterator of chunks if stream=True.
         """
+        # Clonar mensajes para no mutar el original
+        msgs = list(messages)
+
+        # Multimodal: adjuntar imágenes al último mensaje del usuario
+        if images and self.provider == "ollama":
+            # Encontrar el último mensaje de usuario
+            for i in range(len(msgs) - 1, -1, -1):
+                if msgs[i].get("role") == "user":
+                    msgs[i] = dict(msgs[i])
+                    msgs[i]["images"] = images
+                    break
+
         payload: dict[str, Any] = {
             "model": self.model,
-            "messages": messages,
+            "messages": msgs,
             "temperature": temperature,
             "max_tokens": max_tokens or self.max_tokens,
             "stream": stream,

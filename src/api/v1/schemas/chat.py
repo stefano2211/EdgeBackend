@@ -39,3 +39,8 @@ class ChatStreamDone(ChatStreamEvent):
 
 class ChatStreamError(ChatStreamEvent):
     detail: str
+
+
+class ChatResumeRequest(BaseModel):
+    thread_id: str
+    user_response: str
