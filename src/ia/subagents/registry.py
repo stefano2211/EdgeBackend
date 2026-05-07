@@ -7,6 +7,7 @@ via el built-in `task` tool de DeepAgents.
 
 from collections.abc import Callable
 
+from src.core.logging import logging
 from src.ia.langchain_models import get_chat_model, get_multimodal_chat_model
 from src.ia.prompts.subagents import (
     INDUSTRIAL_AGENT_DESCRIPTION,
