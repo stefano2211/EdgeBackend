@@ -94,12 +94,12 @@ async def _async_computer(
     # Caso especial: ask_user bloquea esperando respuesta del humano
     if action == "ask_user":
         prompt = text or "Necesito tu ayuda."
-        # Obtener thread_id del contexto de ejecución (más confiable que el LLM)
-        from src.core.context import active_thread_id
-        ctx_thread_id = active_thread_id.get()
+        # Obtener thread_id del controller (establecido por ChatOrchestrator al iniciar stream)
+        ctrl_thread_id = _controller.active_thread_id
+        effective_thread_id = ctrl_thread_id or thread_id or "default"
         response = await _controller.ask_user(
             prompt=prompt,
-            thread_id=ctx_thread_id or thread_id or "default",
+            thread_id=effective_thread_id,
             action_type="general",
         )
         return f"User response: {response}"

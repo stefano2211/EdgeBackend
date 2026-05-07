@@ -179,14 +179,20 @@ class BrowserController:
         self._event_emitter = emitter
 
     async def _emit_state(self, state: BrowserState, action_msg: str = "") -> None:
-        """Emite un evento SSE con screenshot al frontend."""
+        """Emite un evento SSE con screenshot LIMPIO (sin SoM) al frontend."""
         if not self._event_emitter:
             return
 
+        # Capturar screenshot LIMPIO para el usuario (sin cajas rojas)
+        # El AOM textual ya tiene los IDs para la IA
+        clean_screenshot = await self.perception.capture_screenshot(
+            self._page, draw_som=False
+        )
+
         payload = {
-            "b64": state.screenshot.base64_image,
+            "b64": clean_screenshot.base64_image,
             "step": 1,
-            "has_omniparser": state.screenshot.has_som,
+            "has_omniparser": False,  # El usuario no ve las cajas rojas
             "action": action_msg,
             "url": state.url,
             "title": state.title,
