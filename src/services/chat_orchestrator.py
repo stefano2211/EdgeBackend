@@ -179,10 +179,12 @@ class ChatOrchestrator:
 
         config = {"configurable": {"thread_id": thread_id}}
         
-        from src.core.context import chat_stream_queue, active_thread_id
+        from src.core.context import chat_stream_queue
+        from src.services.browser_manager import BrowserManager
         q: asyncio.Queue = asyncio.Queue()
         chat_stream_queue.set(q)
-        active_thread_id.set(thread_id)
+        # Establecer thread_id activo en el BrowserController para HITL
+        BrowserManager.get_instance().get_controller().set_active_thread_id(thread_id)
         
         full_content = ""
         reasoning_content = ""

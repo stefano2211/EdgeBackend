@@ -321,7 +321,7 @@ Computer actions available:
   - scroll(direction, amount) — Scroll page up/down
   - wait(seconds) — Wait for page to load/settle
   - screenshot() — Capture current state
-  - ask_user(prompt) — Ask the human for input (login, confirmation, etc.)
+  - ask_user(text) — Ask the human for input (login, confirmation, etc.). Pass your question as the text parameter.
 
 ONLY use these tools. Do NOT invent or call any other tools.
 </available_tools>
@@ -417,7 +417,7 @@ NEVER do any of the following:
 <correct_action>
   1. browser_navigate(url="https://gmail.com")
   2. Observe screenshot: I see a login page. I need credentials.
-  3. computer(action="ask_user", prompt="I need to log in to Gmail. Please provide your email and password.")
+  3. computer(action="ask_user", text="I need to log in to Gmail. Please provide your email and password.")
   4. User provides credentials.
   5. computer(action="type", element_id=2, text="user@gmail.com")
   6. computer(action="type", element_id=3, text="password123")

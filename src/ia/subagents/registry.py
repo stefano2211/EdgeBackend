@@ -57,6 +57,7 @@ def _build_historical_subagent(knowledge_base_id: str | None = None) -> dict:
 
 def _build_vl_subagent(knowledge_base_id: str | None = None) -> dict:
     """Sub-agente VL: navegación web, screenshots, visión multimodal."""
+    logger.info("[VL-Subagent] Building with model=%s", get_multimodal_chat_model())
     return {
         "name": "vl-agent",
         "description": VL_AGENT_DESCRIPTION,

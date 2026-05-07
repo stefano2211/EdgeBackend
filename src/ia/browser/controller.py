@@ -58,11 +58,22 @@ class BrowserController:
         # SSE event emitter callback (inyectado desde fuera)
         self._event_emitter: Any | None = None
 
+        # Thread ID activo para human-in-the-loop
+        self._active_thread_id: str | None = None
+
     # ── Propiedades ──
 
     @property
     def is_started(self) -> bool:
         return self._started
+
+    def set_active_thread_id(self, thread_id: str) -> None:
+        """Establece el thread ID activo para HITL."""
+        self._active_thread_id = thread_id
+
+    @property
+    def active_thread_id(self) -> str | None:
+        return self._active_thread_id
 
     @property
     def current_url(self) -> str:
@@ -206,7 +217,9 @@ class BrowserController:
 
     async def ask_user(self, prompt: str, thread_id: str, action_type: str = "general") -> str:
         """Pausa ejecución y espera respuesta del usuario vía HumanLoopService."""
-        logger.info("[BrowserController] Takeover requested: %s", prompt)
+        # Usar el thread_id activo del controller si está disponible
+        effective_thread_id = self._active_thread_id or thread_id or "default"
+        logger.info("[BrowserController] Takeover requested for thread=%s: %s", effective_thread_id, prompt)
 
         # 1. Emitir evento SSE al frontend para que muestre el takeover
         if self._event_emitter:
@@ -214,7 +227,7 @@ class BrowserController:
                 takeover_payload = {
                     "type": "takeover",
                     "message": prompt,
-                    "thread_id": thread_id,
+                    "thread_id": effective_thread_id,
                     "action_type": action_type,
                 }
                 if asyncio.iscoroutinefunction(self._event_emitter):
@@ -226,7 +239,7 @@ class BrowserController:
 
         # 2. Bloquear esperando respuesta del usuario
         request = TakeoverRequest(
-            thread_id=thread_id,
+            thread_id=effective_thread_id,
             prompt=prompt,
             action_type=action_type,
         )

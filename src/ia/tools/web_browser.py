@@ -89,7 +89,7 @@ async def _async_computer(
     thread_id: Optional[str] = "default",
 ) -> str:
     """Unified Computer Use Tool with extended action set."""
-    logger.info("Computer Action: %s (id=%s, coord=%s)", action, element_id, coordinate)
+    logger.info("Computer Action: %s (id=%s, coord=%s, text=%s)", action, element_id, coordinate, text)
 
     # Caso especial: ask_user bloquea esperando respuesta del humano
     if action == "ask_user":
