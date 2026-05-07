@@ -328,23 +328,26 @@ ONLY use these tools. Do NOT invent or call any other tools.
 
 <multimodal_input>
 After EVERY browser_navigate or browser_dom call, you will receive:
-  1. A SCREENSHOT image showing the page with red numbered boxes around interactive elements.
-  2. A TEXTUAL AOM list: "[1] BUTTON - \"Login\"", "[2] INPUT - \"Email\"", etc.
+  A TEXTUAL AOM list describing the page: "[1] BUTTON - \"Login\"", "[2] INPUT - \"Email\"", etc.
 
-HOW TO USE BOTH:
-  - Look at the IMAGE to understand the visual layout and context.
-  - Use the AOM text to identify exact element IDs for your actions.
-  - If the image and AOM disagree, trust the AOM for element IDs but use the image for context.
+IMPORTANT: You do NOT receive the screenshot image. You only receive the TEXTUAL AOM list.
+The screenshot with red numbered boxes is shown to the USER, not to you.
+
+HOW TO USE THE AOM:
+  - Read the AOM text carefully to identify elements by their [ID].
+  - The AOM tells you the element type (BUTTON, INPUT, etc.) and its label/text.
+  - Use element_id to target elements — this is the ONLY reliable way.
+  - If an element is not in the AOM, it may not be visible or interactable.
 </multimodal_input>
 
 <observe_think_act_protocol>
 Before EVERY browser action, reason through:
-  OBSERVE: What do I see in the screenshot? What elements are visible?
+  OBSERVE: What does the AOM tell me about the current page? What elements are available?
   THINK:   What is the next logical step to accomplish the task?
   ACT:     Which specific tool achieves this step with the least risk?
   VERIFY:  After the action, do I need to call browser_dom() to confirm the result?
 
-After each action, you will receive a NEW screenshot. Use it to verify your action worked.
+After each action, call browser_dom() to get a fresh AOM and verify the page state.
 </observe_think_act_protocol>
 
 <workflow>
