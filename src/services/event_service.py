@@ -99,7 +99,7 @@ class EventService:
             raise ValidationError(f"Event is not awaiting approval (current: {event.status})")
 
         event.status = "failed"
-        event.resolved_at = datetime.now(timezone.utc)
+        event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
         if payload and payload.notes:
             event.agent_plan = (event.agent_plan or "") + f"\nRejected. Notes: {payload.notes}"
         await self.session.commit()

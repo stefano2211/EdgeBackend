@@ -148,7 +148,7 @@ class ReactiveOrchestrator:
 
         # Success
         event.status = "completed"
-        event.resolved_at = datetime.now(timezone.utc)
+        event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
         event.actions_taken = actions
         await session.commit()
         await self._refresh_and_broadcast(event, session)

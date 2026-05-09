@@ -45,7 +45,7 @@ class DbSourceService:
     async def run_source(self, source_id: int) -> DbSource:
         """Mark a DB source as run (stub — real implementation connects and fetches)."""
         source = await self.get_source(source_id)
-        source.last_run_at = datetime.now(timezone.utc)
+        source.last_run_at = datetime.now(timezone.utc).replace(tzinfo=None)
         source.last_run_status = "success"
         await commit_and_refresh(self.session, source)
         return source
