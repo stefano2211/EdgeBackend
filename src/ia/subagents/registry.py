@@ -19,6 +19,10 @@ from src.ia.prompts.subagents import (
     VL_AGENT_DESCRIPTION,
     VL_AGENT_SYSTEM_PROMPT,
 )
+from src.ia.prompts.reactive import (
+    REACTIVE_S1_COORDINATOR_PROMPT,
+    S1_COORDINATOR_DESCRIPTION,
+)
 from src.ia.tools import create_rag_tool, mcp_execute, browser_navigate, browser_dom, computer
 
 
@@ -74,12 +78,31 @@ def _build_vl_subagent(knowledge_base_id: str | None = None) -> dict:
     }
 
 
+def _build_s1_coordinator(knowledge_base_id: str | None = None) -> dict:
+    """System-1 Coordinator: fast intuition via historical + vl sub-agents (parallel).
+
+    This agent is the FAST thinking layer for reactive events.
+    It delegates to historical-agent (pattern matching) and optionally vl-agent
+    (visual verification) in parallel, then synthesizes their outputs.
+    """
+    # Note: s1-coordinator does NOT have direct tools — it delegates via task()
+    # to its sub-subagents: historical-agent and vl-agent.
+    return {
+        "name": "s1-coordinator",
+        "description": S1_COORDINATOR_DESCRIPTION,
+        "system_prompt": REACTIVE_S1_COORDINATOR_PROMPT,
+        "tools": [],
+        "model": get_chat_model(),
+    }
+
+
 # ── Registry público ──
 # Agregar nuevos sub-agentes aquí — el orquestador los descubre automáticamente
 SUBAGENT_BUILDERS: dict[str, Callable[[str | None], dict]] = {
     "industrial": _build_industrial_subagent,
     "historical": _build_historical_subagent,
     "vl": _build_vl_subagent,
+    "s1-coordinator": _build_s1_coordinator,
 }
 
 
@@ -107,10 +130,21 @@ def get_available_subagents(
     return result
 
 
-def get_subagent_descriptions(knowledge_base_id: str | None = None) -> str:
-    """Generate descriptions string for orchestrator system prompt."""
+def get_subagent_descriptions(
+    names: list[str] | None = None,
+    knowledge_base_id: str | None = None,
+) -> str:
+    """Generate descriptions string for orchestrator system prompt.
+
+    Args:
+        names: Specific subagent names to describe. If None, describes all.
+        knowledge_base_id: Optional ID passed to builders.
+    """
+    names = names or list(SUBAGENT_BUILDERS.keys())
     lines = []
-    for name, builder in SUBAGENT_BUILDERS.items():
-        cfg = builder(knowledge_base_id)
+    for name in names:
+        if name not in SUBAGENT_BUILDERS:
+            continue
+        cfg = SUBAGENT_BUILDERS[name](knowledge_base_id)
         lines.append(f"- {cfg['name']}: {cfg['description']}")
     return "\n".join(lines)
