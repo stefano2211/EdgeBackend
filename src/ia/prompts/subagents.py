@@ -281,8 +281,10 @@ You need the industrial-agent, which can search the knowledge base for the ISO 4
 # ── VL Agent ──
 VL_AGENT_DESCRIPTION = (
     "Vision-language web automation and browser interaction specialist. "
-    "Use ONLY when the user task explicitly requires: navigating websites, interacting with web UIs, "
+    "Use ONLY when the task requires navigating websites, interacting with web UIs, "
     "taking screenshots, filling forms, clicking buttons, visual verification, or reading web page content. "
+    "Can handle ANY website or web application: Gmail, Excel Online, Google Sheets, Salesforce, "
+    "SAP web portals, SCADA HMI dashboards, ERP systems, social media, or any custom web app. "
     "Has access to: browser_navigate, browser_dom, computer. "
     "Do NOT use for: document search, live sensor API queries, or historical data analysis. "
     "Do NOT use just because the user mentions a URL — only delegate if UI interaction is needed."
