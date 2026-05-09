@@ -1,9 +1,10 @@
 """Reactive event pipeline — Digital Optimus v2.
 
-Architecture (3-phase):
+Architecture (2-phase):
   Phase 1 — S2-Triage:      routing decision (fast LLM call, JSON)
-  Phase 2 — S1-Coordinator: fast intuition (historical + vl in parallel)
-  Phase 3 — S2-Synthesis:   deep reasoning + planning (DeepAgents with tools)
+  Phase 2 — S2-Autonomous:  autonomous orchestrator delegates to industrial-agent
+                             and s1-coordinator (which internally manages
+                             historical-agent + vl-agent) via task()
 
 SOLID:
   - SRP: Each phase is a private method.
@@ -22,13 +23,11 @@ from src.api.v1.schemas.chat import ChatRequest
 from src.core.config import settings
 from src.core.logging import logging
 from src.ia.llm_client import get_llm_client
-from src.ia.langchain_models import get_chat_model, get_multimodal_chat_model
+from src.ia.langchain_models import get_chat_model
 from src.ia.orchestrator_factory import create_reactive_orchestrator
 from src.ia.prompts.reactive import (
     REACTIVE_S2_TRIAGE_PROMPT,
-    REACTIVE_S1_COORDINATOR_PROMPT,
-    REACTIVE_HISTORICAL_PROMPT,
-    build_reactive_synthesis_prompt,
+    build_reactive_s2_orchestrator_prompt,
 )
 from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
@@ -57,8 +56,13 @@ class ReactiveOrchestrator:
     # ═══════════════════════════════════════════════════════════════════════════
 
     async def analyze(self, event: Event, session: AsyncSession) -> None:
-        """Run the full 3-phase reactive analysis pipeline."""
-        thread_id = f"event-{event.id}"
+        """Run the 2-phase reactive analysis pipeline.
+
+        Phase 1 — S2 Triage: fast LLM call producing routing hints (JSON).
+        Phase 2 — S2 Autonomous: DeepAgents orchestrator with industrial-agent,
+                  historical-agent and vl-agent as direct sub-agents. S2
+                  decides which to invoke via task() and synthesizes the results.
+        """
         event_query = self._build_event_query(event)
 
         # Load user's reactive configuration
@@ -74,70 +78,46 @@ class ReactiveOrchestrator:
         )
 
         try:
-            # ── Phase 1: S2-Triage ──
+            # ── Phase 1: S2-Triage (fast routing hints) ──
             await self._emit_log(event.id, "Phase 1: S2-Triage starting", level="info")
             triage = await self._run_s2_triage(event_query)
             await self._emit("triage_result", event.id, {"triage": triage})
             await self._emit_log(
                 event.id,
-                f"Phase 1: Triage complete → needs_s1={triage.get('needs_s1')} "
-                f"needs_industrial={triage.get('needs_industrial')} "
-                f"urgency={triage.get('urgency')}",
+                f"Phase 1: Triage → urgency={triage.get('urgency')} "
+                f"needs_s1={triage.get('needs_s1')} "
+                f"needs_industrial={triage.get('needs_industrial')}",
                 level="info",
             )
 
-            # ── Phase 2: S1-Coordinator (parallel specialists) ──
-            s1_analysis: str | None = None
-            if triage.get("needs_s1"):
-                await self._emit_log(event.id, "Phase 2: S1-Coordinator starting", level="info")
-                s1_analysis = await self._run_s1_coordinator(event, event_query, triage)
-                if s1_analysis:
-                    await self._emit("system1_result", event.id, {"result": s1_analysis})
-                    await self._emit_log(event.id, "Phase 2: System-1 analysis completed", level="info")
-            else:
-                await self._emit_log(event.id, "Phase 2: Skipped (triage decided no S1 needed)", level="info")
-
-            # ── Phase 2b: S2-Industrial (live data) ──
-            industrial_data: str | None = None
-            if triage.get("needs_industrial"):
-                await self._emit_log(event.id, "Phase 2b: S2-Industrial data fetch starting", level="info")
-                industrial_data = await self._run_s2_industrial(
-                    event, event_query, enabled_tool_ids, enabled_kb_ids
-                )
-                if industrial_data:
-                    await self._emit("industrial_result", event.id, {"result": industrial_data})
-                    await self._emit_log(event.id, "Phase 2b: Industrial data fetched", level="info")
-            else:
-                await self._emit_log(event.id, "Phase 2b: Skipped (no industrial data needed)", level="info")
-
-            # ── Phase 3: S2-Synthesis ──
-            await self._emit_log(event.id, "Phase 3: S2-Synthesis starting", level="info")
-            synthesis = await self._run_s2_synthesis(
+            # ── Phase 2: S2 Autonomous Orchestrator ──
+            # S2 receives event + triage hints and autonomously decides which
+            # sub-agents (industrial-agent, historical-agent, vl-agent) to
+            # invoke via task(), then synthesizes all results.
+            await self._emit_log(event.id, "Phase 2: S2 Autonomous Orchestrator starting", level="info")
+            synthesis = await self._run_s2_autonomous(
                 event=event,
                 event_query=event_query,
                 triage=triage,
-                s1_analysis=s1_analysis,
-                industrial_data=industrial_data,
                 enabled_tool_ids=enabled_tool_ids,
                 enabled_kb_ids=enabled_kb_ids,
             )
 
             analysis_text, plan, execute = self._parse_sections(synthesis)
 
-            # Emit results
             if analysis_text:
                 event.agent_reasoning = analysis_text
                 await self._emit("system2_result", event.id, {"result": analysis_text})
-                await self._emit_log(event.id, "Phase 3: System-2 reasoning completed", level="info")
+                await self._emit_log(event.id, "Phase 2: S2 reasoning completed", level="info")
 
             if plan:
                 event.agent_plan = plan
                 await self._emit("planner_result", event.id, {"plan": plan})
-                await self._emit_log(event.id, "Phase 3: Planner generated remediation plan", level="info")
+                await self._emit_log(event.id, "Phase 2: Remediation plan generated", level="info")
 
             if execute:
                 await self._emit("execute_instruction", event.id, {"instruction": execute})
-                await self._emit_log(event.id, "Phase 3: Execution instruction ready", level="info")
+                await self._emit_log(event.id, "Phase 2: Execution instruction ready", level="info")
 
             # Transition
             event.status = "awaiting_approval"
@@ -266,288 +246,60 @@ class ReactiveOrchestrator:
         return triage
 
     # ═══════════════════════════════════════════════════════════════════════════
-    #  PHASE 2 — S1 COORDINATOR
+    #  PHASE 2 — S2 AUTONOMOUS ORCHESTRATOR
     # ═══════════════════════════════════════════════════════════════════════════
 
-    async def _run_s1_coordinator(
+    async def _run_s2_autonomous(
         self,
         event: Event,
         event_query: str,
         triage: dict,
-    ) -> str | None:
-        """Phase 2: fast intuition via historical + optional vl in parallel."""
-        event_id = event.id
-        thread_id = f"event-{event.id}-s1"
-
-        # Always run historical
-        await self._emit_log(event_id, "S1: Launching historical-agent...", level="info")
-        historical_task = asyncio.create_task(self._call_historical_agent(event_query))
-
-        # Conditionally run VL (visual verification via real browser streaming)
-        vl_task = None
-        if triage.get("needs_vl_post_approval"):
-            await self._emit_log(event_id, "S1: Launching vl-agent (visual verification)...", level="info")
-            vl_task = asyncio.create_task(self._call_vl_agent(event_query, event_id))
-
-        # Await results
-        historical_result = await historical_task
-        await self._emit_log(event_id, "S1: historical-agent returned", level="info")
-
-        vl_result = None
-        if vl_task:
-            vl_result = await vl_task
-            await self._emit_log(event_id, "S1: vl-agent returned", level="info")
-
-        # Synthesize S1 output
-        s1_prompt = self._build_s1_synthesis_prompt(
-            event_query=event_query,
-            historical_result=historical_result,
-            vl_result=vl_result,
-        )
-
-        client = get_llm_client()
-        response = await client.chat_completion(
-            messages=[
-                {"role": "system", "content": REACTIVE_S1_COORDINATOR_PROMPT},
-                {"role": "user", "content": s1_prompt},
-            ],
-            temperature=0.5,
-            max_tokens=600,
-            stream=False,
-        )
-
-        raw = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-        return raw.strip() if raw else None
-
-    async def _call_historical_agent(self, event_query: str) -> str | None:
-        """Direct LLM call to the historical specialist (no tools, fine-tuned)."""
-        try:
-            model = get_chat_model(adapter="historical")
-            # For simplicity, we use the raw LLM client; historical is a reasoning-only agent
-            client = get_llm_client()
-            response = await client.chat_completion(
-                messages=[
-                    {"role": "system", "content": REACTIVE_HISTORICAL_PROMPT},
-                    {"role": "user", "content": event_query},
-                ],
-                temperature=0.4,
-                max_tokens=500,
-                stream=False,
-            )
-            return response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        except Exception as exc:
-            logger.warning("Historical agent call failed: %s", exc)
-            return None
-
-    async def _call_vl_agent(self, event_query: str, event_id: int) -> str | None:
-        """VL visual verification with real browser + SSE streaming.
-
-        Reuses ChatOrchestrator.stream() to get the full VL sub-agent experience
-        (browser_navigate, screenshots, thoughts, tool_calls) and re-emits
-        events as vl_* so the frontend can show the mini S1 Visual Panel.
-
-        Safety limits: max 5 tool actions or 60 seconds, whichever comes first.
-        """
-        instruction = (
-            f"Event context:\n{event_query}\n\n"
-            "Verify the current visual state relevant to this event. "
-            "Navigate to the relevant dashboard/URL if needed. "
-            "Take screenshots and report what you see concisely. "
-            "Maximum 5 browser actions — stop after that."
-        )
-
-        request = ChatRequest(
-            query=instruction,
-            thread_id=f"event-{event_id}-vl",
-        )
-        messages = [{"role": "user", "content": instruction}]
-
-        # Guard active thread_id so we don't conflict with ongoing chats
-        controller = BrowserManager.get_instance().get_controller()
-        prev_thread_id = controller.active_thread_id
-        controller.set_active_thread_id(request.thread_id)
-
-        full_content = ""
-        step_count = 0
-        start_time = time.time()
-        max_steps = 5
-        max_duration = 60.0
-
-        try:
-            async for chunk in self._chat.stream(request, messages, request.thread_id):
-                # Internal chunk — skip
-                if chunk.get("_internal"):
-                    full_content = chunk.get("full_content", full_content)
-                    continue
-
-                # Safety brake
-                if step_count >= max_steps or (time.time() - start_time) > max_duration:
-                    await self._emit_log(event_id, "S1-VL: Safety limit reached, stopping.", level="info")
-                    break
-
-                chunk_type = chunk.get("type")
-
-                if chunk_type == "screenshot":
-                    await self._emit("vl_screenshot", event_id, chunk.get("data", {}))
-
-                elif chunk_type == "thought":
-                    thought = chunk.get("content", "")
-                    await self._emit("vl_thought", event_id, {"thought": thought})
-
-                elif chunk_type == "tool_call":
-                    step_count += 1
-                    action = {
-                        "type": chunk.get("name", "tool"),
-                        "args": chunk.get("args", ""),
-                        "step": step_count,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                    await self._emit("vl_action_executed", event_id, {"action": action})
-                    await self._emit("vl_progress", event_id, {
-                        "current_step": step_count,
-                        "max_steps": max_steps,
-                    })
-                    await self._emit_log(
-                        event_id,
-                        f"S1-VL: Action {step_count}/{max_steps} — {action['type']}",
-                        level="info",
-                    )
-
-                elif chunk_type == "tool_result":
-                    result = chunk.get("content", "")
-                    await self._emit("vl_action_result", event_id, {"result": result})
-
-                elif chunk_type == "subagent":
-                    name = chunk.get("name", "unknown")
-                    status = chunk.get("status", "")
-                    await self._emit_log(
-                        event_id,
-                        f"S1-VL: Sub-agent {name} {status}",
-                        level="debug",
-                    )
-
-                elif chunk_type == "done":
-                    break
-
-                elif chunk_type == "error":
-                    await self._emit_log(
-                        event_id,
-                        f"S1-VL: Stream error — {chunk.get('detail', 'Unknown')}",
-                        level="error",
-                    )
-                    break
-
-        except Exception as exc:
-            logger.warning("VL agent streaming failed: %s", exc)
-            await self._emit_log(event_id, f"S1-VL error: {exc}", level="error")
-
-        finally:
-            controller.set_active_thread_id(prev_thread_id)
-
-        return full_content.strip() if full_content else None
-
-    def _build_s1_synthesis_prompt(
-        self,
-        event_query: str,
-        historical_result: str | None,
-        vl_result: str | None,
-    ) -> str:
-        """Build the input for the S1-Coordinator synthesis call."""
-        parts = [f"Original event:\n{event_query}\n"]
-        if historical_result:
-            parts.append(f"<historical_result>\n{historical_result}\n</historical_result>\n")
-        if vl_result:
-            parts.append(f"<vl_result>\n{vl_result}\n</vl_result>\n")
-        parts.append(
-            "Synthesize the above into a concise System-1 Analysis. "
-            "Follow the output format in your system prompt."
-        )
-        return "\n".join(parts)
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    #  PHASE 2b — S2 INDUSTRIAL (live data)
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    async def _run_s2_industrial(
-        self,
-        event: Event,
-        event_query: str,
         enabled_tool_ids: list[int],
         enabled_kb_ids: list[int],
-    ) -> str | None:
-        """Fetch live sensor data and SOPs via Industrial-Agent tools.
+    ) -> str:
+        """Phase 2: S2 autonomous orchestrator.
 
-        Uses the reactive orchestrator directly (MCP + RAG) and returns
-        the raw tool results as a formatted string for S2 synthesis.
+        S2 receives the event + triage context and autonomously decides which
+        sub-agents to invoke via task():
+          - task("industrial-agent") → live sensors + SOPs via MCP/RAG
+          - task("historical-agent") → historical pattern matching
+          - task("vl-agent")         → visual verification via browser
+
+        S2 invokes them (in parallel when needed) and synthesizes all
+        results into the final analysis + plan + execute instruction.
         """
+        orchestrator = create_reactive_orchestrator(
+            knowledge_base_ids=enabled_kb_ids or None,
+            enable_knowledge=bool(enabled_kb_ids),
+            enable_mcp=bool(enabled_tool_ids),
+            enabled_tool_names=enabled_tool_ids,
+        )
+
+        # Pass triage hints + event as the user message so S2 can make
+        # an informed delegation decision without being hardcoded to follow it.
+        triage_str = json.dumps(triage, ensure_ascii=False, indent=2)
+        user_message = (
+            f"<triage_hints>\n{triage_str}\n</triage_hints>\n\n"
+            f"<event>\n{event_query}\n</event>\n\n"
+            "Analiza este evento industrial. Usa task() para delegar a los "
+            "sub-agentes que necesites (puedes invocar varios en paralelo). "
+            "Luego sintetiza todos los resultados en el formato requerido."
+        )
+
+        thread_id = f"event-{event.id}-s2"
+        config = {"configurable": {"thread_id": thread_id}}
+        messages = [{"role": "user", "content": user_message}]
+
         try:
-            # Create a temporary reactive orchestrator focused on industrial data
-            orchestrator = create_reactive_orchestrator(
-                knowledge_base_ids=enabled_kb_ids or None,
-                enable_knowledge=bool(enabled_kb_ids),
-                enable_mcp=bool(enabled_tool_ids),
-                enabled_tool_names=enabled_tool_ids,
-            )
-
-            thread_id = f"event-{event.id}-industrial"
-            config = {"configurable": {"thread_id": thread_id}}
-            messages = [{"role": "user", "content": event_query}]
-
             result = await orchestrator.ainvoke(
                 {"messages": messages},
                 config=config,
             )
-            # DeepAgents returns a dict with "messages" list
             msgs = result.get("messages", [])
-            if msgs:
-                return str(msgs[-1].content).strip()
-            return None
+            return str(msgs[-1].content).strip() if msgs else ""
         except Exception as exc:
-            logger.warning("Industrial data fetch failed: %s", exc)
-            return None
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    #  PHASE 3 — S2 SYNTHESIS
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    async def _run_s2_synthesis(
-        self,
-        event: Event,
-        event_query: str,
-        triage: dict,
-        s1_analysis: str | None,
-        industrial_data: str | None,
-        enabled_tool_ids: list[int],
-        enabled_kb_ids: list[int],
-    ) -> str:
-        """Phase 3: deep reasoning + planning via DeepAgents synthesis."""
-        synthesis_prompt = build_reactive_synthesis_prompt(
-            system1_analysis=s1_analysis or "No System-1 analysis available.",
-            industrial_data=industrial_data or "No live industrial data available.",
-            event_context=event_query,
-        )
-
-        # Create reactive orchestrator for S2 (has tools + synthesis prompt)
-        orchestrator = create_reactive_orchestrator(
-            knowledge_base_ids=enabled_kb_ids or None,
-            enable_knowledge=bool(enabled_kb_ids),
-            enable_mcp=bool(enabled_tool_ids) and triage.get("needs_industrial", True),
-            enabled_tool_names=enabled_tool_ids,
-            system_prompt_override=synthesis_prompt,
-        )
-
-        thread_id = f"event-{event.id}-synthesis"
-        config = {"configurable": {"thread_id": thread_id}}
-        messages = [{"role": "user", "content": "Produce the final analysis, plan, and execute instruction."}]
-
-        result = await orchestrator.ainvoke(
-            {"messages": messages},
-            config=config,
-        )
-        msgs = result.get("messages", [])
-        if msgs:
-            return str(msgs[-1].content)
-        return ""
+            logger.warning("S2 autonomous orchestrator failed: %s", exc)
+            return ""
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  PRIVATE HELPERS

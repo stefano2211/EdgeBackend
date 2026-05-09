@@ -18,7 +18,7 @@ from src.ia.subagents.registry import get_available_subagents, get_subagent_desc
 from src.ia.tools import create_rag_tool, mcp_execute
 from src.ia.memory import get_checkpointer, get_store
 from src.ia.prompts.orchestrator import build_orchestrator_prompt
-from src.ia.prompts.reactive import build_reactive_synthesis_prompt
+from src.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
 from src.core.logging import logging
 
 logger = logging.getLogger(__name__)
@@ -117,17 +117,20 @@ def create_reactive_orchestrator(
 ):
     """Create a DeepAgents orchestrator for the reactive event pipeline.
 
-    DIFFERENT from chat orchestrator:
-    - System-2 (this orchestrator) does triage + synthesis.
-    - Sub-agent: s1-coordinator (fast intuition via historical + vl).
-    - Direct tools: mcp_execute + rag_retrieve (industrial data for S2).
+    S2 is the SINGLE ENTRY POINT for reactive events. It autonomously decides
+    which sub-agents to invoke via task() and synthesizes the results.
+
+    Sub-agents registered:
+    - industrial-agent: live sensor data (MCP) + SOPs/manuals (RAG)
+    - s1-coordinator: fast intuition layer that internally delegates to
+      historical-agent (LoRA pattern matching) and vl-agent (visual/browser)
 
     Args:
         knowledge_base_ids: Optional list of KB IDs for RAG.
         enable_knowledge: Whether to enable RAG tool.
         enable_mcp: Whether to enable MCP tools.
         enabled_tool_names: Optional list of tool IDs to limit MCP tools.
-        system_prompt_override: Optional custom system prompt for synthesis.
+        system_prompt_override: Optional custom system prompt.
 
     Returns:
         Compiled DeepAgent ready for streaming.
@@ -137,16 +140,17 @@ def create_reactive_orchestrator(
     if enable_knowledge and knowledge_base_ids:
         kb_id_for_subagent = str(knowledge_base_ids[0])
 
+    # S2 has industrial-agent (data) + s1-coordinator (intuition w/ historical + vl)
     subagents = get_available_subagents(
-        names=["s1-coordinator"],
+        names=["industrial", "s1-coordinator"],
         knowledge_base_id=kb_id_for_subagent,
         enable_mcp=enable_mcp,
     )
 
+    # S2 also keeps direct tools as a fallback for lightweight queries
     tools = []
     if enable_mcp:
         tools.append(mcp_execute)
-    # NOTE: only bind the first KB for now to avoid duplicate tool names
     if enable_knowledge and knowledge_base_ids:
         tools.append(create_rag_tool(str(knowledge_base_ids[0])))
 
@@ -155,12 +159,12 @@ def create_reactive_orchestrator(
     if system_prompt_override:
         prompt = system_prompt_override
     else:
-        prompt = build_reactive_synthesis_prompt(
+        prompt = build_reactive_s2_orchestrator_prompt(
             active_tool_names=active_tool_names,
         )
 
     logger.info(
-        "Creating Reactive DeepAgents orchestrator | sub-agents=%d tools=%d "
+        "Creating Reactive S2 Orchestrator | sub-agents=%d tools=%d "
         "enable_knowledge=%s enable_mcp=%s active_tools=%s",
         len(subagents),
         len(tools),

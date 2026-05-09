@@ -84,15 +84,20 @@ def _build_s1_coordinator(knowledge_base_id: str | None = None) -> dict:
     This agent is the FAST thinking layer for reactive events.
     It delegates to historical-agent (pattern matching) and optionally vl-agent
     (visual verification) in parallel, then synthesizes their outputs.
+
+    Architecture: s1-coordinator is a nested DeepAgent — it has its own
+    sub-agents (historical-agent + vl-agent) that it invokes via task().
     """
-    # Note: s1-coordinator does NOT have direct tools — it delegates via task()
-    # to its sub-subagents: historical-agent and vl-agent.
     return {
         "name": "s1-coordinator",
         "description": S1_COORDINATOR_DESCRIPTION,
         "system_prompt": REACTIVE_S1_COORDINATOR_PROMPT,
-        "tools": [],
+        "tools": [],  # No direct tools — delegates via task() to sub-agents
         "model": get_chat_model(),
+        "subagents": [
+            _build_historical_subagent(knowledge_base_id),
+            _build_vl_subagent(knowledge_base_id),
+        ],
     }
 
 
