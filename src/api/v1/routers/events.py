@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,7 +87,7 @@ async def get_event(
     return EventOut.model_validate(event)
 
 
-@router.post("/ingest", response_model=EventOut, status_code=201)
+@router.post("/ingest", response_model=EventOut, status_code=status.HTTP_202_ACCEPTED)
 async def ingest_external_event(
     payload: EventIngestPayload,
     api_key: str = Depends(verify_api_key),
@@ -100,7 +100,7 @@ async def ingest_external_event(
     return EventOut.model_validate(event)
 
 
-@router.post("/manual", response_model=EventOut, status_code=201)
+@router.post("/manual", response_model=EventOut, status_code=status.HTTP_202_ACCEPTED)
 async def create_manual_event(
     payload: ManualEventPayload,
     current_user: User = Depends(get_current_user),

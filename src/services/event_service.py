@@ -5,11 +5,13 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.database import AsyncSessionLocal
 from src.core.exceptions import NotFoundError, ValidationError
 from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
 from src.api.v1.schemas.event import ManualEventPayload, EventIngestPayload, ApprovalPayload
 from src.services.event_broadcast import get_event_broadcast
+from src.services.reactive_orchestrator import ReactiveOrchestrator
 from src.services._helpers import commit_and_refresh
 
 
@@ -59,7 +61,6 @@ class EventService:
         return event
 
     async def ingest_event(self, payload: EventIngestPayload) -> Event:
-        """Ingest an external event (sensor/webhook) without requiring a user."""
         event = Event(
             tenant_id=payload.tenant_id,
             source_type=payload.source_type.value,
@@ -83,13 +84,13 @@ class EventService:
             raise ValidationError(f"Event is not awaiting approval (current: {event.status})")
 
         event.status = "executing"
-        event.agent_plan = (event.agent_plan or "") + f"\nApproved. Notes: {payload.notes or 'none'}"
+        if payload and payload.notes:
+            event.agent_plan = (event.agent_plan or "") + f"\nApproved. Notes: {payload.notes}"
         await self.session.commit()
-        await self._broadcast_event_update(event)
+        await self._refresh_and_broadcast(event)
 
-        # In Fase 6 this would trigger actual tool execution via System 2
-        # For now, auto-complete after a brief simulated execution
-        await self._simulate_execution(event)
+        # Launch execution in background with isolated session
+        asyncio.create_task(self._run_execution_background(event_id))
         return event
 
     async def reject_event(self, event_id: int, payload: ApprovalPayload | None = None) -> Event:
@@ -99,37 +100,59 @@ class EventService:
 
         event.status = "failed"
         event.resolved_at = datetime.now(timezone.utc)
-        event.agent_plan = (event.agent_plan or "") + f"\nRejected. Notes: {payload.notes or 'none'}"
+        if payload and payload.notes:
+            event.agent_plan = (event.agent_plan or "") + f"\nRejected. Notes: {payload.notes}"
         await self.session.commit()
         await self._broadcast_event_update(event)
         return event
 
     async def start_analysis(self, event_id: int) -> Event:
-        """Transition from pending -> analyzing. Stub for System 2 integration."""
+        """Transition from pending -> analyzing, then launch background analysis."""
         event = await self.get_event(event_id)
         if event.status != "pending":
             raise ValidationError(f"Event is not pending (current: {event.status})")
 
         event.status = "analyzing"
         await self.session.commit()
-        await self._broadcast_event_update(event)
+        await self._refresh_and_broadcast(event)
 
-        # Simulate async analysis (stub — in Fase 6 this calls the LLM orchestrator)
-        asyncio.create_task(self._simulate_analysis(event_id))
+        # Launch analysis in background with isolated session
+        asyncio.create_task(self._run_analysis_background(event_id))
         return event
 
-    # ── SSE Broadcasting ──
+    # ── Background tasks (isolated sessions) ──
 
-    def connect_sse(self) -> asyncio.Queue:
-        """Register a new SSE listener via the global broadcast manager."""
-        return get_event_broadcast().connect()
+    async def _run_analysis_background(self, event_id: int) -> None:
+        """Run analysis with a fresh database session."""
+        async with AsyncSessionLocal() as session:
+            try:
+                orchestrator = ReactiveOrchestrator(get_event_broadcast())
+                event = await EventRepository(session).get_by_id(event_id)
+                if event:
+                    await orchestrator.analyze(event, session)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "Background analysis failed for event %s", event_id
+                )
 
-    def disconnect_sse(self, queue: asyncio.Queue) -> None:
-        """Remove an SSE listener via the global broadcast manager."""
-        get_event_broadcast().disconnect(queue)
+    async def _run_execution_background(self, event_id: int) -> None:
+        """Run execution with a fresh database session."""
+        async with AsyncSessionLocal() as session:
+            try:
+                orchestrator = ReactiveOrchestrator(get_event_broadcast())
+                event = await EventRepository(session).get_by_id(event_id)
+                if event:
+                    await orchestrator.execute(event, session)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "Background execution failed for event %s", event_id
+                )
+
+    # ── SSE helpers ──
 
     async def _broadcast_event_update(self, event: Event) -> None:
-        """Push an event update to all connected SSE clients."""
         payload = {
             "type": "event_update",
             "event": {
@@ -142,28 +165,7 @@ class EventService:
         }
         await get_event_broadcast().broadcast(payload)
 
-    # ── Simulation Stubs ──
-
-    async def _simulate_analysis(self, event_id: int) -> None:
-        """Simulate AI analysis and transition to awaiting_approval."""
-        await asyncio.sleep(2.0)
-
-        event = await self.repo.get_by_id(event_id)
-        if not event:
-            return
-
-        event.status = "awaiting_approval"
-        event.agent_analysis = f"Simulated analysis for: {event.title}"
-        event.agent_reasoning = "This is a stub reasoning. In Fase 6, System 2 will provide real LLM-based analysis."
-        event.agent_plan = "1. Review data\n2. Take corrective action\n3. Verify resolution"
-        await self.session.commit()
-        await self._broadcast_event_update(event)
-
-    async def _simulate_execution(self, event: Event) -> None:
-        """Simulate tool execution and transition to completed."""
-        await asyncio.sleep(1.5)
-        event.status = "completed"
-        event.resolved_at = datetime.now(timezone.utc)
-        event.actions_taken = ["action_1_stub", "action_2_stub"]
-        await self.session.commit()
+    async def _refresh_and_broadcast(self, event: Event) -> None:
+        """Refresh event from DB and broadcast update."""
+        await self.session.refresh(event)
         await self._broadcast_event_update(event)
