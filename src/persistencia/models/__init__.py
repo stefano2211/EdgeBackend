@@ -10,6 +10,8 @@ from src.persistencia.models.tool_config import MCPSource, ToolConfig
 from src.persistencia.models.prompt_config import PromptConfig
 from src.persistencia.models.db_source import DbSource
 from src.persistencia.models.system_settings import SystemSettings
+from src.persistencia.models.user_reactive_tool import UserReactiveTool
+from src.persistencia.models.user_reactive_kb import UserReactiveKnowledgeBase
 
 __all__ = [
     "Base",
@@ -25,4 +27,6 @@ __all__ = [
     "PromptConfig",
     "DbSource",
     "SystemSettings",
+    "UserReactiveTool",
+    "UserReactiveKnowledgeBase",
 ]

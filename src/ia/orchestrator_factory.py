@@ -109,9 +109,10 @@ def create_orchestrator(
 
 
 def create_reactive_orchestrator(
-    knowledge_base_id: str | None = None,
+    knowledge_base_ids: list[int] | None = None,
     enable_knowledge: bool = True,
     enable_mcp: bool = True,
+    enabled_tool_names: list[int] | None = None,
     system_prompt_override: str | None = None,
 ):
     """Create a DeepAgents orchestrator for the reactive event pipeline.
@@ -122,25 +123,32 @@ def create_reactive_orchestrator(
     - Direct tools: mcp_execute + rag_retrieve (industrial data for S2).
 
     Args:
-        knowledge_base_id: Optional KB ID for RAG.
+        knowledge_base_ids: Optional list of KB IDs for RAG.
         enable_knowledge: Whether to enable RAG tool.
         enable_mcp: Whether to enable MCP tools.
+        enabled_tool_names: Optional list of tool IDs to limit MCP tools.
         system_prompt_override: Optional custom system prompt for synthesis.
 
     Returns:
         Compiled DeepAgent ready for streaming.
     """
+    # Pick the first KB ID for subagent compatibility (DeepAgents expects single str)
+    kb_id_for_subagent = None
+    if enable_knowledge and knowledge_base_ids:
+        kb_id_for_subagent = str(knowledge_base_ids[0])
+
     subagents = get_available_subagents(
         names=["s1-coordinator"],
-        knowledge_base_id=knowledge_base_id if enable_knowledge else None,
+        knowledge_base_id=kb_id_for_subagent,
         enable_mcp=enable_mcp,
     )
 
     tools = []
     if enable_mcp:
         tools.append(mcp_execute)
-    if enable_knowledge and knowledge_base_id:
-        tools.append(create_rag_tool(knowledge_base_id))
+    # NOTE: only bind the first KB for now to avoid duplicate tool names
+    if enable_knowledge and knowledge_base_ids:
+        tools.append(create_rag_tool(str(knowledge_base_ids[0])))
 
     active_tool_names = [t.name for t in tools]
 

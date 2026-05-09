@@ -13,6 +13,7 @@ SOLID:
 
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,8 +32,10 @@ from src.ia.prompts.reactive import (
 )
 from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
+from src.services.browser_manager import BrowserManager
 from src.services.chat_orchestrator import ChatOrchestrator
 from src.services.event_broadcast import EventBroadcastManager
+from src.services.reactive_config_service import ReactiveConfigService
 from src.services._helpers import commit_and_refresh
 
 logger = logging.getLogger(__name__)
@@ -58,7 +61,17 @@ class ReactiveOrchestrator:
         thread_id = f"event-{event.id}"
         event_query = self._build_event_query(event)
 
+        # Load user's reactive configuration
+        config_service = ReactiveConfigService(session)
+        enabled_tool_ids = await config_service.get_enabled_tools(event.triggered_by_user_id)
+        enabled_kb_ids = await config_service.get_enabled_knowledge_bases(event.triggered_by_user_id)
+
         await self._emit_log(event.id, "Phase 0: Pipeline started", level="info")
+        await self._emit_log(
+            event.id,
+            f"Config: {len(enabled_tool_ids)} tools, {len(enabled_kb_ids)} KBs enabled",
+            level="info",
+        )
 
         try:
             # ── Phase 1: S2-Triage ──
@@ -88,7 +101,9 @@ class ReactiveOrchestrator:
             industrial_data: str | None = None
             if triage.get("needs_industrial"):
                 await self._emit_log(event.id, "Phase 2b: S2-Industrial data fetch starting", level="info")
-                industrial_data = await self._run_s2_industrial(event, event_query)
+                industrial_data = await self._run_s2_industrial(
+                    event, event_query, enabled_tool_ids, enabled_kb_ids
+                )
                 if industrial_data:
                     await self._emit("industrial_result", event.id, {"result": industrial_data})
                     await self._emit_log(event.id, "Phase 2b: Industrial data fetched", level="info")
@@ -103,6 +118,8 @@ class ReactiveOrchestrator:
                 triage=triage,
                 s1_analysis=s1_analysis,
                 industrial_data=industrial_data,
+                enabled_tool_ids=enabled_tool_ids,
+                enabled_kb_ids=enabled_kb_ids,
             )
 
             analysis_text, plan, execute = self._parse_sections(synthesis)
@@ -266,11 +283,11 @@ class ReactiveOrchestrator:
         await self._emit_log(event_id, "S1: Launching historical-agent...", level="info")
         historical_task = asyncio.create_task(self._call_historical_agent(event_query))
 
-        # Conditionally run VL
+        # Conditionally run VL (visual verification via real browser streaming)
         vl_task = None
         if triage.get("needs_vl_post_approval"):
             await self._emit_log(event_id, "S1: Launching vl-agent (visual verification)...", level="info")
-            vl_task = asyncio.create_task(self._call_vl_agent(event_query))
+            vl_task = asyncio.create_task(self._call_vl_agent(event_query, event_id))
 
         # Await results
         historical_result = await historical_task
@@ -322,35 +339,112 @@ class ReactiveOrchestrator:
             logger.warning("Historical agent call failed: %s", exc)
             return None
 
-    async def _call_vl_agent(self, event_query: str) -> str | None:
-        """Direct invocation of VL agent for visual verification.
+    async def _call_vl_agent(self, event_query: str, event_id: int) -> str | None:
+        """VL visual verification with real browser + SSE streaming.
 
-        NOTE: In production this could be a DeepAgents subagent call.
-        For the reactive pipeline we issue a concise browser instruction.
+        Reuses ChatOrchestrator.stream() to get the full VL sub-agent experience
+        (browser_navigate, screenshots, thoughts, tool_calls) and re-emits
+        events as vl_* so the frontend can show the mini S1 Visual Panel.
+
+        Safety limits: max 5 tool actions or 60 seconds, whichever comes first.
         """
+        instruction = (
+            f"Event context:\n{event_query}\n\n"
+            "Verify the current visual state relevant to this event. "
+            "Navigate to the relevant dashboard/URL if needed. "
+            "Take screenshots and report what you see concisely. "
+            "Maximum 5 browser actions — stop after that."
+        )
+
+        request = ChatRequest(
+            query=instruction,
+            thread_id=f"event-{event_id}-vl",
+        )
+        messages = [{"role": "user", "content": instruction}]
+
+        # Guard active thread_id so we don't conflict with ongoing chats
+        controller = BrowserManager.get_instance().get_controller()
+        prev_thread_id = controller.active_thread_id
+        controller.set_active_thread_id(request.thread_id)
+
+        full_content = ""
+        step_count = 0
+        start_time = time.time()
+        max_steps = 5
+        max_duration = 60.0
+
         try:
-            # Build a concise task for VL
-            vl_task = (
-                f"Event context:\n{event_query}\n\n"
-                "Verify the current visual state relevant to this event. "
-                "Navigate to the relevant dashboard if needed, take a screenshot, "
-                "and report what you see in 2-3 sentences."
-            )
-            # Use the multimodal model directly for a quick check
-            client = get_llm_client()
-            response = await client.chat_completion(
-                messages=[
-                    {"role": "system", "content": "You are the VL visual verifier. Be concise."},
-                    {"role": "user", "content": vl_task},
-                ],
-                temperature=0.3,
-                max_tokens=400,
-                stream=False,
-            )
-            return response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            async for chunk in self._chat.stream(request, messages, request.thread_id):
+                # Internal chunk — skip
+                if chunk.get("_internal"):
+                    full_content = chunk.get("full_content", full_content)
+                    continue
+
+                # Safety brake
+                if step_count >= max_steps or (time.time() - start_time) > max_duration:
+                    await self._emit_log(event_id, "S1-VL: Safety limit reached, stopping.", level="info")
+                    break
+
+                chunk_type = chunk.get("type")
+
+                if chunk_type == "screenshot":
+                    await self._emit("vl_screenshot", event_id, chunk.get("data", {}))
+
+                elif chunk_type == "thought":
+                    thought = chunk.get("content", "")
+                    await self._emit("vl_thought", event_id, {"thought": thought})
+
+                elif chunk_type == "tool_call":
+                    step_count += 1
+                    action = {
+                        "type": chunk.get("name", "tool"),
+                        "args": chunk.get("args", ""),
+                        "step": step_count,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self._emit("vl_action_executed", event_id, {"action": action})
+                    await self._emit("vl_progress", event_id, {
+                        "current_step": step_count,
+                        "max_steps": max_steps,
+                    })
+                    await self._emit_log(
+                        event_id,
+                        f"S1-VL: Action {step_count}/{max_steps} — {action['type']}",
+                        level="info",
+                    )
+
+                elif chunk_type == "tool_result":
+                    result = chunk.get("content", "")
+                    await self._emit("vl_action_result", event_id, {"result": result})
+
+                elif chunk_type == "subagent":
+                    name = chunk.get("name", "unknown")
+                    status = chunk.get("status", "")
+                    await self._emit_log(
+                        event_id,
+                        f"S1-VL: Sub-agent {name} {status}",
+                        level="debug",
+                    )
+
+                elif chunk_type == "done":
+                    break
+
+                elif chunk_type == "error":
+                    await self._emit_log(
+                        event_id,
+                        f"S1-VL: Stream error — {chunk.get('detail', 'Unknown')}",
+                        level="error",
+                    )
+                    break
+
         except Exception as exc:
-            logger.warning("VL agent call failed: %s", exc)
-            return None
+            logger.warning("VL agent streaming failed: %s", exc)
+            await self._emit_log(event_id, f"S1-VL error: {exc}", level="error")
+
+        finally:
+            controller.set_active_thread_id(prev_thread_id)
+
+        return full_content.strip() if full_content else None
 
     def _build_s1_synthesis_prompt(
         self,
@@ -374,7 +468,13 @@ class ReactiveOrchestrator:
     #  PHASE 2b — S2 INDUSTRIAL (live data)
     # ═══════════════════════════════════════════════════════════════════════════
 
-    async def _run_s2_industrial(self, event: Event, event_query: str) -> str | None:
+    async def _run_s2_industrial(
+        self,
+        event: Event,
+        event_query: str,
+        enabled_tool_ids: list[int],
+        enabled_kb_ids: list[int],
+    ) -> str | None:
         """Fetch live sensor data and SOPs via Industrial-Agent tools.
 
         Uses the reactive orchestrator directly (MCP + RAG) and returns
@@ -383,9 +483,10 @@ class ReactiveOrchestrator:
         try:
             # Create a temporary reactive orchestrator focused on industrial data
             orchestrator = create_reactive_orchestrator(
-                knowledge_base_id=None,
-                enable_knowledge=False,
-                enable_mcp=True,
+                knowledge_base_ids=enabled_kb_ids or None,
+                enable_knowledge=bool(enabled_kb_ids),
+                enable_mcp=bool(enabled_tool_ids),
+                enabled_tool_names=enabled_tool_ids,
             )
 
             thread_id = f"event-{event.id}-industrial"
@@ -416,6 +517,8 @@ class ReactiveOrchestrator:
         triage: dict,
         s1_analysis: str | None,
         industrial_data: str | None,
+        enabled_tool_ids: list[int],
+        enabled_kb_ids: list[int],
     ) -> str:
         """Phase 3: deep reasoning + planning via DeepAgents synthesis."""
         synthesis_prompt = build_reactive_synthesis_prompt(
@@ -426,9 +529,10 @@ class ReactiveOrchestrator:
 
         # Create reactive orchestrator for S2 (has tools + synthesis prompt)
         orchestrator = create_reactive_orchestrator(
-            knowledge_base_id=None,
-            enable_knowledge=False,
-            enable_mcp=triage.get("needs_industrial", True),
+            knowledge_base_ids=enabled_kb_ids or None,
+            enable_knowledge=bool(enabled_kb_ids),
+            enable_mcp=bool(enabled_tool_ids) and triage.get("needs_industrial", True),
+            enabled_tool_names=enabled_tool_ids,
             system_prompt_override=synthesis_prompt,
         )
 
