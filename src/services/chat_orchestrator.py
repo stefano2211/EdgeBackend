@@ -279,7 +279,7 @@ class ChatOrchestrator:
         agents_used: set[str] = set()
 
         try:
-            for chunk in orchestrator.stream(
+            async for chunk in orchestrator.astream(
                 {"messages": messages},
                 config=config,
                 stream_mode="messages",
