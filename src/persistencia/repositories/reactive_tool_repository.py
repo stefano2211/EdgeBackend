@@ -3,7 +3,8 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.persistencia.models.reactive_tool_config import ReactiveToolConfig, ReactiveMCPSource
+from src.persistencia.models.reactive_tool_config import ReactiveToolConfig
+from src.persistencia.models.reactive_mcp_source import ReactiveMCPSource
 from src.persistencia.repositories.base_repository import BaseRepository
 
 

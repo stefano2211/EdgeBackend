@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.reactive_tool import ReactiveMCPSourceCreate, ReactiveMCPSourceUpdate
 from src.core.logging import logging
-from src.persistencia.models.reactive_tool_config import ReactiveMCPSource, ReactiveToolConfig
+from src.persistencia.models.reactive_mcp_source import ReactiveMCPSource
+from src.persistencia.models.reactive_tool_config import ReactiveToolConfig
 from src.persistencia.repositories.reactive_tool_repository import ReactiveMCPSourceRepository, ReactiveToolRepository
 from src.services.base_crud_service import BaseCRUDService
 from src.services._helpers import commit_and_refresh
