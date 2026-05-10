@@ -158,9 +158,6 @@ Now you must produce the definitive analysis, root cause, and remediation plan.
 You are the ONLY component that generates plans and execution instructions.
 </mission>
 
-<available_direct_tools>
-{tools_section}
-</available_direct_tools>
 
 <input_sections>
 {input_sections}
@@ -289,21 +286,8 @@ No aplica — la remediación requiere acción manual en campo.
 </examples>
 """
 
-_TOOL_DESCRIPTIONS: dict[str, str] = {
-    "rag_retrieve": (
-        '- rag_retrieve(query: str, top_k: int=5) → Search documents in the knowledge base. '
-        "Use for SOPs, emergency procedures, and regulatory references."
-    ),
-    "mcp_execute": (
-        '- mcp_execute(tool_name: str, arguments: dict) → Execute a registered MCP tool. '
-        "Use for live sensor data and equipment status."
-    ),
-}
-
-
 def build_reactive_synthesis_prompt(
     subagent_descriptions: str = "",
-    active_tool_names: List[str] | None = None,
     system1_analysis: str = "",
     industrial_data: str = "",
     event_context: str = "",
@@ -312,7 +296,6 @@ def build_reactive_synthesis_prompt(
 
     Args:
         subagent_descriptions: Available sub-agents (legacy, usually empty for synthesis).
-        active_tool_names: Tools registered for direct use.
         system1_analysis: Output from the S1-Coordinator.
         industrial_data: JSON/text from Industrial-Agent.
         event_context: Original event description.
@@ -320,16 +303,6 @@ def build_reactive_synthesis_prompt(
     Returns:
         Fully rendered system prompt string for Phase 3 synthesis.
     """
-    if active_tool_names is None:
-        active_tool_names = list(_TOOL_DESCRIPTIONS.keys())
-
-    tool_lines = []
-    for name in active_tool_names:
-        if name in _TOOL_DESCRIPTIONS:
-            tool_lines.append(_TOOL_DESCRIPTIONS[name])
-
-    tools_section = "\n".join(tool_lines) if tool_lines else "- No direct tools available."
-
     input_sections = ""
     if system1_analysis:
         input_sections += f"<system1_analysis>\n{system1_analysis}\n</system1_analysis>\n\n"
@@ -337,7 +310,6 @@ def build_reactive_synthesis_prompt(
         input_sections += f"<industrial_data>\n{industrial_data}\n</industrial_data>\n\n"
 
     return _S2_SYNTHESIS_TEMPLATE.format(
-        tools_section=tools_section,
         input_sections=input_sections,
         event_context=event_context,
     )
@@ -391,7 +363,6 @@ def build_reactive_orchestrator_prompt(available_subagents: List[str]) -> str:
     # Note: the old _REACTIVE_ORCHESTRATOR_TEMPLATE is removed from this file
     # to avoid duplication; callers should migrate to build_reactive_synthesis_prompt.
     return _S2_SYNTHESIS_TEMPLATE.format(
-        tools_section="- See active tools in orchestrator factory.",
         input_sections=f"<available_subagents>\n{available_subagents_section}\n</available_subagents>\n\n",
         event_context="Event context provided at runtime.",
     )
@@ -579,9 +550,6 @@ Toda la inteligencia del sistema pasa por ti.
 {subagents_section}
 </available_subagents>
 
-<available_direct_tools>
-{tools_section}
-</available_direct_tools>
 
 <triage_context_note>
 Recibirás un JSON de triage en el mensaje del usuario.
@@ -603,11 +571,7 @@ Antes de actuar, razona internamente:
 ━━━ SIEMPRE DELEGA — NUNCA RESPONDAS DESDE TU PROPIA MEMORIA ━━━
 NUNCA inventes datos de sensores, patrones históricos ni SOPs de tu conocimiento propio.
 
-[DELEGAR a industrial-agent] cuando:
-  - Se necesitan lecturas actuales de sensores (MCP)
-  - Se deben referenciar SOPs, procedimientos de emergencia o documentación (RAG)
-  - El triage indica needs_industrial=true (tratar como pista fuerte)
-
+{industrial_delegation_rules}
 [DELEGAR a s1-coordinator] cuando:
   - Se necesita contexto histórico de incidentes pasados (>6 meses)
   - Se necesita verificación visual del estado en pantallas (SCADA, SAP, HMI)
@@ -621,9 +585,7 @@ NUNCA inventes datos de sensores, patrones históricos ni SOPs de tu conocimient
   - Se necesita tanto datos actuales COMO intuición histórica/visual
   - Ante la duda, más datos es mejor que menos
 
-[USAR herramientas directas] solo cuando:
-  - Una búsqueda RAG específica o llamada MCP única es suficiente
-  - La delegación a sub-agentes sería overhead excesivo para consultas simples
+
 </delegation_rules>
 
 <confidence_scoring>
@@ -702,7 +664,6 @@ REGLAS DE SALIDA:
 
 
 def build_reactive_s2_orchestrator_prompt(
-    active_tool_names: List[str] | None = None,
     has_industrial: bool = True,
 ) -> str:
     """Build the S2 autonomous orchestrator prompt — unified entry point.
@@ -713,30 +674,30 @@ def build_reactive_s2_orchestrator_prompt(
       historical-agent (LoRA pattern matching) and vl-agent (visual/browser)
 
     Args:
-        active_tool_names: Direct tools registered on the orchestrator.
+        has_industrial: Whether the industrial sub-agent is active.
 
     Returns:
         Fully rendered S2 orchestrator system prompt.
     """
-    if active_tool_names is None:
-        active_tool_names = list(_TOOL_DESCRIPTIONS.keys())
-
-    tool_lines = [
-        _TOOL_DESCRIPTIONS[n] for n in active_tool_names if n in _TOOL_DESCRIPTIONS
-    ]
-    tools_section = (
-        "\n".join(tool_lines)
-        if tool_lines
-        else "- No hay herramientas directas. Delega TODO el trabajo via task()."
-    )
-
     subagent_lines = []
     if has_industrial:
+        industrial_delegation_rules = """\
+[DELEGAR a industrial-agent] cuando:
+  - Se necesitan lecturas actuales de sensores (MCP)
+  - Se deben referenciar SOPs, procedimientos de emergencia o documentación (RAG)
+  - El triage indica needs_industrial=true (tratar como pista fuerte)
+"""
         subagent_lines.append(
             '- task("industrial-agent", ...) → Especialista en datos industriales en tiempo real. '
             "Usa MCP para lecturas actuales de sensores/KPIs y RAG para SOPs y manuales técnicos. "
             "DEBES INVOCARLO SIEMPRE para obtener la telemetría actual y procedimientos estándar."
         )
+    else:
+        industrial_delegation_rules = """\
+NOTA CRÍTICA: El sub-agente industrial (sensores/documentación) está DESACTIVADO.
+No puedes pedir lecturas actuales ni SOPs. Si el usuario las pide o el triage las sugiere,
+debes informar en tu plan que no tienes acceso a esos datos y proceder con precaución.
+"""
 
     subagent_lines.append(
         '- task("s1-coordinator", ...) → Coordinador de Intuición Rápida (System-1). '
@@ -749,6 +710,6 @@ def build_reactive_s2_orchestrator_prompt(
 
     return _S2_ORCHESTRATOR_TEMPLATE.format(
         subagents_section=subagents_section,
-        tools_section=tools_section,
+        industrial_delegation_rules=industrial_delegation_rules,
     )
 

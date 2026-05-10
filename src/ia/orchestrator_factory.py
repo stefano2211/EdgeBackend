@@ -43,32 +43,28 @@ def create_orchestrator(
     Returns:
         Compiled DeepAgent (LangGraph StateGraph) ready for streaming.
     """
+    has_industrial = enable_mcp or enable_knowledge
+    actual_subagent_names = subagent_names or ["industrial", "historical", "vl"]
+    if not has_industrial and "industrial" in actual_subagent_names:
+        actual_subagent_names.remove("industrial")
+
     subagents = get_available_subagents(
-        subagent_names,
+        names=actual_subagent_names,
         knowledge_base_id=knowledge_base_id if enable_knowledge else None,
         enable_mcp=enable_mcp,
     )
 
-    # Build tools list — only register tools that the user has enabled.
-    # The orchestrator has direct access to these; sub-agents have their own.
-    tools = []  # browser tools delegated to vl-agent
-
-    if enable_mcp:
-        tools.append(mcp_execute)
-
-    if enable_knowledge and knowledge_base_id:
-        tools.append(create_rag_tool(knowledge_base_id))
-
-    # Build active tool names for dynamic prompt generation
-    active_tool_names = [t.name for t in tools]
+    # The main orchestrator has NO direct tools; it must delegate all work to sub-agents.
+    tools = []
+    active_tool_names = []
 
     # Default system prompt — built dynamically to only mention available tools
     if system_prompt_override:
         prompt = system_prompt_override
     else:
         prompt = build_orchestrator_prompt(
-            subagent_descriptions=get_subagent_descriptions(),
-            active_tool_names=active_tool_names,
+            subagent_descriptions=get_subagent_descriptions(actual_subagent_names),
+            has_industrial=has_industrial,
         )
 
     logger.info(
@@ -152,20 +148,14 @@ def create_reactive_orchestrator(
         enable_mcp=enable_mcp,
     )
 
-    # S2 also keeps direct tools as a fallback for lightweight queries
+    # S2 has NO direct tools; it delegates entirely to industrial-agent or s1-coordinator.
     tools = []
-    if enable_mcp:
-        tools.append(mcp_execute)
-    if enable_knowledge and knowledge_base_ids:
-        tools.append(create_rag_tool(str(knowledge_base_ids[0])))
-
-    active_tool_names = [t.name for t in tools]
+    active_tool_names = []
 
     if system_prompt_override:
         prompt = system_prompt_override
     else:
         prompt = build_reactive_s2_orchestrator_prompt(
-            active_tool_names=active_tool_names,
             has_industrial=has_industrial,
         )
 
