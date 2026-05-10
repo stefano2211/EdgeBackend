@@ -15,7 +15,7 @@ from langchain_core.tools import StructuredTool
 
 from src.core.database import AsyncSessionLocal
 from src.core.logging import logging
-from src.persistencia.models.reactive_tool_config import ReactiveMCPSource
+from src.persistencia.models.reactive_mcp_source import ReactiveMCPSource
 from src.persistencia.repositories.reactive_tool_repository import ReactiveToolRepository
 from src.services.mcp_service import MCPService
 
