@@ -275,6 +275,17 @@ class ReactiveOrchestrator:
             enabled_tool_names=enabled_tool_ids,
         )
 
+        # Hook up the browser controller so it streams vl-agent screenshots during Phase 2
+        from src.services.browser_manager import BrowserManager
+        manager = BrowserManager()
+        controller = manager.get_controller()
+        async def _vl_emitter(payload: dict) -> None:
+            if "screenshot" in payload:
+                await self._emit("vl_screenshot", event.id, payload["screenshot"])
+            elif "thought" in payload:
+                await self._emit("vl_thought", event.id, {"thought": payload["thought"]})
+        controller.set_event_emitter(_vl_emitter)
+
         # Pass triage hints + event as the user message so S2 can make
         # an informed delegation decision without being hardcoded to follow it.
         triage_str = json.dumps(triage, ensure_ascii=False, indent=2)

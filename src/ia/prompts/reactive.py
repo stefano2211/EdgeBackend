@@ -704,6 +704,7 @@ REGLAS DE SALIDA:
 
 def build_reactive_s2_orchestrator_prompt(
     active_tool_names: List[str] | None = None,
+    has_industrial: bool = True,
 ) -> str:
     """Build the S2 autonomous orchestrator prompt — unified entry point.
 
@@ -730,16 +731,20 @@ def build_reactive_s2_orchestrator_prompt(
         else "- No hay herramientas directas. Delega TODO el trabajo via task()."
     )
 
-    subagent_lines = [
-        '- task("industrial-agent", ...) → Especialista en datos industriales en tiempo real. '
-        "Usa MCP para lecturas actuales de sensores/KPIs y RAG para SOPs y manuales técnicos. "
-        "Invocar cuando se necesiten datos ACTUALES o documentación operativa.",
+    subagent_lines = []
+    if has_industrial:
+        subagent_lines.append(
+            '- task("industrial-agent", ...) → Especialista en datos industriales en tiempo real. '
+            "Usa MCP para lecturas actuales de sensores/KPIs y RAG para SOPs y manuales técnicos. "
+            "DEBES INVOCARLO SIEMPRE para obtener la telemetría actual y procedimientos estándar."
+        )
 
+    subagent_lines.append(
         '- task("s1-coordinator", ...) → Coordinador de Intuición Rápida (System-1). '
-        "Internamente delega en paralelo a historical-agent (patrones de falla históricos, "
-        "LoRA fine-tuned, sin herramientas) y vl-agent (verificación visual via browser/SCADA/SAP). "
-        "Invocar cuando se necesite contexto histórico (>6 meses) y/o verificación visual.",
-    ]
+        "Internamente delega en paralelo a historical-agent (patrones de falla históricos) "
+        "y vl-agent (verificación visual via browser/SCADA/SAP). "
+        "DEBES INVOCARLO SIEMPRE para obtener contexto histórico rápido y verificación visual de ser posible."
+    )
 
     subagents_section = "\n".join(subagent_lines)
 

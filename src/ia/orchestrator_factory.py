@@ -140,9 +140,14 @@ def create_reactive_orchestrator(
     if enable_knowledge and knowledge_base_ids:
         kb_id_for_subagent = str(knowledge_base_ids[0])
 
-    # S2 has industrial-agent (data) + s1-coordinator (intuition w/ historical + vl)
+    # S2 has industrial-agent (data) only if tools are enabled + s1-coordinator (intuition)
+    has_industrial = enable_mcp or enable_knowledge
+    subagent_names = ["s1-coordinator"]
+    if has_industrial:
+        subagent_names.insert(0, "industrial")
+
     subagents = get_available_subagents(
-        names=["industrial", "s1-coordinator"],
+        names=subagent_names,
         knowledge_base_id=kb_id_for_subagent,
         enable_mcp=enable_mcp,
     )
@@ -161,6 +166,7 @@ def create_reactive_orchestrator(
     else:
         prompt = build_reactive_s2_orchestrator_prompt(
             active_tool_names=active_tool_names,
+            has_industrial=has_industrial,
         )
 
     logger.info(
