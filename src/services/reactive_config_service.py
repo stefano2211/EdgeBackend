@@ -27,6 +27,7 @@ class ReactiveConfigService:
     async def toggle_tool(self, user_id: int, tool_id: int, enabled: bool) -> None:
         """Enable or disable a tool for reactive events."""
         await self._tool_repo.set_enabled(user_id, tool_id, enabled)
+        await self._session.commit()
         logger.info(
             "User %s %s tool %s for reactive",
             user_id,
@@ -41,6 +42,7 @@ class ReactiveConfigService:
     async def toggle_knowledge_base(self, user_id: int, kb_id: int, enabled: bool) -> None:
         """Enable or disable a KB for reactive events."""
         await self._kb_repo.set_enabled(user_id, kb_id, enabled)
+        await self._session.commit()
         logger.info(
             "User %s %s KB %s for reactive",
             user_id,

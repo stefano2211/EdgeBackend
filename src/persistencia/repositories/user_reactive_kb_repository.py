@@ -70,4 +70,3 @@ class UserReactiveKbRepository:
             )
         )
         await self._session.execute(stmt)
-        await self._session.commit()

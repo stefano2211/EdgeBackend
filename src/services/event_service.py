@@ -1,6 +1,7 @@
 """Event service with pipeline management and SSE broadcasting."""
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,24 @@ from src.api.v1.schemas.event import ManualEventPayload, EventIngestPayload, App
 from src.services.event_broadcast import get_event_broadcast
 from src.services.reactive_orchestrator import ReactiveOrchestrator
 from src.services._helpers import commit_and_refresh
+
+logger = logging.getLogger(__name__)
+
+
+async def _with_retry(coro, max_retries: int = 3, base_delay: float = 1.0):
+    """Run an async coroutine with exponential backoff retries."""
+    last_exc = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            return await coro
+        except Exception as exc:
+            last_exc = exc
+            if attempt == max_retries:
+                break
+            delay = base_delay * (2 ** (attempt - 1))
+            logger.warning("Retry %d/%d after %.1fs due to %s", attempt, max_retries, delay, exc)
+            await asyncio.sleep(delay)
+    raise last_exc
 
 
 class EventService:
@@ -123,32 +142,32 @@ class EventService:
     # ── Background tasks (isolated sessions) ──
 
     async def _run_analysis_background(self, event_id: int) -> None:
-        """Run analysis with a fresh database session."""
-        async with AsyncSessionLocal() as session:
-            try:
+        """Run analysis with a fresh database session and retry."""
+        async def _analysis():
+            async with AsyncSessionLocal() as session:
                 orchestrator = ReactiveOrchestrator(get_event_broadcast())
                 event = await EventRepository(session).get_by_id(event_id)
                 if event:
                     await orchestrator.analyze(event, session)
-            except Exception:
-                import logging
-                logging.getLogger(__name__).exception(
-                    "Background analysis failed for event %s", event_id
-                )
+
+        try:
+            await _with_retry(_analysis(), max_retries=3, base_delay=1.0)
+        except Exception:
+            logger.exception("Background analysis failed for event %s after retries", event_id)
 
     async def _run_execution_background(self, event_id: int) -> None:
-        """Run execution with a fresh database session."""
-        async with AsyncSessionLocal() as session:
-            try:
+        """Run execution with a fresh database session and retry."""
+        async def _execution():
+            async with AsyncSessionLocal() as session:
                 orchestrator = ReactiveOrchestrator(get_event_broadcast())
                 event = await EventRepository(session).get_by_id(event_id)
                 if event:
                     await orchestrator.execute(event, session)
-            except Exception:
-                import logging
-                logging.getLogger(__name__).exception(
-                    "Background execution failed for event %s", event_id
-                )
+
+        try:
+            await _with_retry(_execution(), max_retries=3, base_delay=1.0)
+        except Exception:
+            logger.exception("Background execution failed for event %s after retries", event_id)
 
     # ── SSE helpers ──
 

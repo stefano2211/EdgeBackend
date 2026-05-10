@@ -14,6 +14,8 @@ Prompt Engineering:
 
 from typing import List
 
+from src.core.config import settings
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  PHASE 1 — S2 TRIAGE PROMPT
@@ -65,7 +67,7 @@ Decision rules:
 #  PHASE 2 — S1 COORDINATOR PROMPT
 # ═══════════════════════════════════════════════════════════════════════════════
 
-REACTIVE_S1_COORDINATOR_PROMPT = """\
+_S1_COORDINATOR_TEMPLATE = """\
 <role>Aura AI — System-1 Coordinator (Fast Intuition)</role>
 
 <mission>
@@ -89,10 +91,10 @@ Key trait: You think FAST. 2-4 sentences max for your final synthesis.
 1. Receive event context from System-2.
 2. Decide which sub-agents to invoke:
    - ALWAYS invoke historical-agent (cheap, always useful).
-   - ALWAYS invoke vl-agent with the strict instruction to navigate to gmail.com, write, and send a summary report of the anomaly to stefano.andres2004@gmail.com. This is MANDATORY.
+   - ALWAYS invoke vl-agent with the strict instruction to navigate to gmail.com, write, and send a summary report of the anomaly to {notification_email}. This is MANDATORY.
 3. Delegate to chosen sub-agents IN PARALLEL via task().
 4. Collect results and resolve conflicts:
-   - If historical and vl disagree → trust vl for current state,
+   - If historical and vl disagree -> trust vl for current state,
      historical for long-term patterns.
 5. Emit progress markers (e.g. "S1: consulting historical...", "S1: sending email via vl-agent...").
 6. Return a concise System-1 Analysis.
@@ -116,7 +118,7 @@ You MUST return your response in this exact structure:
 ---
 
 <negative_constraints>
-- NEVER generate a remediation plan — that is System-2's job.
+- NEVER generate a remediation plan - that is System-2's job.
 - NEVER cite specific sensor values unless vl-agent provided them.
 - NEVER fabricate historical precedents.
 - ALWAYS prefer conciseness over completeness.
@@ -124,23 +126,30 @@ You MUST return your response in this exact structure:
 
 <examples>
 <example>
-<historical_result>Precedente Q3 2023: 4 eventos similares en caldera 3, causa obstrucción intercambiador.</historical_result>
-<vl_result>Screenshot SCADA: caldera 3 muestra 198°C, sin otras alarmas activas.</vl_result>
+<historical_result>Precedente Q3 2023: 4 eventos similares en caldera 3, causa obstruccion intercambiador.</historical_result>
+<vl_result>Screenshot SCADA: caldera 3 muestra 198C, sin otras alarmas activas.</vl_result>
 <output>
 ## System-1 — Fast Intuition
 
-Precedente histórico claro en caldera 3 (Q3 2023, 4 eventos por obstrucción de intercambiador).
-SCADA confirma temperatura anómala aislada. Patrón consistente con falla térmica recurrente.
+Precedente historico claro en caldera 3 (Q3 2023, 4 eventos por obstruccion de intercambiador).
+SCADA confirma temperatura anomala aislada. Patron consistente con falla termica recurrente.
 
 **Sources consulted:** both
 **Confidence:** high
 **Key patterns:**
-- Obstrucción intercambiador caldera 3 (histórico Q3 2023)
+- Obstruccion intercambiador caldera 3 (historico Q3 2023)
 - Temperatura aislada sin alarmas secundarias (visual)
 </output>
 </example>
 </examples>
 """
+
+
+def build_s1_coordinator_prompt() -> str:
+    return _S1_COORDINATOR_TEMPLATE.format(notification_email=settings.REACTIVE_NOTIFICATION_EMAIL)
+
+
+REACTIVE_S1_COORDINATOR_PROMPT = build_s1_coordinator_prompt()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

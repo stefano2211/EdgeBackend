@@ -8,12 +8,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.persistencia.models.base import Base
 
 
+from sqlalchemy import Index
+
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        Index("idx_message_conversation", "conversation_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     conversation_id: Mapped[int] = mapped_column(
-        ForeignKey("conversations.id"), nullable=False
+        ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text)

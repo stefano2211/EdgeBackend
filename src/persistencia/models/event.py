@@ -8,8 +8,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.persistencia.models.base import Base
 
 
+from sqlalchemy import Index
+
 class Event(Base):
     __tablename__ = "events"
+    __table_args__ = (
+        Index("idx_event_status", "status"),
+        Index("idx_event_severity", "severity"),
+        Index("idx_event_source_type", "source_type"),
+        Index("idx_event_created_at", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tenant_id: Mapped[str] = mapped_column(String(36), default="default")
@@ -29,7 +37,7 @@ class Event(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     triggered_by_user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id"), nullable=True
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     triggered_by: Mapped["User | None"] = relationship(

@@ -17,7 +17,7 @@ async def list_db_sources(
     session: AsyncSession = Depends(get_db),
 ):
     service = DbSourceService(session)
-    return await service.list_sources()
+    return await service.list()
 
 
 @router.post("", response_model=DbSourceOut, status_code=201)
@@ -27,7 +27,7 @@ async def create_db_source(
     session: AsyncSession = Depends(get_db),
 ):
     service = DbSourceService(session)
-    return await service.create_source(data)
+    return await service.create(data)
 
 
 @router.post("/{source_id}/run", response_model=DbSourceOut)
@@ -47,4 +47,4 @@ async def delete_db_source(
     session: AsyncSession = Depends(get_db),
 ):
     service = DbSourceService(session)
-    await service.delete_source(source_id)
+    await service.delete(source_id)

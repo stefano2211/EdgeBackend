@@ -269,10 +269,10 @@ class ReactiveOrchestrator:
         results into the final analysis + plan + execute instruction.
         """
         orchestrator = create_reactive_orchestrator(
-            knowledge_base_ids=enabled_kb_ids or None,
+            knowledge_base_ids=[str(k) for k in enabled_kb_ids] or None,
             enable_knowledge=bool(enabled_kb_ids),
             enable_mcp=bool(enabled_tool_ids),
-            enabled_tool_names=enabled_tool_ids,
+            enabled_tool_names=[str(t) for t in enabled_tool_ids],
         )
 
         # Hook up the browser controller so it streams vl-agent screenshots during Phase 2

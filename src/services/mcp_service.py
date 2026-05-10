@@ -377,6 +377,12 @@ class MCPService:
                             data = {"text": content}
                         return await self._auto_map_response(tool_name, data)
 
+        except httpx.HTTPError as e:
+            logger.error("[MCP Service] HTTP execution failed: %s", str(e))
+            return MCPResponse(source=tool_name, error=f"HTTP error: {e}")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error("[MCP Service] Data parsing failed: %s", str(e))
+            return MCPResponse(source=tool_name, error=f"Parse error: {e}")
         except Exception as e:
             logger.error("[MCP Service] Execution failed: %s", str(e))
             return MCPResponse(source=tool_name, error=str(e))
@@ -412,8 +418,10 @@ class MCPService:
 
             if raw:
                 return json.loads(raw)
-        except Exception as e:
+        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as e:
             logger.warning("[MCP Service] LLM analysis failed: %s", e)
+        except Exception as e:
+            logger.warning("[MCP Service] LLM analysis unexpected error: %s", e)
         return None
 
     # ------------------------------------------------------------------
@@ -450,17 +458,17 @@ class MCPService:
                             return await self._discover_rest_bridge(
                                 base_url, initial_response=resp, is_resource=is_resource, method=method
                             )
-                        except Exception as bridge_err:
+                        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as bridge_err:
                             logger.error(
                                 "[MCP Service] AI Bridge failed for REST-detected endpoint: %s",
                                 bridge_err,
                             )
-                            raise Exception(f"AI Discovery failed: {bridge_err}")
-            except Exception as e:
+                            raise RuntimeError(f"AI Discovery failed: {bridge_err}")
+            except httpx.HTTPError as e:
                 logger.warning("[MCP Service] Proactive network check failed for %s: %s", base_url, e)
 
         if not _MCP_SDK_AVAILABLE:
-            raise Exception("mcp SDK not installed. Cannot discover via stdio/sse.")
+            raise RuntimeError("mcp SDK not installed. Cannot discover via stdio/sse.")
 
         try:
             if is_stdio:
@@ -489,9 +497,11 @@ class MCPService:
                             base_url, is_resource=is_resource, method=method
                         )
                     raise sse_err
-        except Exception as e:
+        except RuntimeError:
+            raise
+        except httpx.HTTPError as e:
             error_msg = str(e)
-            logger.error("[MCP Service] Discovery fatal error: %s", error_msg)
+            logger.error("[MCP Service] Discovery HTTP error: %s", error_msg)
 
             if not is_stdio and ("connection" in error_msg.lower() or "timeout" in error_msg.lower()):
                 try:
@@ -501,7 +511,11 @@ class MCPService:
                 except Exception as bridge_err:
                     error_msg = f"Fallo total (MCP y Bridge): {str(bridge_err)}"
 
-            raise Exception(error_msg)
+            raise RuntimeError(error_msg)
+        except Exception as e:
+            error_msg = str(e)
+            logger.error("[MCP Service] Discovery fatal error: %s", error_msg)
+            raise RuntimeError(error_msg)
 
     async def _discover_rest_bridge(
         self,

@@ -4,48 +4,24 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import NotFoundError
+from src.api.v1.schemas.tool import MCPSourceCreate, MCPSourceUpdate
 from src.core.logging import logging
 from src.persistencia.models.tool_config import MCPSource, ToolConfig
-from src.persistencia.repositories.tool_repository import ToolRepository, MCPSourceRepository
-from src.api.v1.schemas.tool import MCPSourceCreate, MCPSourceUpdate
-from src.services._helpers import commit_and_refresh, apply_patch
+from src.persistencia.repositories.tool_repository import MCPSourceRepository, ToolRepository
+from src.services.base_crud_service import BaseCRUDService
+from src.services._helpers import commit_and_refresh
 from src.services.mcp_service import MCPService
 
 logger = logging.getLogger(__name__)
 
 
-class MCPSourceService:
+class MCPSourceService(BaseCRUDService[MCPSource, MCPSourceCreate, MCPSourceUpdate]):
+    model_class = MCPSource
+    repo_class = MCPSourceRepository
+
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
-        self.repo = MCPSourceRepository(session)
+        super().__init__(session)
         self.tool_repo = ToolRepository(session)
-
-    async def list_sources(self) -> list[MCPSource]:
-        return await self.repo.list()
-
-    async def get_source(self, source_id: int) -> MCPSource:
-        source = await self.repo.get_by_id(source_id)
-        if not source:
-            raise NotFoundError(f"MCP Source {source_id} not found")
-        return source
-
-    async def create_source(self, data: MCPSourceCreate) -> MCPSource:
-        source = MCPSource(**data.model_dump())
-        await self.repo.create(source)
-        await commit_and_refresh(self.session, source)
-        return source
-
-    async def update_source(self, source_id: int, data: MCPSourceUpdate) -> MCPSource:
-        source = await self.get_source(source_id)
-        apply_patch(source, data)
-        await commit_and_refresh(self.session, source)
-        return source
-
-    async def delete_source(self, source_id: int) -> None:
-        source = await self.get_source(source_id)
-        await self.repo.delete(source)
-        await self.session.commit()
 
     async def sync_source_tools(self, source_id: int) -> dict:
         """Connect to an MCP source, discover available tools, and auto-register them.
@@ -53,7 +29,7 @@ class MCPSourceService:
         Returns:
             {"tools_discovered": int, "tools_added": int}
         """
-        source = await self.get_source(source_id)
+        source = await self.get(source_id)
         mcp_service = MCPService()
 
         discovered_tools = await mcp_service.discover_tools(

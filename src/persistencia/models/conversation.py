@@ -9,14 +9,20 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.persistencia.models.base import Base
 
 
+from sqlalchemy import Index
+
 class Conversation(Base):
     __tablename__ = "conversations"
+    __table_args__ = (
+        Index("idx_conversation_user", "user_id"),
+        Index("idx_conversation_archived", "is_archived"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     thread_id: Mapped[str] = mapped_column(
         String(36), unique=True, default=lambda: str(uuid.uuid4())
     )
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title: Mapped[str] = mapped_column(String(200), default="New Chat")
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

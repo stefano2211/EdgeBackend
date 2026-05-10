@@ -17,7 +17,7 @@ async def list_models(
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
-    models = await service.list_models()
+    models = await service.list()
     return models
 
 
@@ -28,7 +28,7 @@ async def get_model(
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
-    model = await service.get_model(model_id)
+    model = await service.get(model_id)
     return model
 
 
@@ -39,7 +39,7 @@ async def create_model(
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
-    model = await service.create_model(data)
+    model = await service.create(data)
     return model
 
 
@@ -51,7 +51,7 @@ async def update_model(
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
-    model = await service.update_model(model_id, data)
+    model = await service.update(model_id, data)
     return model
 
 
@@ -62,7 +62,7 @@ async def delete_model(
     session: AsyncSession = Depends(get_db),
 ):
     service = ModelService(session)
-    await service.delete_model(model_id)
+    await service.delete(model_id)
     return None
 
 

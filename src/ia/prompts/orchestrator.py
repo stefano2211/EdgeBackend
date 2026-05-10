@@ -19,14 +19,14 @@ def build_orchestrator_prompt(
     subagent_descriptions: str,
     has_industrial: bool = True,
 ) -> str:
-    \"\"\"Build the orchestrator system prompt dynamically.
+    """Build the orchestrator system prompt dynamically.
 
     Args:
         subagent_descriptions: Formatted string listing available sub-agents.
 
     Returns:
         Fully rendered system prompt string.
-    \"\"\"
+    """
     if has_industrial:
         routing_rules = """\
 [IF] Query needs document search, live API data, sensor values, or BOTH
@@ -86,7 +86,7 @@ def build_orchestrator_prompt(
     )
 
 
-_PROMPT_TEMPLATE = \"\"\"\
+_PROMPT_TEMPLATE = """
 <role>Aura AI — Proactive Orchestrator (Director)</role>
 
 <mission>
@@ -192,7 +192,7 @@ After receiving sub-agent results:
 - Citations: Include document names, sensor IDs, or source references when available
 - Forbidden: Raw JSON, tool names, internal architecture details
 </output_format>
-\"\"\"
+"""
 
 # Backwards-compatible default
 ORCHESTRATOR_SYSTEM_PROMPT = build_orchestrator_prompt(

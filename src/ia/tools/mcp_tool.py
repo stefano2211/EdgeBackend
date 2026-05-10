@@ -22,17 +22,23 @@ from src.services.mcp_service import MCPService
 
 logger = logging.getLogger(__name__)
 
+import asyncio
+
 # Lazy-init singleton
 _mcp_service: MCPService | None = None
+_mcp_service_lock = asyncio.Lock()
 
 # In-memory URL resolution cache
 _url_cache: dict = {}
+_url_cache_lock = asyncio.Lock()
 
 
-def _get_mcp_service() -> MCPService:
+async def _get_mcp_service() -> MCPService:
     global _mcp_service
     if _mcp_service is None:
-        _mcp_service = MCPService()
+        async with _mcp_service_lock:
+            if _mcp_service is None:
+                _mcp_service = MCPService()
     return _mcp_service
 
 
@@ -87,7 +93,7 @@ async def _do_call_dynamic_mcp(
     if not tool_config:
         return json.dumps({"error": f"Tool configuration '{tool_config_name}' not found."})
 
-    mcp_service = _get_mcp_service()
+    mcp_service = await _get_mcp_service()
 
     config_data = tool_config.config or {}
     execution_url = config_data.get("url", "")

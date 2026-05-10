@@ -24,6 +24,27 @@ from src.core.logging import logging
 logger = logging.getLogger(__name__)
 
 
+def _resolve_memory() -> tuple:
+    """Resolve checkpointer & store with graceful fallback.
+
+    Returns:
+        (checkpointer, store) tuple where each may be None.
+    """
+    try:
+        checkpointer = get_checkpointer()
+    except RuntimeError:
+        logger.warning("Checkpointer not initialized; DeepAgents will use default")
+        checkpointer = None
+
+    try:
+        store = get_store()
+    except RuntimeError:
+        logger.warning("Store not initialized; DeepAgents will use default")
+        store = None
+
+    return checkpointer, store
+
+
 def create_orchestrator(
     subagent_names: list[str] | None = None,
     knowledge_base_id: str | None = None,
@@ -77,18 +98,7 @@ def create_orchestrator(
         active_tool_names,
     )
 
-    # Resolve checkpointer & store with graceful fallback
-    try:
-        checkpointer = get_checkpointer()
-    except RuntimeError:
-        logger.warning("Checkpointer not initialized; DeepAgents will use default")
-        checkpointer = None
-
-    try:
-        store = get_store()
-    except RuntimeError:
-        logger.warning("Store not initialized; DeepAgents will use default")
-        store = None
+    checkpointer, store = _resolve_memory()
 
     kwargs: dict = {
         "model": get_chat_model(),
@@ -105,10 +115,10 @@ def create_orchestrator(
 
 
 def create_reactive_orchestrator(
-    knowledge_base_ids: list[int] | None = None,
+    knowledge_base_ids: list[str] | None = None,
     enable_knowledge: bool = True,
     enable_mcp: bool = True,
-    enabled_tool_names: list[int] | None = None,
+    enabled_tool_names: list[str] | None = None,
     system_prompt_override: str | None = None,
 ):
     """Create a DeepAgents orchestrator for the reactive event pipeline.
@@ -125,7 +135,7 @@ def create_reactive_orchestrator(
         knowledge_base_ids: Optional list of KB IDs for RAG.
         enable_knowledge: Whether to enable RAG tool.
         enable_mcp: Whether to enable MCP tools.
-        enabled_tool_names: Optional list of tool IDs to limit MCP tools.
+        enabled_tool_names: Optional list of tool names to limit MCP tools.
         system_prompt_override: Optional custom system prompt.
 
     Returns:
@@ -134,7 +144,7 @@ def create_reactive_orchestrator(
     # Pick the first KB ID for subagent compatibility (DeepAgents expects single str)
     kb_id_for_subagent = None
     if enable_knowledge and knowledge_base_ids:
-        kb_id_for_subagent = str(knowledge_base_ids[0])
+        kb_id_for_subagent = knowledge_base_ids[0]
 
     # S2 has industrial-agent (data) only if tools are enabled + s1-coordinator (intuition)
     has_industrial = enable_mcp or enable_knowledge
@@ -169,17 +179,7 @@ def create_reactive_orchestrator(
         active_tool_names,
     )
 
-    try:
-        checkpointer = get_checkpointer()
-    except RuntimeError:
-        logger.warning("Checkpointer not initialized; DeepAgents will use default")
-        checkpointer = None
-
-    try:
-        store = get_store()
-    except RuntimeError:
-        logger.warning("Store not initialized; DeepAgents will use default")
-        store = None
+    checkpointer, store = _resolve_memory()
 
     kwargs: dict = {
         "model": get_chat_model(),

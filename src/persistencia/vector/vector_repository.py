@@ -66,7 +66,7 @@ class VectorRepository:
 
         # Ensure metadata is per-chunk
         if isinstance(metadata, dict):
-            meta_list: list[dict] = [metadata] * len(chunks)
+            meta_list: list[dict] = [metadata.copy() for _ in chunks]
         else:
             meta_list = list(metadata)
             if len(meta_list) < len(chunks):

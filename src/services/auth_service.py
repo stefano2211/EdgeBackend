@@ -29,7 +29,7 @@ class AuthService:
         if existing_username:
             raise ConflictError("Username already taken")
 
-        stmt = select(func.count()).select_from(User)
+        stmt = select(func.count()).select_from(User).limit(1)
         result = await self.session.execute(stmt)
         user_count = result.scalar() or 0
         role = "admin" if user_count == 0 else "user"

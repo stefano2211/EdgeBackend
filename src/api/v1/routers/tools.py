@@ -27,7 +27,7 @@ async def list_tools(
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
-    return await service.list_tools()
+    return await service.list()
 
 
 @router.get("/{tool_id}", response_model=ToolConfigOut)
@@ -37,7 +37,7 @@ async def get_tool(
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
-    return await service.get_tool(tool_id)
+    return await service.get(tool_id)
 
 
 @router.post("", response_model=ToolConfigOut, status_code=201)
@@ -47,7 +47,7 @@ async def create_tool(
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
-    return await service.create_tool(data)
+    return await service.create(data)
 
 
 @router.patch("/{tool_id}", response_model=ToolConfigOut)
@@ -58,7 +58,7 @@ async def update_tool(
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
-    return await service.update_tool(tool_id, data)
+    return await service.update(tool_id, data)
 
 
 @router.delete("/{tool_id}", status_code=204)
@@ -68,7 +68,7 @@ async def delete_tool(
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
-    await service.delete_tool(tool_id)
+    await service.delete(tool_id)
     return None
 
 
@@ -80,7 +80,7 @@ async def list_sources(
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
-    return await service.list_sources()
+    return await service.list()
 
 
 @router.post("/sources/", response_model=MCPSourceOut, status_code=201)
@@ -90,7 +90,7 @@ async def create_source(
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
-    return await service.create_source(data)
+    return await service.create(data)
 
 
 @router.patch("/sources/{source_id}", response_model=MCPSourceOut)
@@ -101,7 +101,7 @@ async def update_source(
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
-    return await service.update_source(source_id, data)
+    return await service.update(source_id, data)
 
 
 @router.delete("/sources/{source_id}", status_code=204)
@@ -111,7 +111,7 @@ async def delete_source(
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
-    await service.delete_source(source_id)
+    await service.delete(source_id)
     return None
 
 
@@ -146,7 +146,7 @@ async def discover_source_tools(
     from src.services.mcp_service import MCPService
 
     service = MCPSourceService(session)
-    source = await service.get_source(source_id)
+    source = await service.get(source_id)
     mcp_service = MCPService()
     try:
         return await mcp_service.discover_tools(

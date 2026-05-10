@@ -59,27 +59,33 @@ class KnowledgeService:
         return kb
 
     async def delete_knowledge_base(self, kb_id: int, user_id: int) -> None:
+        """Delete knowledge base and all associated data.
+
+        Order: DB commit first, then external systems. This prevents orphaned DB
+        references if an external deletion fails.
+        """
         kb = await self.get_knowledge_base(kb_id, user_id)
 
-        # 1. Delete Qdrant collection
+        # 1. Delete from Relational DB first (source of truth).
+        #    Documents cascade automatically via SQLAlchemy ORM + DB FK.
+        await self.kb_repo.delete(kb)
+        await self.session.commit()
+        logger.info("Deleted knowledge base %d from DB", kb_id)
+
+        # 2. Delete Qdrant collection (best-effort)
         try:
             await self.vector_repo.delete_collection(knowledge_base_id=kb_id)
             logger.info("Deleted Qdrant collection kb_%d", kb_id)
         except Exception:
             logger.warning("Qdrant collection kb_%d not found or already deleted", kb_id)
 
-        # 2. Delete all document objects from MinIO (prefix isolation)
+        # 3. Delete all document objects from MinIO (prefix isolation) (best-effort)
         if self._storage is not None:
             try:
                 deleted = await self._storage.delete_prefix(f"kb/{kb_id}/")
                 logger.info("Deleted %d objects from MinIO for kb_%d", deleted, kb_id)
             except Exception:
                 logger.exception("Failed to delete MinIO objects for kb_%d", kb_id)
-
-        # 3. Delete knowledge base (cascades documents in DB via FK if configured,
-        #    otherwise we should delete documents explicitly first)
-        await self.kb_repo.delete(kb)
-        await self.session.commit()
 
     async def get_knowledge_base_with_documents(self, kb_id: int, user_id: int) -> KnowledgeBase:
         return await self.get_knowledge_base(kb_id, user_id)

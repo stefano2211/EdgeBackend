@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     # ── Query Enhancement ──
     QUERY_ENHANCEMENT_ENABLED: bool = True
 
+    # ── Reactive Pipeline ──
+    REACTIVE_NOTIFICATION_EMAIL: str = "stefano.andres2004@gmail.com"
+
     @property
     def is_dev(self) -> bool:
         return self.APP_ENV.lower() == "development"

@@ -8,6 +8,7 @@ TODO: Deprecar este archivo una vez que web_browser.py use BrowserController dir
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
 from src.core.logging import logging
@@ -17,24 +18,31 @@ logger = logging.getLogger(__name__)
 
 
 class BrowserManager:
-    """Singleton backward-compatible wrapper."""
+    """Singleton backward-compatible wrapper (thread-safe)."""
     _instance = None
-    
+    _lock = threading.Lock()
+
     def __init__(self):
         self._controller: Optional[BrowserController] = None
-    
+        self._controller_lock = threading.Lock()
+
     @classmethod
     def get_instance(cls) -> "BrowserManager":
         if cls._instance is None:
-            cls._instance = cls()
+            with cls._lock:
+                # Double-checked locking
+                if cls._instance is None:
+                    cls._instance = cls()
         return cls._instance
 
     def get_controller(self) -> BrowserController:
         """Obtiene el BrowserController compartido (singleton)."""
         if self._controller is None:
-            self._controller = BrowserController()
-            # Conectar el emitter SSE al callback antiguo
-            self._controller.set_event_emitter(self._legacy_emitter)
+            with self._controller_lock:
+                if self._controller is None:
+                    self._controller = BrowserController()
+                    # Conectar el emitter SSE al callback antiguo
+                    self._controller.set_event_emitter(self._legacy_emitter)
         return self._controller
 
     def _get_controller(self) -> BrowserController:

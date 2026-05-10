@@ -8,11 +8,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.persistencia.models.base import Base
 
 
+from sqlalchemy import Index
+
 class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"
+    __table_args__ = (
+        Index("idx_knowledge_base_user", "user_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     context_mode: Mapped[str] = mapped_column(String(20), default="both")

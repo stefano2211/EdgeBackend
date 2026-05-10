@@ -8,12 +8,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.persistencia.models.base import Base
 
 
+from sqlalchemy import Index
+
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        Index("idx_document_kb", "knowledge_base_id"),
+        Index("idx_document_status", "status"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     knowledge_base_id: Mapped[int] = mapped_column(
-        ForeignKey("knowledge_bases.id"), nullable=False
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False
     )
     # Full S3 key: kb/{knowledge_base_id}/{uuid}.{ext} (up to ~500 chars)
     file_id: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
