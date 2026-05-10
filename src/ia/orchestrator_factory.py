@@ -15,6 +15,7 @@ from deepagents import create_deep_agent
 
 from src.ia.langchain_models import get_chat_model
 from src.ia.subagents.registry import get_available_subagents, get_subagent_descriptions
+from src.ia.subagents.reactive_registry import get_reactive_subagents, get_reactive_subagent_descriptions
 from src.ia.tools import create_rag_tool, mcp_execute
 from src.ia.memory import get_checkpointer, get_store
 from src.ia.prompts.orchestrator import build_orchestrator_prompt
@@ -152,7 +153,7 @@ def create_reactive_orchestrator(
     if has_industrial:
         subagent_names.insert(0, "industrial")
 
-    subagents = get_available_subagents(
+    subagents = get_reactive_subagents(
         names=subagent_names,
         knowledge_base_id=kb_id_for_subagent,
         enable_mcp=enable_mcp,
