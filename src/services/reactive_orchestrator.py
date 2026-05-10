@@ -310,11 +310,21 @@ class ReactiveOrchestrator:
             
             # Emit sub-agent results so the frontend panels are populated
             from src.ia.prompts.reactive import REACTIVE_S1_COORDINATOR_PROMPT
-            for msg in msgs:
+            for i, msg in enumerate(msgs):
                 if getattr(msg, "type", "") == "tool":
-                    if msg.name == "industrial-agent":
+                    agent_name = msg.name
+                    # If DeepAgents uses a unified 'task' tool, find the actual agent name from the AIMessage
+                    if msg.name == "task":
+                        for prev_msg in reversed(msgs[:i]):
+                            if getattr(prev_msg, "type", "") == "ai" and hasattr(prev_msg, "tool_calls"):
+                                for tc in prev_msg.tool_calls:
+                                    if tc.get("id") == msg.tool_call_id:
+                                        agent_name = tc.get("args", {}).get("agent", "task")
+                                        break
+
+                    if agent_name == "industrial-agent":
                         await self._emit("industrial_result", event.id, {"result": str(msg.content)})
-                    elif msg.name == "s1-coordinator":
+                    elif agent_name == "s1-coordinator":
                         await self._emit("system1_result", event.id, {
                             "result": str(msg.content),
                             "prompt": REACTIVE_S1_COORDINATOR_PROMPT
