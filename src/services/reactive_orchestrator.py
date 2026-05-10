@@ -296,6 +296,21 @@ class ReactiveOrchestrator:
                 config=config,
             )
             msgs = result.get("messages", [])
+            
+            # Emit sub-agent results so the frontend panels are populated
+            from src.ia.prompts.reactive import REACTIVE_S1_COORDINATOR_PROMPT
+            for msg in msgs:
+                if getattr(msg, "type", "") == "tool":
+                    if msg.name == "industrial-agent":
+                        await self._emit("industrial_result", event.id, {"result": str(msg.content)})
+                    elif msg.name == "s1-coordinator":
+                        await self._emit("system1_result", event.id, {
+                            "result": str(msg.content),
+                            "prompt": REACTIVE_S1_COORDINATOR_PROMPT
+                        })
+                        # Save S1 output to DB so it persists on reload
+                        event.agent_analysis = str(msg.content)
+            
             return str(msgs[-1].content).strip() if msgs else ""
         except Exception as exc:
             logger.warning("S2 autonomous orchestrator failed: %s", exc)
