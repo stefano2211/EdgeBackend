@@ -32,10 +32,10 @@ from src.ia.prompts.reactive import (
 from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
 from src.services.browser_manager import BrowserManager
-from src.services.chat_orchestrator import ChatOrchestrator
 from src.services.event_broadcast import EventBroadcastManager
 from src.services.reactive_config_service import ReactiveConfigService
 from src.services._helpers import commit_and_refresh
+from src.services.chat_orchestrator import _extract_chunk_payload
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +46,9 @@ class ReactiveOrchestrator:
     def __init__(
         self,
         broadcaster: EventBroadcastManager,
-        chat_orchestrator: ChatOrchestrator | None = None,
     ) -> None:
         self._broadcaster = broadcaster
-        self._chat = chat_orchestrator or ChatOrchestrator()
+        self._browser_manager = BrowserManager.get_instance("reactive")
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  PUBLIC API
@@ -133,53 +132,85 @@ class ReactiveOrchestrator:
             await self._broadcast_event(event)
 
     async def execute(self, event: Event, session: AsyncSession) -> None:
-        """Execute approved plan using VLM + browser (streaming)."""
+        """Execute approved plan using VLM + isolated reactive browser (streaming)."""
         thread_id = f"event-{event.id}"
         instruction = self._extract_execute_instruction(event) or event.agent_plan or "Execute the plan."
 
-        request = ChatRequest(query=instruction, thread_id=thread_id)
         messages = [{"role": "user", "content": instruction}]
 
         await self._emit("vlm_prompt", event.id, {"prompt": instruction})
         await self._emit_log(event.id, "VLM execution started", level="info")
 
+        # Load user's reactive configuration
+        config_service = ReactiveConfigService(session)
+        enabled_tool_ids = await config_service.get_enabled_tools(event.triggered_by_user_id)
+        enabled_kb_ids = await config_service.get_enabled_knowledge_bases(event.triggered_by_user_id)
+
+        # Create isolated reactive orchestrator
+        orchestrator = create_reactive_orchestrator(
+            knowledge_base_ids=[str(k) for k in enabled_kb_ids] or None,
+            enable_knowledge=bool(enabled_kb_ids),
+            enable_mcp=bool(enabled_tool_ids),
+            enabled_tool_names=[str(t) for t in enabled_tool_ids],
+        )
+
+        # Set up isolated browser emitter for the reactive pipeline
+        controller = self._browser_manager.get_controller()
+
+        async def _reactive_emitter(payload: dict) -> None:
+            if "screenshot" in payload:
+                await self._emit("screenshot", event.id, payload["screenshot"])
+            elif "thought" in payload:
+                await self._emit("vlm_analysis", event.id, {"analysis": payload["thought"]})
+                await self._emit_log(event.id, f"VLM thought: {payload['thought'][:120]}", level="debug")
+
+        controller.set_event_emitter(_reactive_emitter)
+        controller.set_active_thread_id(thread_id)
+
+        config = {"configurable": {"thread_id": thread_id}}
         actions: list[dict] = []
+        full_content = ""
+        current_agent = "orchestrator"
+        agents_used: set[str] = set()
 
         try:
-            async for chunk in self._chat.stream(request, messages, thread_id):
-                chunk_type = chunk.get("type")
+            async for chunk in orchestrator.astream(
+                {"messages": messages},
+                config=config,
+                stream_mode="messages",
+                subgraphs=True,
+                version="v2",
+            ):
+                agent_name, text, reasoning, agents_used, events = _extract_chunk_payload(
+                    chunk, current_agent=current_agent, agents_used=agents_used
+                )
+                current_agent = agent_name
 
-                if chunk_type == "screenshot":
-                    await self._emit("screenshot", event.id, chunk.get("data", {}))
-                    await self._emit_log(event.id, "Screenshot captured", level="debug")
+                if text:
+                    full_content += text
 
-                elif chunk_type == "thought":
-                    thought = chunk.get("content", "")
-                    await self._emit("vlm_analysis", event.id, {"analysis": thought})
-                    await self._emit_log(event.id, f"VLM thought: {thought[:120]}", level="debug")
-
-                elif chunk_type == "tool_call":
-                    action = {
-                        "type": chunk.get("name", "tool"),
-                        "args": chunk.get("args", ""),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                    actions.append(action)
-                    await self._emit("action_executed", event.id, {"action": action})
-                    await self._emit_log(event.id, f"Action: {action['type']}", level="info")
-
-                elif chunk_type == "tool_result":
-                    result = chunk.get("content", "")
-                    if actions:
-                        actions[-1]["result"] = result
-                    await self._emit_log(event.id, f"Result: {result[:120]}", level="debug")
-
-                elif chunk_type == "error":
-                    error_msg = chunk.get("detail", "Unknown error")
-                    await self._emit_log(event.id, f"Execution error: {error_msg}", level="error")
-
-                elif chunk_type == "done":
-                    await self._emit_log(event.id, "Execution stream completed", level="info")
+                for ev in events:
+                    ev_type = ev.get("type")
+                    if ev_type == "tool_call":
+                        action = {
+                            "type": ev.get("name", "tool"),
+                            "args": ev.get("args", ""),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        actions.append(action)
+                        await self._emit("action_executed", event.id, {"action": action})
+                        await self._emit_log(event.id, f"Action: {action['type']}", level="info")
+                    elif ev_type == "tool_result":
+                        result = ev.get("content", "")
+                        if actions:
+                            actions[-1]["result"] = result
+                        await self._emit_log(event.id, f"Result: {result[:120]}", level="debug")
+                    elif ev_type == "subagent":
+                        await self._emit_log(
+                            event.id,
+                            f"Sub-agent {ev.get('name')} {ev.get('status')}",
+                            level="debug",
+                        )
 
         except Exception as exc:
             logger.exception("Execution failed for event %s", event.id)
@@ -275,10 +306,8 @@ class ReactiveOrchestrator:
             enabled_tool_names=[str(t) for t in enabled_tool_ids],
         )
 
-        # Hook up the browser controller so it streams vl-agent screenshots during Phase 2
-        from src.services.browser_manager import BrowserManager
-        manager = BrowserManager()
-        controller = manager.get_controller()
+        # Hook up the isolated reactive browser controller for vl-agent screenshots
+        controller = self._browser_manager.get_controller()
         async def _vl_emitter(payload: dict) -> None:
             if "screenshot" in payload:
                 await self._emit("vl_screenshot", event.id, payload["screenshot"])

@@ -12,6 +12,10 @@ from src.persistencia.models.db_source import DbSource
 from src.persistencia.models.system_settings import SystemSettings
 from src.persistencia.models.user_reactive_tool import UserReactiveTool
 from src.persistencia.models.user_reactive_kb import UserReactiveKnowledgeBase
+from src.persistencia.models.reactive_knowledge_base import ReactiveKnowledgeBase
+from src.persistencia.models.reactive_document import ReactiveDocument
+from src.persistencia.models.reactive_mcp_source import ReactiveMCPSource
+from src.persistencia.models.reactive_tool_config import ReactiveToolConfig
 
 __all__ = [
     "Base",
@@ -29,4 +33,8 @@ __all__ = [
     "SystemSettings",
     "UserReactiveTool",
     "UserReactiveKnowledgeBase",
+    "ReactiveKnowledgeBase",
+    "ReactiveDocument",
+    "ReactiveMCPSource",
+    "ReactiveToolConfig",
 ]

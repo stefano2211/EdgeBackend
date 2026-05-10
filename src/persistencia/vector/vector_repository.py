@@ -51,6 +51,7 @@ class VectorRepository:
         metadata: list[dict[str, Any]] | dict[str, Any],
         doc_id: int | str,
         sparse_embeddings: list[SparseVector] | None = None,
+        prefix: str = "kb_",
     ) -> None:
         """Upsert document chunks with dense + sparse vectors into the KB collection.
 
@@ -60,9 +61,10 @@ class VectorRepository:
             metadata: Per-chunk metadata list or a single dict applied to all.
             doc_id: Source document ID for filtering/deletion.
             sparse_embeddings: Optional sparse BM25 vectors (parallel to chunks).
+            prefix: Collection name prefix (default "kb_", use "reactive_kb_" for reactive).
         """
-        await ensure_collection(knowledge_base_id, dimension=len(embeddings[0]))
-        name = collection_name(knowledge_base_id)
+        await ensure_collection(knowledge_base_id, dimension=len(embeddings[0]), prefix=prefix)
+        name = collection_name(knowledge_base_id, prefix=prefix)
 
         # Ensure metadata is per-chunk
         if isinstance(metadata, dict):
@@ -128,6 +130,7 @@ class VectorRepository:
         hnsw_ef: int = 128,
         sparse_query: SparseVector | None = None,
         prefetch_limit: int = 50,
+        prefix: str = "kb_",
     ) -> list[dict[str, Any]]:
         """Search for top-k similar chunks using hybrid search (dense + sparse + RRF).
 
@@ -145,8 +148,9 @@ class VectorRepository:
             hnsw_ef: HNSW exploration factor (64-128 sweet spot).
             sparse_query: Optional sparse BM25 query vector.
             prefetch_limit: Number of candidates per prefetch stage.
+            prefix: Collection name prefix (default "kb_", use "reactive_kb_" for reactive).
         """
-        name = collection_name(knowledge_base_id)
+        name = collection_name(knowledge_base_id, prefix=prefix)
 
         # Build optional filter
         query_filter = None
@@ -227,9 +231,10 @@ class VectorRepository:
         self,
         knowledge_base_id: int | str,
         doc_id: int | str,
+        prefix: str = "kb_",
     ) -> None:
         """Remove all chunks belonging to a single document."""
-        name = collection_name(knowledge_base_id)
+        name = collection_name(knowledge_base_id, prefix=prefix)
         from qdrant_client.models import Filter, FieldCondition, MatchValue
 
         await self.client.delete(
@@ -245,8 +250,10 @@ class VectorRepository:
         )
         logger.info("Deleted chunks for doc_id=%s from %s", doc_id, name)
 
-    async def delete_collection(self, knowledge_base_id: int | str) -> None:
+    async def delete_collection(
+        self, knowledge_base_id: int | str, prefix: str = "kb_"
+    ) -> None:
         """Remove an entire Qdrant collection for a knowledge base."""
-        name = collection_name(knowledge_base_id)
+        name = collection_name(knowledge_base_id, prefix=prefix)
         await self.client.delete_collection(collection_name=name)
         logger.info("Deleted Qdrant collection %s", name)

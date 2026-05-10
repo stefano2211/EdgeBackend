@@ -3,14 +3,14 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
-class MCPSourceCreate(BaseModel):
+class ReactiveMCPSourceCreate(BaseModel):
     name: str
     description: str | None = None
     url: str
     type: str = "rest"
 
 
-class MCPSourceUpdate(BaseModel):
+class ReactiveMCPSourceUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     url: str | None = None
@@ -18,8 +18,9 @@ class MCPSourceUpdate(BaseModel):
     is_enabled: bool | None = None
 
 
-class MCPSourceOut(BaseModel):
+class ReactiveMCPSourceOut(BaseModel):
     id: int
+    user_id: int
     name: str
     description: str | None = None
     url: str
@@ -30,7 +31,7 @@ class MCPSourceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ToolConfigUpdate(BaseModel):
+class ReactiveToolConfigUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     is_enabled: bool | None = None
@@ -39,7 +40,7 @@ class ToolConfigUpdate(BaseModel):
     source_id: int | None = None
 
 
-class ToolConfigCreate(BaseModel):
+class ReactiveToolConfigCreate(BaseModel):
     name: str
     description: str | None = None
     is_enabled: bool = True
@@ -48,8 +49,9 @@ class ToolConfigCreate(BaseModel):
     source_id: int | None = None
 
 
-class ToolConfigOut(BaseModel):
+class ReactiveToolConfigOut(BaseModel):
     id: int
+    user_id: int
     name: str
     description: str | None = None
     is_enabled: bool
@@ -57,5 +59,6 @@ class ToolConfigOut(BaseModel):
     parameter_schema: dict | None = None
     source_id: int | None = None
     created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

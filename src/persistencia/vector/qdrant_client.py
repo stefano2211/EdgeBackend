@@ -43,14 +43,15 @@ def get_qdrant_client() -> AsyncQdrantClient:
     return _qdrant_client
 
 
-def collection_name(knowledge_base_id: int | str) -> str:
-    return f"kb_{knowledge_base_id}"
+def collection_name(knowledge_base_id: int | str, prefix: str = "kb_") -> str:
+    return f"{prefix}{knowledge_base_id}"
 
 
 async def ensure_collection(
     knowledge_base_id: int | str,
     dimension: int = 384,
     vectors_on_disk: bool = False,
+    prefix: str = "kb_",
 ) -> str:
     """Create Qdrant collection with named vectors (dense + sparse) + payload indexes.
 
@@ -61,7 +62,7 @@ async def ensure_collection(
     - Sparse vectors with IDF modifier for native BM25 scoring
     """
     client = get_qdrant_client()
-    name = collection_name(knowledge_base_id)
+    name = collection_name(knowledge_base_id, prefix=prefix)
 
     exists = await client.collection_exists(name)
     if exists:

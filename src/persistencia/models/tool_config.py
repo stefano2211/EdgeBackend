@@ -17,7 +17,6 @@ class MCPSource(Base):
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     type: Mapped[str] = mapped_column(String(20), default="rest")
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    context_mode: Mapped[str] = mapped_column(String(20), default="both")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     tools: Mapped[list["ToolConfig"]] = relationship(
@@ -32,7 +31,6 @@ class ToolConfig(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    context_mode: Mapped[str] = mapped_column(String(20), default="both")
     config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     parameter_schema: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     source_id: Mapped[int | None] = mapped_column(

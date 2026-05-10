@@ -1,4 +1,4 @@
-"""KnowledgeBase repository with context_mode filtering."""
+"""KnowledgeBase repository."""
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,14 +11,12 @@ class KnowledgeRepository(BaseRepository[KnowledgeBase]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, KnowledgeBase)
 
-    async def list_by_user(self, user_id: int, context_mode: str | None = None) -> list[KnowledgeBase]:
-        stmt = select(KnowledgeBase).where(KnowledgeBase.user_id == user_id)
-        if context_mode:
-            # Filter by exact match or 'both'
-            stmt = stmt.where(
-                (KnowledgeBase.context_mode == context_mode) | (KnowledgeBase.context_mode == "both")
-            )
-        stmt = stmt.order_by(KnowledgeBase.updated_at.desc())
+    async def list_by_user(self, user_id: int) -> list[KnowledgeBase]:
+        stmt = (
+            select(KnowledgeBase)
+            .where(KnowledgeBase.user_id == user_id)
+            .order_by(KnowledgeBase.updated_at.desc())
+        )
         result = await self.session.execute(stmt)
         return result.scalars().all()
 

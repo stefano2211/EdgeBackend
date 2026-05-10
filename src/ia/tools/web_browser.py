@@ -19,8 +19,8 @@ from src.services.browser_manager import BrowserManager
 
 logger = logging.getLogger(__name__)
 
-# Obtener controller del singleton BrowserManager para compartir estado SSE
-_controller = BrowserManager.get_instance().get_controller()
+# Obtener controller del BrowserManager "chat" para compartir estado SSE
+_controller = BrowserManager.get_instance("chat").get_controller()
 
 
 async def _async_navigate(url: str) -> str:

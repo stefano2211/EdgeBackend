@@ -3,28 +3,30 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
-class KnowledgeBaseCreate(BaseModel):
+class ReactiveKnowledgeBaseCreate(BaseModel):
     name: str
     description: str | None = None
 
 
-class KnowledgeBaseUpdate(BaseModel):
+class ReactiveKnowledgeBaseUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    is_enabled: bool | None = None
 
 
-class KnowledgeBaseOut(BaseModel):
+class ReactiveKnowledgeBaseOut(BaseModel):
     id: int
     user_id: int
     name: str
     description: str | None = None
+    is_enabled: bool
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class KnowledgeDocumentOut(BaseModel):
+class ReactiveKnowledgeDocumentOut(BaseModel):
     id: int
     file_id: str
     filename: str
@@ -34,5 +36,5 @@ class KnowledgeDocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class KnowledgeBaseDetailOut(KnowledgeBaseOut):
-    documents: list[KnowledgeDocumentOut]
+class ReactiveKnowledgeBaseDetailOut(ReactiveKnowledgeBaseOut):
+    documents: list[ReactiveKnowledgeDocumentOut]

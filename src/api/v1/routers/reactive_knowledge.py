@@ -1,61 +1,61 @@
-"""Knowledge router — functional CRUD."""
+"""Reactive Knowledge router — functional CRUD for reactive knowledge bases."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.v1.schemas.knowledge import (
-    KnowledgeBaseCreate,
-    KnowledgeBaseUpdate,
-    KnowledgeBaseOut,
-    KnowledgeBaseDetailOut,
-    KnowledgeDocumentOut,
+from src.api.v1.schemas.reactive_knowledge import (
+    ReactiveKnowledgeBaseCreate,
+    ReactiveKnowledgeBaseUpdate,
+    ReactiveKnowledgeBaseOut,
+    ReactiveKnowledgeBaseDetailOut,
+    ReactiveKnowledgeDocumentOut,
 )
 from src.core.deps import get_db, get_current_user
 from src.persistencia.models.user import User
-from src.services.knowledge_service import KnowledgeService
+from src.services.reactive_knowledge_service import ReactiveKnowledgeService
 
-router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+router = APIRouter(prefix="/reactive/knowledge", tags=["reactive-knowledge"])
 
 
-@router.get("", response_model=list[KnowledgeBaseOut])
-async def list_knowledge_bases(
+@router.get("", response_model=list[ReactiveKnowledgeBaseOut])
+async def list_reactive_knowledge_bases(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    service = KnowledgeService(session)
+    service = ReactiveKnowledgeService(session)
     kbs = await service.list_knowledge_bases(current_user.id)
     return kbs
 
 
-@router.post("", response_model=KnowledgeBaseOut, status_code=201)
-async def create_knowledge_base(
-    data: KnowledgeBaseCreate,
+@router.post("", response_model=ReactiveKnowledgeBaseOut, status_code=201)
+async def create_reactive_knowledge_base(
+    data: ReactiveKnowledgeBaseCreate,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    service = KnowledgeService(session)
+    service = ReactiveKnowledgeService(session)
     kb = await service.create_knowledge_base(current_user.id, data)
     return kb
 
 
-@router.get("/{knowledge_id}", response_model=KnowledgeBaseDetailOut)
-async def get_knowledge_base(
+@router.get("/{knowledge_id}", response_model=ReactiveKnowledgeBaseDetailOut)
+async def get_reactive_knowledge_base(
     knowledge_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    service = KnowledgeService(session)
+    service = ReactiveKnowledgeService(session)
     kb = await service.get_knowledge_base_with_documents(knowledge_id, current_user.id)
-    # Build detail response with documents
-    return KnowledgeBaseDetailOut(
+    return ReactiveKnowledgeBaseDetailOut(
         id=kb.id,
         user_id=kb.user_id,
         name=kb.name,
         description=kb.description,
+        is_enabled=kb.is_enabled,
         created_at=kb.created_at,
         updated_at=kb.updated_at,
         documents=[
-            KnowledgeDocumentOut(
+            ReactiveKnowledgeDocumentOut(
                 id=d.id,
                 file_id=d.file_id,
                 filename=d.filename,
@@ -67,24 +67,24 @@ async def get_knowledge_base(
     )
 
 
-@router.patch("/{knowledge_id}", response_model=KnowledgeBaseOut)
-async def update_knowledge_base(
+@router.patch("/{knowledge_id}", response_model=ReactiveKnowledgeBaseOut)
+async def update_reactive_knowledge_base(
     knowledge_id: int,
-    data: KnowledgeBaseUpdate,
+    data: ReactiveKnowledgeBaseUpdate,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    service = KnowledgeService(session)
+    service = ReactiveKnowledgeService(session)
     kb = await service.update_knowledge_base(knowledge_id, current_user.id, data)
     return kb
 
 
 @router.delete("/{knowledge_id}", status_code=204)
-async def delete_knowledge_base(
+async def delete_reactive_knowledge_base(
     knowledge_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    service = KnowledgeService(session)
+    service = ReactiveKnowledgeService(session)
     await service.delete_knowledge_base(knowledge_id, current_user.id)
     return None
