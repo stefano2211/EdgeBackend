@@ -34,6 +34,7 @@ class ReactiveConfigService:
                 "description": t.description,
                 "is_enabled": t.is_enabled,
                 "user_id": t.user_id,
+                "source_name": t.source.name if hasattr(t, 'source') and t.source else None,
             }
             for t in tools
             if t.user_id == user_id
@@ -61,6 +62,7 @@ class ReactiveConfigService:
                 "name": kb.name,
                 "description": kb.description,
                 "is_enabled": kb.is_enabled,
+                "document_count": len(kb.documents),
             }
             for kb in kbs
         ]
