@@ -359,6 +359,8 @@ class ReactiveOrchestrator:
                         })
                         # Save S1 output to DB so it persists on reload
                         event.agent_analysis = str(msg.content)
+                    elif agent_name == "vl-agent":
+                        await self._emit("vl_result", event.id, {"result": str(msg.content)})
             
             return str(msgs[-1].content).strip() if msgs else ""
         except Exception as exc:

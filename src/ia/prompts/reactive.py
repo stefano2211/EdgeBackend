@@ -91,7 +91,7 @@ Key trait: You think FAST. 2-4 sentences max for your final synthesis.
 1. Receive event context from System-2.
 2. Decide which sub-agents to invoke:
    - ALWAYS invoke historical-agent (cheap, always useful).
-   - ALWAYS invoke vl-agent with the strict instruction to navigate to gmail.com, write, and send a summary report of the anomaly to {notification_email}. This is MANDATORY.
+   - MANDATORY: Invoke vl-agent to navigate to gmail.com, compose a new message, and send a detailed summary report of the anomaly to {notification_email}. This MUST be done for every industrial problem or alarm.
 3. Delegate to chosen sub-agents IN PARALLEL via task().
 4. Collect results and resolve conflicts:
    - If historical and vl disagree -> trust vl for current state,
@@ -384,10 +384,10 @@ def build_reactive_orchestrator_prompt(available_subagents: List[str]) -> str:
 S1_COORDINATOR_DESCRIPTION = (
     "System-1 Fast Intuition Coordinator. "
     "Delegates in parallel to historical-agent (pattern matching >6 months) "
-    "and optionally vl-agent (visual verification via browser). "
-    "Resolves conflicts between sources and returns a concise synthesis. "
-    "Use ONLY when System-2 needs rapid pattern recognition before deep analysis. "
-    "Do NOT use for planning, root cause analysis, or GUI execution."
+    "and vl-agent (visual verification + web automation). "
+    "This coordinator is RESPONSIBLE for sending anomaly reports via Gmail "
+    "and performing visual verification of dashboards. "
+    "Use ALWAYS when an alarm or problem is detected to get fast patterns and automated reporting."
 )
 
 
@@ -566,11 +566,10 @@ Recibirás un JSON de triage en el mensaje del usuario.
 </triage_context_note>
 
 <thinking_protocol>
-Antes de actuar, razona internamente:
 1. ¿Qué tipo de evento es este? (alarma de sensor, anomalía de proceso, automatización web, etc.)
 2. ¿Necesito datos actuales de sensores o SOPs? → task("industrial-agent", ...)
-3. ¿Necesito intuición rápida (patrones históricos y/o verificación visual)?
-   → task("s1-coordinator", ...) — él se encargará de consultar al historical-agent y vl-agent internamente
+3. ¿Es un problema, alarma o anomalía? 
+   → task("s1-coordinator", ...) — EL COORDINADOR S1 ES MANDATORIO para enviar el reporte por Gmail y buscar patrones históricos.
 4. ¿Debo invocar ambos en paralelo? (generalmente SÍ para urgencia crítica/alta)
 5. ¿Cuál es mi nivel de confianza tras recopilar resultados?
 6. ¿El plan requiere interacción GUI? → incluir ---EXECUTE--- solo si confianza ≥ MEDIO.
@@ -582,12 +581,11 @@ NUNCA inventes datos de sensores, patrones históricos ni SOPs de tu conocimient
 
 {industrial_delegation_rules}
 [DELEGAR a s1-coordinator] cuando:
-  - Se necesita contexto histórico de incidentes pasados (>6 meses)
-  - Se necesita verificación visual del estado en pantallas (SCADA, SAP, HMI)
-  - La identificación de patrones recurrentes mejoraría el diagnóstico
-  - El triage indica needs_s1=true (tratar como pista fuerte)
-  NOTA: s1-coordinator internamente delega a historical-agent (patrones LoRA)
-  y vl-agent (verificación visual/browser). NO les delegues directamente a ellos.
+  - Se detecta CUALQUIER alarma o problema industrial (MANDATORIO para reporte Gmail).
+  - Se necesita contexto histórico de incidentes pasados (>6 meses).
+  - Se necesita verificación visual del estado en pantallas (SCADA, SAP, HMI).
+  - El triage indica needs_s1=true.
+  NOTA: s1-coordinator se encarga de la automatización de Gmail y búsqueda de patrones.
 
 [DELEGAR a AMBOS EN PARALELO] cuando:
   - Urgencia crítica o alta — siempre preferir más datos
@@ -709,10 +707,9 @@ debes informar en tu plan que no tienes acceso a esos datos y proceder con preca
 """
 
     subagent_lines.append(
-        '- task("s1-coordinator", ...) → Coordinador de Intuición Rápida (System-1). '
-        "Internamente delega en paralelo a historical-agent (patrones de falla históricos) "
-        "y vl-agent (verificación visual via browser/SCADA/SAP). "
-        "DEBES INVOCARLO SIEMPRE para obtener contexto histórico rápido y verificación visual de ser posible."
+        '- task("s1-coordinator", ...) → Coordinador S1 de Intuición y Reporteo. '
+        "MANDATORIO para alarmas. Envía reportes por Gmail automáticamente y verifica patrones históricos. "
+        "Internamente delega a historical-agent y vl-agent (browser)."
     )
 
     subagents_section = "\n".join(subagent_lines)
