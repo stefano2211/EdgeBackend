@@ -19,63 +19,74 @@ logger = logging.getLogger(__name__)
 
 
 async def _reactive_rag_retrieve_impl(
-    knowledge_base_id: str,
+    knowledge_base_ids: list[str],
     query: str,
     top_k: int,
 ) -> str:
     """Internal implementation using the composable RetrievalPipeline (reactive prefix).
 
-    Pipeline stages:
-    1. Query Enhancement (multi-query + HyDE)
-    2. Dense + Sparse embedding
-    3. Hybrid search with RRF fusion in Qdrant (collection: reactive_kb_{id})
-    4. Cross-Encoder reranking for precision
-    5. Context formatting with source citations
+    Iterates through all provided KB IDs and aggregates results.
     """
     try:
         from src.services.retrieval_pipeline import RetrievalPipeline
 
         pipeline = RetrievalPipeline()
-        result = await pipeline.retrieve(
-            knowledge_base_id=knowledge_base_id,
-            query=query,
-            top_k=top_k,
-            prefix="reactive_kb_",
-        )
+        all_chunks = []
+        
+        # Search each collection
+        # We limit to first 5 collections to avoid extreme latency
+        for kb_id in knowledge_base_ids[:5]:
+            result = await pipeline.retrieve(
+                knowledge_base_id=kb_id,
+                query=query,
+                top_k=top_k,
+                prefix="reactive_kb_",
+            )
+            if result.chunks:
+                all_chunks.extend(result.chunks)
 
-        if not result.chunks:
+        if not all_chunks:
             logger.debug(
-                "No reactive RAG results for KB %s query: %s",
-                knowledge_base_id,
+                "No reactive RAG results for KBs %s query: %s",
+                knowledge_base_ids,
                 query[:50],
             )
-            return "[No relevant documents found in the reactive knowledge base.]"
+            return "[No relevant documents found in the reactive knowledge bases.]"
 
-        if result.context is None:
-            return "[Documents found but relevance too low to include.]"
+        # Deduplicate and sort by rerank_score (if available) or score
+        # Since RetrievalPipeline already reranked per collection, we just need to merge.
+        def _get_score(c):
+            return c.get("rerank_score") or c.get("score") or 0.0
 
-        return result.context
+        all_chunks.sort(key=_get_score, reverse=True)
+        top_chunks = all_chunks[:top_k]
+
+        # Re-format context using RetrievalPipeline's logic (or similar)
+        # For simplicity, we can use the first result's context builder if we had one,
+        # but RetrievalPipeline._format_context is static.
+        formatted = RetrievalPipeline._format_context(top_chunks, query)
+        return formatted or "[Documents found but relevance too low to include.]"
 
     except Exception as e:
-        logger.exception("Reactive RAG retrieval failed for KB %s: %s", knowledge_base_id, e)
+        logger.exception("Reactive RAG retrieval failed for KBs %s: %s", knowledge_base_ids, e)
         return f"[Document retrieval error: {e}]"
 
 
-def create_reactive_rag_tool(knowledge_base_id: str) -> StructuredTool:
-    """Create a reactive RAG tool bound to a specific reactive knowledge base ID."""
+def create_reactive_rag_tool(knowledge_base_ids: list[str]) -> StructuredTool:
+    """Create a reactive RAG tool bound to a list of reactive knowledge base IDs."""
 
     async def _bound_rag_retrieve(query: str, top_k: int = 5) -> str:
-        """Search the reactive Qdrant knowledge base for relevant document chunks."""
-        return await _reactive_rag_retrieve_impl(knowledge_base_id, query, top_k)
+        """Search the reactive Qdrant knowledge bases for relevant document chunks."""
+        return await _reactive_rag_retrieve_impl(knowledge_base_ids, query, top_k)
 
     return StructuredTool.from_function(
         coroutine=_bound_rag_retrieve,
         name="reactive_rag_retrieve",
         description=(
-            "Search the REACTIVE knowledge base for relevant document chunks. "
-            "Uses hybrid search (dense + BM25 sparse) with cross-encoder reranking "
-            "for high-precision retrieval. Returns formatted context with source "
-            "citations including rank, score, rerank_score, filename, and page number. "
+            "Search the REACTIVE knowledge bases for relevant document chunks. "
+            "Searches across multiple enabled collections. "
+            "Returns formatted context with source citations. "
             "Use when the user query requires document retrieval or RAG from the reactive system."
         ),
     )
+

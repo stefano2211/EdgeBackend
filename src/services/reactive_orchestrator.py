@@ -66,8 +66,11 @@ class ReactiveOrchestrator:
 
         # Load user's reactive configuration
         config_service = ReactiveConfigService(session)
-        enabled_tool_ids = await config_service.get_enabled_tools(event.triggered_by_user_id)
-        enabled_kb_ids = await config_service.get_enabled_knowledge_bases(event.triggered_by_user_id)
+        config_res = await config_service.get_enabled_resources(event.triggered_by_user_id)
+        enabled_tool_ids = config_res["tool_ids"]
+        enabled_kb_ids = config_res["kb_ids"]
+        enabled_kb_names = config_res["kb_names"]
+        enabled_tool_names = config_res["tool_names"]
 
         await self._emit_log(event.id, "Phase 0: Pipeline started", level="info")
         await self._emit_log(
@@ -98,9 +101,11 @@ class ReactiveOrchestrator:
                 event=event,
                 event_query=event_query,
                 triage=triage,
-                enabled_tool_ids=enabled_tool_ids,
-                enabled_kb_ids=enabled_kb_ids,
+                enabled_kb_ids=[str(k) for k in enabled_kb_ids],
+                enabled_kb_names=enabled_kb_names,
+                enabled_tool_names=enabled_tool_names,
             )
+
 
             analysis_text, plan, execute = self._parse_sections(synthesis)
 
@@ -143,16 +148,18 @@ class ReactiveOrchestrator:
 
         # Load user's reactive configuration
         config_service = ReactiveConfigService(session)
-        enabled_tool_ids = await config_service.get_enabled_tools(event.triggered_by_user_id)
-        enabled_kb_ids = await config_service.get_enabled_knowledge_bases(event.triggered_by_user_id)
+        config_res = await config_service.get_enabled_resources(event.triggered_by_user_id)
+        enabled_kb_ids = config_res["kb_ids"]
+        enabled_tool_names = config_res["tool_names"]
 
         # Create isolated reactive orchestrator
         orchestrator = create_reactive_orchestrator(
             knowledge_base_ids=[str(k) for k in enabled_kb_ids] or None,
             enable_knowledge=bool(enabled_kb_ids),
-            enable_mcp=bool(enabled_tool_ids),
-            enabled_tool_names=[str(t) for t in enabled_tool_ids],
+            enable_mcp=bool(enabled_tool_names),
+            enabled_tool_names=enabled_tool_names,
         )
+
 
         # Set up isolated browser emitter for the reactive pipeline
         controller = self._browser_manager.get_controller()
@@ -285,26 +292,18 @@ class ReactiveOrchestrator:
         event: Event,
         event_query: str,
         triage: dict,
-        enabled_tool_ids: list[int],
-        enabled_kb_ids: list[int],
+        enabled_kb_ids: list[str],
+        enabled_kb_names: list[str],
+        enabled_tool_names: list[str],
     ) -> str:
-        """Phase 2: S2 autonomous orchestrator.
-
-        S2 receives the event + triage context and autonomously decides which
-        sub-agents to invoke via task():
-          - task("industrial-agent") → live sensors + SOPs via MCP/RAG
-          - task("historical-agent") → historical pattern matching
-          - task("vl-agent")         → visual verification via browser
-
-        S2 invokes them (in parallel when needed) and synthesizes all
-        results into the final analysis + plan + execute instruction.
-        """
+        """Phase 2: S2 autonomous orchestrator."""
         orchestrator = create_reactive_orchestrator(
-            knowledge_base_ids=[str(k) for k in enabled_kb_ids] or None,
+            knowledge_base_ids=enabled_kb_ids or None,
             enable_knowledge=bool(enabled_kb_ids),
-            enable_mcp=bool(enabled_tool_ids),
-            enabled_tool_names=[str(t) for t in enabled_tool_ids],
+            enable_mcp=bool(enabled_tool_names),
+            enabled_tool_names=enabled_tool_names,
         )
+
 
         # Hook up the isolated reactive browser controller for vl-agent screenshots
         controller = self._browser_manager.get_controller()

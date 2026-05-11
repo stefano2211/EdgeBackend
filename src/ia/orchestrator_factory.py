@@ -142,11 +142,6 @@ def create_reactive_orchestrator(
     Returns:
         Compiled DeepAgent ready for streaming.
     """
-    # Pick the first KB ID for subagent compatibility (DeepAgents expects single str)
-    kb_id_for_subagent = None
-    if enable_knowledge and knowledge_base_ids:
-        kb_id_for_subagent = knowledge_base_ids[0]
-
     # S2 has industrial-agent (data) only if tools are enabled + s1-coordinator (intuition)
     has_industrial = enable_mcp or enable_knowledge
     subagent_names = ["s1-coordinator"]
@@ -155,9 +150,11 @@ def create_reactive_orchestrator(
 
     subagents = get_reactive_subagents(
         names=subagent_names,
-        knowledge_base_id=kb_id_for_subagent,
+        knowledge_base_ids=knowledge_base_ids if enable_knowledge else None,
         enable_mcp=enable_mcp,
+        mcp_tool_names=enabled_tool_names,
     )
+
 
     # S2 has NO direct tools; it delegates entirely to industrial-agent or s1-coordinator.
     tools = []

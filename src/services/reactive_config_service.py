@@ -90,8 +90,20 @@ class ReactiveConfigService:
         kbs = await self._kb_repo.list_by_user(user_id)
         return [kb.id for kb in kbs if kb.is_enabled]
 
-    async def has_any_config(self, user_id: int) -> bool:
-        """Return True if the user has enabled at least one reactive tool or KB."""
+    async def get_enabled_resources(self, user_id: int) -> dict:
+        """Return both IDs and names of enabled reactive tools and KBs."""
         tools = await self._tool_repo.list_enabled_by_user(user_id)
         kbs = await self._kb_repo.list_by_user(user_id)
-        return bool(tools or any(kb.is_enabled for kb in kbs))
+        enabled_kbs = [kb for kb in kbs if kb.is_enabled]
+        
+        return {
+            "tool_ids": [t.id for t in tools],
+            "tool_names": [t.name for t in tools],
+            "kb_ids": [kb.id for kb in enabled_kbs],
+            "kb_names": [kb.name for kb in enabled_kbs],
+        }
+
+    async def has_any_config(self, user_id: int) -> bool:
+        """Return True if the user has enabled at least one reactive tool or KB."""
+        res = await self.get_enabled_resources(user_id)
+        return bool(res["tool_ids"] or res["kb_ids"])
