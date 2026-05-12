@@ -143,7 +143,7 @@ class ReactiveOrchestrator:
         messages = [{"role": "user", "content": instruction}]
 
         await self._emit("vlm_prompt", event.id, {"prompt": instruction})
-        await self._emit_log(event.id, "VLM execution started", level="info")
+        await self._emit_log(event.id, "Execution pipeline started", level="info")
 
         # Load user's reactive configuration
         config_service = ReactiveConfigService(session)
@@ -178,6 +178,8 @@ class ReactiveOrchestrator:
         full_content = ""
         current_agent = "orchestrator"
         agents_used: set[str] = set()
+        # Track which sub-agent is currently being delegated to via task()
+        pending_task_agent: str | None = None
 
         try:
             async for chunk in orchestrator.astream(
@@ -198,19 +200,43 @@ class ReactiveOrchestrator:
                 for ev in events:
                     ev_type = ev.get("type")
                     if ev_type == "tool_call":
+                        tool_name = ev.get("name", "tool")
+                        tool_args = ev.get("args", "")
                         action = {
-                            "type": ev.get("name", "tool"),
-                            "args": ev.get("args", ""),
+                            "type": tool_name,
+                            "args": tool_args,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
                         actions.append(action)
                         await self._emit("action_executed", event.id, {"action": action})
-                        await self._emit_log(event.id, f"Action: {action['type']}", level="info")
+                        await self._emit_log(event.id, f"Action: {tool_name}", level="info")
+
+                        # Detect task() delegation to sub-agents
+                        if tool_name == "task" and isinstance(tool_args, dict):
+                            pending_task_agent = tool_args.get("agent")
+                            if pending_task_agent:
+                                await self._emit_log(
+                                    event.id,
+                                    f"Delegating to {pending_task_agent}",
+                                    level="info",
+                                )
                     elif ev_type == "tool_result":
                         result = ev.get("content", "")
                         if actions:
                             actions[-1]["result"] = result
-                        await self._emit_log(event.id, f"Result: {result[:120]}", level="debug")
+                        await self._emit_log(event.id, f"Result: {str(result)[:120]}", level="debug")
+
+                        # Emit sub-agent results to the appropriate frontend panel
+                        if pending_task_agent == "historical-agent":
+                            await self._emit("historical_result", event.id, {"result": str(result)})
+                            await self._emit_log(event.id, "Historical analysis received", level="info")
+                        elif pending_task_agent == "vl-agent":
+                            await self._emit("vl_result", event.id, {"result": str(result)})
+                            await self._emit_log(event.id, "VL agent result received", level="info")
+                        elif pending_task_agent == "industrial-agent":
+                            await self._emit("industrial_result", event.id, {"result": str(result)})
+                            await self._emit_log(event.id, "Industrial result received", level="info")
+                        pending_task_agent = None
                     elif ev_type == "subagent":
                         await self._emit_log(
                             event.id,
@@ -353,6 +379,7 @@ class ReactiveOrchestrator:
                     elif agent_name == "historical-agent":
                         await self._emit("historical_result", event.id, {"result": str(msg.content)})
                         await self._emit_log(event.id, "Historical analysis received", level="info")
+                        event.agent_analysis = str(msg.content)
                     elif agent_name == "vl-agent":
                         await self._emit("vl_result", event.id, {"result": str(msg.content)})
             
