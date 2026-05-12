@@ -20,10 +20,7 @@ from src.ia.prompts.subagents import (
     VL_AGENT_SYSTEM_PROMPT,
     build_industrial_agent_prompt,
 )
-from src.ia.prompts.reactive import (
-    REACTIVE_S1_COORDINATOR_PROMPT,
-    S1_COORDINATOR_DESCRIPTION,
-)
+
 from src.ia.tools.reactive_rag_tool import create_reactive_rag_tool
 from src.ia.tools.reactive_mcp_tool import reactive_mcp_execute
 from src.ia.tools.reactive_web_browser import (
@@ -98,22 +95,6 @@ def _build_reactive_vl_subagent(knowledge_base_ids: list[str] | None = None) -> 
     }
 
 
-def _build_reactive_s1_coordinator(knowledge_base_ids: list[str] | None = None) -> dict:
-    """Reactive S1 Coordinator: fast intuition via historical + vl (parallel).
-
-    Uses the reactive vl-agent with the isolated browser instance.
-    """
-    return {
-        "name": "s1-coordinator",
-        "description": S1_COORDINATOR_DESCRIPTION,
-        "system_prompt": REACTIVE_S1_COORDINATOR_PROMPT,
-        "tools": [],
-        "model": get_chat_model(),
-        "subagents": [
-            _build_reactive_historical_subagent(knowledge_base_ids),
-            _build_reactive_vl_subagent(knowledge_base_ids),
-        ],
-    }
 
 
 # ── Registry público ──
@@ -122,7 +103,6 @@ REACTIVE_SUBAGENT_BUILDERS: dict[str, Callable] = {
     "industrial": _build_reactive_industrial_subagent,
     "historical": _build_reactive_historical_subagent,
     "vl": _build_reactive_vl_subagent,
-    "s1-coordinator": _build_reactive_s1_coordinator,
 }
 
 

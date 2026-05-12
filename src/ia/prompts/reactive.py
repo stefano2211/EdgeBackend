@@ -537,8 +537,8 @@ Sugiero consultar el industrial-agent para lecturas actuales de flujo y verifica
 # ═══════════════════════════════════════════════════════════════════════════════
 #  S2 AUTONOMOUS ORCHESTRATOR PROMPT (unified entry point)
 #  S2 recibe el evento, decide qué sub-agentes invocar, y sintetiza.
-#  Sub-agentes directos: industrial-agent + s1-coordinator
-#  s1-coordinator internamente maneja: historical-agent + vl-agent
+#  Sub-agentes directos: industrial-agent, historical-agent, vl-agent
+#  (Flat hierarchy — same as proactive orchestrator)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _S2_ORCHESTRATOR_TEMPLATE = """\
@@ -568,11 +568,11 @@ Recibirás un JSON de triage en el mensaje del usuario.
 <thinking_protocol>
 1. ¿Qué tipo de evento es este? (alarma de sensor, anomalía de proceso, automatización web, etc.)
 2. ¿Necesito datos actuales de sensores o SOPs? → task("industrial-agent", ...)
-3. ¿Es un problema, alarma o anomalía? 
-   → task("s1-coordinator", ...) — EL COORDINADOR S1 ES MANDATORIO para enviar el reporte por Gmail y buscar patrones históricos.
-4. ¿Debo invocar ambos en paralelo? (generalmente SÍ para urgencia crítica/alta)
-5. ¿Cuál es mi nivel de confianza tras recopilar resultados?
-6. ¿El plan requiere interacción GUI? → incluir ---EXECUTE--- solo si confianza ≥ MEDIO.
+3. ¿Hay precedentes históricos de este tipo de evento? → task("historical-agent", ...)
+4. ¿Necesito verificación visual de dashboards o ejecutar acciones en pantalla? → task("vl-agent", ...)
+5. ¿Debo invocar varios en paralelo? (generalmente SÍ para urgencia crítica/alta)
+6. ¿Cuál es mi nivel de confianza tras recopilar resultados?
+7. ¿El plan requiere interacción GUI? → incluir ---EXECUTE--- solo si confianza ≥ MEDIO.
 </thinking_protocol>
 
 <delegation_rules>
@@ -580,24 +580,28 @@ Recibirás un JSON de triage en el mensaje del usuario.
 NUNCA inventes datos de sensores, patrones históricos ni SOPs de tu conocimiento propio.
 
 {industrial_delegation_rules}
-[DELEGAR a s1-coordinator] cuando:
-  - Se detecta CUALQUIER alarma o problema industrial (MANDATORIO para reporte Gmail).
+[DELEGAR a historical-agent] cuando:
   - Se necesita contexto histórico de incidentes pasados (>6 meses).
-  - Se necesita verificación visual del estado en pantallas (SCADA, SAP, HMI).
-  - El triage indica needs_s1=true.
-  NOTA: s1-coordinator se encarga de la automatización de Gmail y búsqueda de patrones.
+  - Se quiere identificar patrones recurrentes o estacionales.
+  - El triage indica needs_s1=true (tratar como pista fuerte).
+  NOTA: historical-agent usa pesos fine-tuned, no herramientas externas.
 
-[DELEGAR a AMBOS EN PARALELO] cuando:
+[DELEGAR a vl-agent] cuando:
+  - Se necesita verificación visual del estado en pantallas (SCADA, SAP, HMI).
+  - Se necesita ejecutar acciones GUI (enviar emails, llenar formularios, navegar dashboards).
+  - El plan de remediación requiere interacción con interfaces web.
+  NOTA: vl-agent es el ÚNICO agente que puede interactuar con pantallas y sitios web.
+
+[DELEGAR a MÚLTIPLES EN PARALELO] cuando:
   - Urgencia crítica o alta — siempre preferir más datos
   - Se necesita tanto datos actuales COMO intuición histórica/visual
   - Ante la duda, más datos es mejor que menos
-
 
 </delegation_rules>
 
 <confidence_scoring>
 Tras recopilar resultados de sub-agentes, evalúa la confianza:
-- ALTO: Múltiples fuentes corroboran. s1-coordinator e industrial-agent coinciden.
+- ALTO: Múltiples fuentes corroboran. historical-agent e industrial-agent coinciden.
 - MEDIO: Alguna evidencia, pero incompleta o parcialmente contradictoria.
 - BAJO: Datos limitados. Recomendar revisión humana antes de actuar.
 Si confianza es BAJO → NO incluir sección ---EXECUTE---.
@@ -616,7 +620,6 @@ Verifica indicadores de falso positivo:
 - NUNCA incluyas ---EXECUTE--- sin un plan validado que lo preceda.
 - NUNCA incluyas ---EXECUTE--- si la confianza es BAJO.
 - NUNCA expongas nombres internos de sub-agentes ni JSON raw en la salida final.
-- NUNCA delegues directamente a historical-agent o vl-agent — solo a s1-coordinator.
 - NO uses tags XML para simular tool calls — usa task() nativo de DeepAgents.
 </negative_constraints>
 
@@ -675,10 +678,10 @@ def build_reactive_s2_orchestrator_prompt(
 ) -> str:
     """Build the S2 autonomous orchestrator prompt — unified entry point.
 
-    S2 has two direct sub-agents:
+    S2 has three direct sub-agents (flat hierarchy, same as proactive):
     - industrial-agent: live sensor data (MCP) + SOPs/manuals (RAG)
-    - s1-coordinator: fast intuition layer that internally manages
-      historical-agent (LoRA pattern matching) and vl-agent (visual/browser)
+    - historical-agent: LoRA pattern matching for past incidents
+    - vl-agent: visual verification + web automation via isolated browser
 
     Args:
         has_industrial: Whether the industrial sub-agent is active.
@@ -707,9 +710,16 @@ debes informar en tu plan que no tienes acceso a esos datos y proceder con preca
 """
 
     subagent_lines.append(
-        '- task("s1-coordinator", ...) → Coordinador S1 de Intuición y Reporteo. '
-        "MANDATORIO para alarmas. Envía reportes por Gmail automáticamente y verifica patrones históricos. "
-        "Internamente delega a historical-agent y vl-agent (browser)."
+        '- task("historical-agent", ...) → Especialista en diagnóstico histórico. '
+        "Identifica precedentes, patrones de falla recurrentes y correlaciones con incidentes pasados. "
+        "Usa pesos fine-tuned (LoRA), no necesita herramientas externas. Siempre es rápido y barato de invocar."
+    )
+
+    subagent_lines.append(
+        '- task("vl-agent", ...) → Agente autónomo de Computer Use (Observe-Think-Act). '
+        "Puede navegar cualquier GUI (navegador web, SCADA HMI, SAP/ERP, email, dashboards), "
+        "leer valores, llenar formularios, hacer clicks, enviar emails. "
+        "Es el ÚNICO agente que puede interactuar con pantallas y sitios web."
     )
 
     subagents_section = "\n".join(subagent_lines)

@@ -127,10 +127,10 @@ def create_reactive_orchestrator(
     S2 is the SINGLE ENTRY POINT for reactive events. It autonomously decides
     which sub-agents to invoke via task() and synthesizes the results.
 
-    Sub-agents registered:
+    Sub-agents registered (flat hierarchy, same as proactive):
     - industrial-agent: live sensor data (MCP) + SOPs/manuals (RAG)
-    - s1-coordinator: fast intuition layer that internally delegates to
-      historical-agent (LoRA pattern matching) and vl-agent (visual/browser)
+    - historical-agent: LoRA pattern matching for past incidents
+    - vl-agent: visual verification + web automation via isolated browser
 
     Args:
         knowledge_base_ids: Optional list of KB IDs for RAG.
@@ -142,9 +142,9 @@ def create_reactive_orchestrator(
     Returns:
         Compiled DeepAgent ready for streaming.
     """
-    # S2 has industrial-agent (data) only if tools are enabled + s1-coordinator (intuition)
+    # S2 has industrial-agent (data) only if tools are enabled + historical + vl directly
     has_industrial = enable_mcp or enable_knowledge
-    subagent_names = ["s1-coordinator"]
+    subagent_names = ["historical", "vl"]
     if has_industrial:
         subagent_names.insert(0, "industrial")
 
@@ -156,7 +156,7 @@ def create_reactive_orchestrator(
     )
 
 
-    # S2 has NO direct tools; it delegates entirely to industrial-agent or s1-coordinator.
+    # S2 has NO direct tools; it delegates to industrial-agent, historical-agent, and vl-agent.
     tools = []
     active_tool_names = []
 

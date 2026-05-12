@@ -2,9 +2,8 @@
 
 Architecture (2-phase):
   Phase 1 — S2-Triage:      routing decision (fast LLM call, JSON)
-  Phase 2 — S2-Autonomous:  autonomous orchestrator delegates to industrial-agent
-                             and s1-coordinator (which internally manages
-                             historical-agent + vl-agent) via task()
+  Phase 2 — S2-Autonomous:  autonomous orchestrator delegates to industrial-agent,
+                             historical-agent and vl-agent via task() (flat hierarchy)
 
 SOLID:
   - SRP: Each phase is a private method.
@@ -87,7 +86,7 @@ class ReactiveOrchestrator:
             await self._emit_log(
                 event.id,
                 f"Phase 1: Triage → urgency={triage.get('urgency')} "
-                f"needs_s1={triage.get('needs_s1')} "
+                f"needs_historical={triage.get('needs_s1')} "
                 f"needs_industrial={triage.get('needs_industrial')}",
                 level="info",
             )
@@ -337,7 +336,6 @@ class ReactiveOrchestrator:
             msgs = result.get("messages", [])
             
             # Emit sub-agent results so the frontend panels are populated
-            from src.ia.prompts.reactive import REACTIVE_S1_COORDINATOR_PROMPT
             for i, msg in enumerate(msgs):
                 if getattr(msg, "type", "") == "tool":
                     agent_name = msg.name
@@ -352,13 +350,8 @@ class ReactiveOrchestrator:
 
                     if agent_name == "industrial-agent":
                         await self._emit("industrial_result", event.id, {"result": str(msg.content)})
-                    elif agent_name == "s1-coordinator":
-                        await self._emit("system1_result", event.id, {
-                            "result": str(msg.content),
-                            "prompt": REACTIVE_S1_COORDINATOR_PROMPT
-                        })
-                        # Save S1 output to DB so it persists on reload
-                        event.agent_analysis = str(msg.content)
+                    elif agent_name == "historical-agent":
+                        await self._emit_log(event.id, f"Historical analysis received", level="info")
                     elif agent_name == "vl-agent":
                         await self._emit("vl_result", event.id, {"result": str(msg.content)})
             
