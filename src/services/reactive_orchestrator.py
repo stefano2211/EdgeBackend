@@ -165,10 +165,10 @@ class ReactiveOrchestrator:
 
         async def _reactive_emitter(payload: dict) -> None:
             if "screenshot" in payload:
-                await self._emit("screenshot", event.id, payload["screenshot"])
+                await self._emit("vl_screenshot", event.id, payload["screenshot"])
             elif "thought" in payload:
-                await self._emit("vlm_analysis", event.id, {"analysis": payload["thought"]})
-                await self._emit_log(event.id, f"VLM thought: {payload['thought'][:120]}", level="debug")
+                await self._emit("vl_thought", event.id, {"thought": payload["thought"]})
+                await self._emit_log(event.id, f"VL thought: {payload['thought'][:120]}", level="debug")
 
         controller.set_event_emitter(_reactive_emitter)
         controller.set_active_thread_id(thread_id)
@@ -351,7 +351,8 @@ class ReactiveOrchestrator:
                     if agent_name == "industrial-agent":
                         await self._emit("industrial_result", event.id, {"result": str(msg.content)})
                     elif agent_name == "historical-agent":
-                        await self._emit_log(event.id, f"Historical analysis received", level="info")
+                        await self._emit("historical_result", event.id, {"result": str(msg.content)})
+                        await self._emit_log(event.id, "Historical analysis received", level="info")
                     elif agent_name == "vl-agent":
                         await self._emit("vl_result", event.id, {"result": str(msg.content)})
             
