@@ -235,14 +235,26 @@ class ReactiveOrchestrator:
                         await self._emit_log(event.id, f"Action: {tool_name}", level="info")
 
                         # Detect task() delegation to sub-agents
-                        if tool_name == "task" and isinstance(tool_args, dict):
-                            pending_task_agent = tool_args.get("agent")
-                            if pending_task_agent:
-                                await self._emit_log(
-                                    event.id,
-                                    f"Delegating to {pending_task_agent}",
-                                    level="info",
+                        if tool_name == "task":
+                            # Args may be a dict or a JSON string during streaming
+                            parsed_args = tool_args
+                            if isinstance(tool_args, str):
+                                try:
+                                    parsed_args = json.loads(tool_args)
+                                except (json.JSONDecodeError, TypeError):
+                                    parsed_args = {}
+                            if isinstance(parsed_args, dict):
+                                # DeepAgents uses 'subagent_type' but some versions use 'agent'
+                                pending_task_agent = (
+                                    parsed_args.get("subagent_type")
+                                    or parsed_args.get("agent")
                                 )
+                                if pending_task_agent:
+                                    await self._emit_log(
+                                        event.id,
+                                        f"Delegating to {pending_task_agent}",
+                                        level="info",
+                                    )
                     elif ev_type == "tool_result":
                         result = ev.get("content", "")
                         if actions:
@@ -394,7 +406,18 @@ class ReactiveOrchestrator:
                             if getattr(prev_msg, "type", "") == "ai" and hasattr(prev_msg, "tool_calls"):
                                 for tc in prev_msg.tool_calls:
                                     if tc.get("id") == msg.tool_call_id:
-                                        agent_name = tc.get("args", {}).get("agent", "task")
+                                        tc_args = tc.get("args", {})
+                                        # Handle string args (JSON) from some providers
+                                        if isinstance(tc_args, str):
+                                            try:
+                                                tc_args = json.loads(tc_args)
+                                            except (json.JSONDecodeError, TypeError):
+                                                tc_args = {}
+                                        agent_name = (
+                                            tc_args.get("subagent_type")
+                                            or tc_args.get("agent")
+                                            or "task"
+                                        )
                                         break
 
                     if agent_name == "industrial-agent":
