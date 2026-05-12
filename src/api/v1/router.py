@@ -14,6 +14,7 @@ from src.api.v1.routers import (
     models,
     prompts,
     reactive_config,
+    reactive_credentials,
     reactive_documents,
     reactive_knowledge,
     reactive_tools,
@@ -38,6 +39,7 @@ router.include_router(reactive_config.router)
 router.include_router(reactive_knowledge.router)
 router.include_router(reactive_documents.router)
 router.include_router(reactive_tools.router)
+router.include_router(reactive_credentials.router)
 router.include_router(system.router)
 router.include_router(admin.router)
 router.include_router(db_collector.router)

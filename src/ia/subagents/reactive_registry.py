@@ -28,6 +28,7 @@ from src.ia.tools.reactive_web_browser import (
     reactive_browser_dom,
     reactive_computer,
 )
+from src.ia.tools.credential_tool import get_secret_credential
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,7 @@ def _build_reactive_vl_subagent(knowledge_base_ids: list[str] | None = None) -> 
             reactive_browser_navigate,
             reactive_browser_dom,
             reactive_computer,
+            get_secret_credential,
         ],
         "model": get_multimodal_chat_model(),
     }

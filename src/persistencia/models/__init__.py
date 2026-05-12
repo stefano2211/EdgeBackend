@@ -16,6 +16,7 @@ from src.persistencia.models.reactive_knowledge_base import ReactiveKnowledgeBas
 from src.persistencia.models.reactive_document import ReactiveDocument
 from src.persistencia.models.reactive_mcp_source import ReactiveMCPSource
 from src.persistencia.models.reactive_tool_config import ReactiveToolConfig
+from src.persistencia.models.reactive_credential import ReactiveCredential
 
 __all__ = [
     "Base",
@@ -37,4 +38,5 @@ __all__ = [
     "ReactiveDocument",
     "ReactiveMCPSource",
     "ReactiveToolConfig",
+    "ReactiveCredential",
 ]

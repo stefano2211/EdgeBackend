@@ -41,6 +41,7 @@ dependencies = [
     "fastembed>=0.4.0",
     "playwright>=1.49.0",
     "pillow>=10.0.0",
+    "cryptography>=47.0.0",
 ]
 
 [tool.setuptools.packages.find]
