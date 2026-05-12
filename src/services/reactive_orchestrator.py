@@ -136,9 +136,32 @@ class ReactiveOrchestrator:
             await self._broadcast_event(event)
 
     async def execute(self, event: Event, session: AsyncSession) -> None:
-        """Execute approved plan using VLM + isolated reactive browser (streaming)."""
+        """Execute approved plan using orchestrator + VL agent for Gmail report."""
         thread_id = f"event-{event.id}"
-        instruction = self._extract_execute_instruction(event) or event.agent_plan or "Execute the plan."
+        base_instruction = self._extract_execute_instruction(event) or event.agent_plan or "Execute the plan."
+
+        # Build a comprehensive execution prompt that always ends with a
+        # VL-agent Gmail report step, so the operator always receives an email.
+        instruction = (
+            f"{base_instruction}\n\n"
+            "---\n"
+            "MANDATORY FINAL STEP — Gmail Report:\n"
+            "After completing all other steps above, you MUST delegate to the "
+            "vl-agent (via task()) to send a summary report by email.\n"
+            "The vl-agent must:\n"
+            "1. Open a browser and navigate to https://mail.google.com\n"
+            "2. Compose a new email to erastellius@gmail.com\n"
+            f"3. Subject: '[Digital Optimus] Incident Report — {event.title}'\n"
+            "4. Body: A professional summary of this event including:\n"
+            f"   - Event: {event.title}\n"
+            f"   - Severity: {event.severity}\n"
+            f"   - Description: {event.description}\n"
+            "   - Analysis summary (from the System-2 reasoning above)\n"
+            "   - Actions taken / remediation plan\n"
+            "   - Timestamp of resolution\n"
+            "5. Send the email\n"
+            "This step is NON-NEGOTIABLE. Do NOT skip it.\n"
+        )
 
         messages = [{"role": "user", "content": instruction}]
 
