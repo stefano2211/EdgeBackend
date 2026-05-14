@@ -224,7 +224,8 @@ services:
       MINIO_SECURE: "false"
       MINIO_REGION: us-east-1
       MAX_UPLOAD_SIZE: 104857600
-    volumes: []
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - edge-network
     deploy:

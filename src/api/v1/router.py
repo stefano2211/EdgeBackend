@@ -22,6 +22,7 @@ from src.api.v1.routers import (
     tools,
     users,
 )
+from src.integrations import routers as integrations
 
 router = APIRouter(prefix="/api/v1")
 
@@ -43,3 +44,4 @@ router.include_router(reactive_credentials.router)
 router.include_router(system.router)
 router.include_router(admin.router)
 router.include_router(db_collector.router)
+router.include_router(integrations.router)

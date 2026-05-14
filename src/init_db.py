@@ -6,6 +6,11 @@ import sys
 
 from src.core.database import engine
 from src.persistencia.models import Base  # noqa: F401  (registers all models)
+from src.integrations.models import (  # noqa: F401  (registers integration models)
+    IntegrationCatalog,
+    IntegrationInstance,
+    IntegrationCredential,
+)
 
 
 async def _create_tables() -> None:
