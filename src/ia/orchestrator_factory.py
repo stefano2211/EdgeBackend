@@ -74,19 +74,24 @@ def create_orchestrator(
     Returns:
         Compiled DeepAgent (LangGraph StateGraph) ready for streaming.
     """
-    has_industrial = enable_mcp or enable_knowledge
+    has_rag = enable_knowledge
+    has_mcp = enable_mcp
 
     # Resolve KB IDs uniformly
     if context == "reactive":
         kb_ids = knowledge_base_ids if enable_knowledge else None
         default_names = ["historical", "vl"]
-        if has_industrial:
-            default_names.insert(0, "industrial")
+        if has_rag:
+            default_names.insert(0, "rag")
+        if has_mcp:
+            default_names.insert(1, "mcp")
     else:
         kb_ids = [knowledge_base_id] if (knowledge_base_id and enable_knowledge) else None
-        default_names = ["industrial", "historical", "vl"]
-        if not has_industrial and "industrial" in default_names:
-            default_names.remove("industrial")
+        default_names = ["rag", "mcp", "historical", "vl"]
+        if not has_rag and "rag" in default_names:
+            default_names.remove("rag")
+        if not has_mcp and "mcp" in default_names:
+            default_names.remove("mcp")
 
     actual_names = subagent_names or default_names
 
@@ -104,11 +109,12 @@ def create_orchestrator(
     if system_prompt_override:
         prompt = system_prompt_override
     elif context == "reactive":
-        prompt = build_reactive_s2_orchestrator_prompt(has_industrial=has_industrial)
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=has_rag, has_mcp=has_mcp)
     else:
         prompt = build_orchestrator_prompt(
             subagent_descriptions=SubagentRegistry.get_descriptions(names=actual_names),
-            has_industrial=has_industrial,
+            has_rag=has_rag,
+            has_mcp=has_mcp,
         )
 
     logger.info(

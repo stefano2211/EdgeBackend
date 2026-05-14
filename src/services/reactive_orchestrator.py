@@ -2,7 +2,7 @@
 
 Architecture (2-phase):
   Phase 1 — S2-Triage:      routing decision (fast LLM call, JSON)
-  Phase 2 — S2-Autonomous:  autonomous orchestrator delegates to industrial-agent,
+  Phase 2 — S2-Autonomous:  autonomous orchestrator delegates to rag-agent, mcp-agent,
                              historical-agent and vl-agent via task() (flat hierarchy)
 
 SOLID:
@@ -57,7 +57,7 @@ class ReactiveOrchestrator:
         """Run the 2-phase reactive analysis pipeline.
 
         Phase 1 — S2 Triage: fast LLM call producing routing hints (JSON).
-        Phase 2 — S2 Autonomous: DeepAgents orchestrator with industrial-agent,
+            Phase 2 — S2 Autonomous: DeepAgents orchestrator with rag-agent, mcp-agent,
                   historical-agent and vl-agent as direct sub-agents. S2
                   decides which to invoke via task() and synthesizes the results.
         """
@@ -93,7 +93,7 @@ class ReactiveOrchestrator:
 
             # ── Phase 2: S2 Autonomous Orchestrator ──
             # S2 receives event + triage hints and autonomously decides which
-            # sub-agents (industrial-agent, historical-agent, vl-agent) to
+            # sub-agents (rag-agent, mcp-agent, historical-agent, vl-agent) to
             # invoke via task(), then synthesizes all results.
             await self._emit_log(event.id, "Phase 2: S2 Autonomous Orchestrator starting", level="info")
             synthesis = await self._run_s2_autonomous(
@@ -283,9 +283,12 @@ class ReactiveOrchestrator:
                         elif pending_task_agent == "vl-agent":
                             await self._emit("vl_result", event.id, {"result": str(result)})
                             await self._emit_log(event.id, "VL agent result received", level="info")
-                        elif pending_task_agent == "industrial-agent":
-                            await self._emit("industrial_result", event.id, {"result": str(result)})
-                            await self._emit_log(event.id, "Industrial result received", level="info")
+                        elif pending_task_agent == "rag-agent":
+                            await self._emit("rag_result", event.id, {"result": str(result)})
+                            await self._emit_log(event.id, "RAG result received", level="info")
+                        elif pending_task_agent == "mcp-agent":
+                            await self._emit("mcp_result", event.id, {"result": str(result)})
+                            await self._emit_log(event.id, "MCP result received", level="info")
                         pending_task_agent = None
                     elif ev_type == "subagent":
                         await self._emit_log(
@@ -435,8 +438,10 @@ class ReactiveOrchestrator:
                                         )
                                         break
 
-                    if agent_name == "industrial-agent":
-                        await self._emit("industrial_result", event.id, {"result": str(msg.content)})
+                    if agent_name == "rag-agent":
+                        await self._emit("rag_result", event.id, {"result": str(msg.content)})
+                    elif agent_name == "mcp-agent":
+                        await self._emit("mcp_result", event.id, {"result": str(msg.content)})
                     elif agent_name == "historical-agent":
                         await self._emit("historical_result", event.id, {"result": str(msg.content)})
                         await self._emit_log(event.id, "Historical analysis received", level="info")
