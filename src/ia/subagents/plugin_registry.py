@@ -57,7 +57,7 @@ class SubagentRegistry:
 
             # Build tools list based on plugin requirements + caller toggles
             tools = []
-            if plugin.requires_mcp and enable_mcp and tool_names:
+            if plugin.requires_mcp and enable_mcp:
                 from src.ia.tools.unified.mcp import create_mcp_tool
                 tools.append(create_mcp_tool(source=context))
             if plugin.requires_rag and enable_knowledge and kb_ids:
