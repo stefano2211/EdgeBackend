@@ -1,31 +1,45 @@
-"""DeepAgents tools — exported for orchestrator and sub-agent registration."""
+"""DeepAgents tools — unified exports.
 
-# Chat tools
-from src.ia.tools.rag_tool import create_rag_tool
-from src.ia.tools.mcp_tool import mcp_execute
-from src.ia.tools.web_browser import (
-    browser_navigate,
-    browser_dom,
-    computer,
+All tools are created via factories that accept a `source` or `instance`
+parameter to bind to proactive (chat) or reactive (event) context.
+
+Backwards-compatible aliases are provided for legacy imports.
+"""
+
+from src.ia.tools.unified.rag import create_rag_tool
+from src.ia.tools.unified.mcp import create_mcp_tool
+from src.ia.tools.unified.computer import (
+    create_computer_tool,
+    create_browser_navigate_tool,
+    create_browser_dom_tool,
 )
 
-# Reactive tools (isolated from chat)
-from src.ia.tools.reactive_rag_tool import create_reactive_rag_tool
-from src.ia.tools.reactive_mcp_tool import reactive_mcp_execute
-from src.ia.tools.reactive_web_browser import (
-    reactive_browser_navigate,
-    reactive_browser_dom,
-    reactive_computer,
-)
+# ── Backwards-compatible instances (proactive / chat defaults) ──
+mcp_execute = create_mcp_tool(source="chat")
+browser_navigate = create_browser_navigate_tool(instance="chat")
+browser_dom = create_browser_dom_tool(instance="chat")
+computer = create_computer_tool(instance="chat")
+
+# ── Backwards-compatible instances (reactive defaults) ──
+create_reactive_rag_tool = create_rag_tool  # signature compatible
+reactive_mcp_execute = create_mcp_tool(source="reactive")
+reactive_browser_navigate = create_browser_navigate_tool(instance="reactive")
+reactive_browser_dom = create_browser_dom_tool(instance="reactive")
+reactive_computer = create_computer_tool(instance="reactive")
 
 __all__ = [
-    # Chat
+    # Factories (new preferred API)
     "create_rag_tool",
+    "create_mcp_tool",
+    "create_computer_tool",
+    "create_browser_navigate_tool",
+    "create_browser_dom_tool",
+    # Legacy aliases (proactive)
     "mcp_execute",
     "browser_navigate",
     "browser_dom",
     "computer",
-    # Reactive
+    # Legacy aliases (reactive)
     "create_reactive_rag_tool",
     "reactive_mcp_execute",
     "reactive_browser_navigate",

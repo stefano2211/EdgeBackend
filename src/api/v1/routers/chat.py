@@ -12,9 +12,13 @@ from src.core.deps import get_db, get_current_user
 from src.persistencia.models.user import User
 from src.services.chat_service import ChatService
 from src.ia.browser import TakeoverResponse
-from src.ia.tools.web_browser import _controller
+from src.services.browser_manager import BrowserManager
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def _get_browser_controller():
+    return BrowserManager.get_instance("chat").get_controller()
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -64,5 +68,5 @@ async def chat_resume(
         thread_id=request.thread_id,
         response=request.user_response,
     )
-    await _controller.human_loop.resume(response)
+    await _get_browser_controller().human_loop.resume(response)
     return {"status": "ok", "message": "Resume signal sent"}
