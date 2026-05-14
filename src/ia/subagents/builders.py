@@ -8,8 +8,10 @@ from __future__ import annotations
 from src.core.logging import logging
 from src.ia.langchain_models import get_chat_model, get_multimodal_chat_model
 from src.ia.prompts.subagents import (
-    INDUSTRIAL_AGENT_DESCRIPTION,
-    INDUSTRIAL_AGENT_SYSTEM_PROMPT,
+    RAG_AGENT_DESCRIPTION,
+    RAG_AGENT_SYSTEM_PROMPT,
+    MCP_AGENT_DESCRIPTION,
+    MCP_AGENT_SYSTEM_PROMPT,
     HISTORICAL_AGENT_DESCRIPTION,
     HISTORICAL_AGENT_SYSTEM_PROMPT,
     VL_AGENT_DESCRIPTION,
@@ -26,16 +28,31 @@ from src.ia.subagents.plugin_registry import SubagentPlugin, SubagentRegistry
 logger = logging.getLogger(__name__)
 
 
-def _build_industrial_subagent(
+def _build_rag_subagent(
     context: str,
     tools: list,
     kb_ids: list[str] | None = None,
     **_,
 ) -> dict:
     return {
-        "name": "industrial-agent",
-        "description": INDUSTRIAL_AGENT_DESCRIPTION,
-        "system_prompt": INDUSTRIAL_AGENT_SYSTEM_PROMPT,
+        "name": "rag-agent",
+        "description": RAG_AGENT_DESCRIPTION,
+        "system_prompt": RAG_AGENT_SYSTEM_PROMPT,
+        "tools": tools,
+        "model": get_chat_model(),
+    }
+
+
+def _build_mcp_subagent(
+    context: str,
+    tools: list,
+    kb_ids: list[str] | None = None,
+    **_,
+) -> dict:
+    return {
+        "name": "mcp-agent",
+        "description": MCP_AGENT_DESCRIPTION,
+        "system_prompt": MCP_AGENT_SYSTEM_PROMPT,
         "tools": tools,
         "model": get_chat_model(),
     }
@@ -78,10 +95,21 @@ def _build_vl_subagent(
 
 # ── Auto-register on import ──
 SubagentRegistry.register(SubagentPlugin(
-    name="industrial",
-    description=INDUSTRIAL_AGENT_DESCRIPTION,
-    builder=_build_industrial_subagent,
+    name="rag",
+    description=RAG_AGENT_DESCRIPTION,
+    builder=_build_rag_subagent,
     applies_to={"proactive", "reactive"},
+    requires_rag=True,
+    requires_mcp=False,
+))
+
+SubagentRegistry.register(SubagentPlugin(
+    name="mcp",
+    description=MCP_AGENT_DESCRIPTION,
+    builder=_build_mcp_subagent,
+    applies_to={"proactive", "reactive"},
+    requires_rag=False,
+    requires_mcp=True,
 ))
 
 SubagentRegistry.register(SubagentPlugin(

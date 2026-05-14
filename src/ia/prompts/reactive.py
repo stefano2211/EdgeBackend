@@ -59,27 +59,47 @@ def build_reactive_synthesis_prompt(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def build_reactive_s2_orchestrator_prompt(
-    has_industrial: bool = True,
+    has_rag: bool = True,
+    has_mcp: bool = True,
 ) -> str:
     """Build the S2 autonomous orchestrator prompt — unified entry point."""
     subagent_lines = []
-    if has_industrial:
-        industrial_delegation_rules = (
-            "[DELEGAR a industrial-agent] cuando:\n"
-            "  - Se necesitan lecturas actuales de sensores (MCP)\n"
-            "  - Se deben referenciar SOPs, procedimientos de emergencia o documentación (RAG)\n"
-            "  - El triage indica needs_industrial=true (tratar como pista fuerte)\n"
+    delegation_rules = []
+
+    if has_rag:
+        delegation_rules.append(
+            "[DELEGAR a rag-agent] cuando:\n"
+            "  - Se necesitan SOPs, procedimientos de emergencia, manuales o documentación.\n"
+            "  - El evento menciona normas, regulaciones o límites de seguridad.\n"
+            "  - El triage indica que se necesita contexto documental.\n"
         )
         subagent_lines.append(
-            '- task("industrial-agent", ...) → Especialista en datos industriales en tiempo real. '
-            "Usa MCP para lecturas actuales de sensores/KPIs y RAG para SOPs y manuales técnicos. "
-            "DEBES INVOCARLO SIEMPRE para obtener la telemetría actual y procedimientos estándar."
+            '- task("rag-agent", ...) → Especialista en búsqueda documental. '
+            "Busca en manuales, SOPs, normas ISO y documentación técnica usando RAG. "
+            "Usa filtros precisos y devuelve citas completas con texto extraído."
         )
     else:
-        industrial_delegation_rules = (
-            "NOTA CRÍTICA: El sub-agente industrial (sensores/documentación) está DESACTIVADO.\n"
-            "No puedes pedir lecturas actuales ni SOPs. Si el usuario las pide o el triage las sugiere,\n"
-            "debes informar en tu plan que no tienes acceso a esos datos y proceder con precaución.\n"
+        delegation_rules.append(
+            "NOTA CRÍTICA: El sub-agente rag-agent (búsqueda documental) está DESACTIVADO.\n"
+            "No puedes consultar manuales ni SOPs. Si el evento lo requiere, indica la limitación.\n"
+        )
+
+    if has_mcp:
+        delegation_rules.append(
+            "[DELEGAR a mcp-agent] cuando:\n"
+            "  - Se necesitan lecturas actuales de sensores (temperatura, presión, flujo, nivel).\n"
+            "  - Se requiere el estado en tiempo real de equipos o sistemas.\n"
+            "  - El triage indica needs_industrial=true (tratar como pista fuerte).\n"
+        )
+        subagent_lines.append(
+            '- task("mcp-agent", ...) → Especialista en datos en tiempo real. '
+            "Ejecuta APIs y consulta sensores SCADA/PLC usando MCP. "
+            "Usa filtros específicos por equipo y métrica. Devuelve TODOS los registros."
+        )
+    else:
+        delegation_rules.append(
+            "NOTA CRÍTICA: El sub-agente mcp-agent (datos en tiempo real) está DESACTIVADO.\n"
+            "No puedes obtener lecturas de sensores ni estados de equipos. Si el evento lo requiere, indica la limitación.\n"
         )
 
     subagent_lines.append(
@@ -96,11 +116,12 @@ def build_reactive_s2_orchestrator_prompt(
     )
 
     subagents_section = "\n".join(subagent_lines)
+    data_delegation_rules = "\n".join(delegation_rules)
 
     return load_prompt(
         "reactive_orchestrator",
         subagents_section=subagents_section,
-        industrial_delegation_rules=industrial_delegation_rules,
+        industrial_delegation_rules=data_delegation_rules,
     )
 
 
@@ -109,10 +130,15 @@ def build_reactive_s2_orchestrator_prompt(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _REACTIVE_SUBAGENT_DESCRIPTIONS = {
-    "industrial-agent": (
-        "Real-time SCADA/PLC sensor readings, live equipment KPIs, current status of "
-        "machinery and processes, emergency SOPs, maintenance manuals, compliance "
-        "documents, and regulatory references (RAG knowledge base)."
+    "rag-agent": (
+        "Document search and knowledge retrieval specialist. "
+        "Searches manuals, SOPs, regulations, technical specs, and compliance documents. "
+        "Has access to rag_retrieve for RAG knowledge base queries."
+    ),
+    "mcp-agent": (
+        "Live data and API execution specialist. "
+        "Fetches real-time sensor readings, equipment status, and SCADA data. "
+        "Has access to mcp_execute for live API/tool calls."
     ),
     "historical-agent": (
         "Historical industrial data: past sensor trends, "
@@ -170,14 +196,9 @@ S1_COORDINATOR_DESCRIPTION = (
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  REACTIVE INDUSTRIAL EXPERT — Phase 2b (used by Industrial-Agent directly)
+#  REACTIVE RAG / MCP PROMPTS — loaded from templates
 # ═══════════════════════════════════════════════════════════════════════════════
 
-REACTIVE_INDUSTRIAL_PROMPT = load_prompt("subagent_industrial")
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  REACTIVE HISTORICAL EXPERT — used by Historical-Agent (S1 sub-specialist)
-# ═══════════════════════════════════════════════════════════════════════════════
-
+REACTIVE_RAG_PROMPT = load_prompt("subagent_rag")
+REACTIVE_MCP_PROMPT = load_prompt("subagent_mcp")
 REACTIVE_HISTORICAL_PROMPT = load_prompt("subagent_historical")
