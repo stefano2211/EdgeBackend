@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
-from src.integrations.custom_mcp_servers.gmail.client import get_client
+from .client import get_client
 
 
 def register_tools(mcp: FastMCP) -> None:

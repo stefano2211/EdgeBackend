@@ -442,32 +442,6 @@ class MCPService:
         """
         method = method.upper()
 
-        if not is_stdio and "://" in base_url:
-            try:
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get(base_url, timeout=10.0)
-                    content_type = resp.headers.get("content-type", "").lower()
-
-                    if "text/event-stream" not in content_type:
-                        logger.info(
-                            "[MCP Service] URL %s is %s, fallback to AI REST Bridge (method=%s).",
-                            base_url,
-                            content_type,
-                            method,
-                        )
-                        try:
-                            return await self._discover_rest_bridge(
-                                base_url, initial_response=resp, is_resource=is_resource, method=method
-                            )
-                        except (httpx.HTTPError, json.JSONDecodeError, ValueError) as bridge_err:
-                            logger.error(
-                                "[MCP Service] AI Bridge failed for REST-detected endpoint: %s",
-                                bridge_err,
-                            )
-                            raise RuntimeError(f"AI Discovery failed: {bridge_err}")
-            except httpx.HTTPError as e:
-                logger.warning("[MCP Service] Proactive network check failed for %s: %s", base_url, e)
-
         if not _MCP_SDK_AVAILABLE:
             raise RuntimeError("mcp SDK not installed. Cannot discover via stdio/sse.")
 
