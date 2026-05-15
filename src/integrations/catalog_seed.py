@@ -103,14 +103,14 @@ Paste it below in the **connection_string** field.
 2. Create a new project (or select existing)
 3. Enable the **Gmail API** in APIs & Services → Library
 4. Go to **Credentials** → Create credentials → OAuth client ID
-5. Configure consent screen (External) and add scope: `https://www.googleapis.com/auth/gmail.send`
+5. Configure consent screen (External) and add scope: `https://www.googleapis.com/auth/gmail.modify`
 6. Download the client credentials JSON
 7. Use a tool or script to exchange authorization code for a **refresh token**:
    ```python
    from google_auth_oauthlib.flow import InstalledAppFlow
    flow = InstalledAppFlow.from_client_secrets_file(
        'client_secret.json',
-       scopes=['https://www.googleapis.com/auth/gmail.send']
+       scopes=['https://www.googleapis.com/auth/gmail.modify']
    )
    creds = flow.run_local_server(port=0)
    print('Refresh token:', creds.refresh_token)
