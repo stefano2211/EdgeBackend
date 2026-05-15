@@ -57,6 +57,7 @@ class IntegrationCatalogOut(BaseModel):
     category: str | None = None
     source_type: str
     auth_type: str
+    auth_env_var_mapping: dict
     auth_setup_guide_markdown: str | None = None
     requires_docker: bool
     is_enabled: bool
@@ -75,7 +76,6 @@ class IntegrationCatalogDetailOut(IntegrationCatalogOut):
     official_args: list | None = None
     custom_module_path: str | None = None
     rest_bridge_url_template: str | None = None
-    auth_env_var_mapping: dict
     docker_image: str | None = None
     docker_command: list | None = None
 
