@@ -97,25 +97,62 @@ Paste it below in the **connection_string** field.
             "GMAIL_CLIENT_ID": "client_id",
             "GMAIL_CLIENT_SECRET": "client_secret",
         },
-        auth_setup_guide_markdown="""## Gmail Setup (Manual OAuth2)
+        auth_setup_guide_markdown="""## Gmail Setup — Step by Step
 
+### Step 1: Create a Google Cloud project
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select existing)
-3. Enable the **Gmail API** in APIs & Services → Library
-4. Go to **Credentials** → Create credentials → OAuth client ID
-5. Configure consent screen (External) and add scope: `https://www.googleapis.com/auth/gmail.modify`
-6. Download the client credentials JSON
-7. Use a tool or script to exchange authorization code for a **refresh token**:
-   ```python
-   from google_auth_oauthlib.flow import InstalledAppFlow
-   flow = InstalledAppFlow.from_client_secrets_file(
-       'client_secret.json',
-       scopes=['https://www.googleapis.com/auth/gmail.modify']
-   )
-   creds = flow.run_local_server(port=0)
-   print('Refresh token:', creds.refresh_token)
-   ```
-8. Copy the **refresh_token**, **client_id**, and **client_secret** below.
+2. Create a new project (or select an existing one)
+
+### Step 2: Enable the Gmail API
+1. Navigate to **APIs & Services** → **Library**
+2. Search for **Gmail API** and click **Enable**
+
+### Step 3: Configure OAuth consent screen
+1. Go to **APIs & Services** → **OAuth consent screen**
+2. Choose **External** → click **Create**
+3. Fill in:
+   - **App name**: anything (e.g. "EdgeBackend Gmail")
+   - **User support email**: your email
+   - **Developer contact email**: your email
+4. Click **Save and Continue**
+5. On the **Scopes** step, click **Add or Remove Scopes**
+6. Search for `https://www.googleapis.com/auth/gmail.modify` and check it
+7. Click **Update**, then **Save and Continue**
+8. On **Test users**, click **Add Users** and add your Gmail address
+9. Click **Save and Continue**, then **Back to Dashboard**
+
+### Step 4: Create OAuth credentials
+1. Go to **APIs & Services** → **Credentials**
+2. Click **Create Credentials** → **OAuth client ID**
+3. Select **Desktop app** as application type
+4. Name it (e.g. "EdgeBackend Desktop")
+5. Click **Create**
+6. Click **DOWNLOAD JSON** — save this file as `client_secret.json`
+
+### Step 5: Get your Refresh Token (run this script)
+```bash
+# Install the helper
+pip install google-auth-oauthlib
+
+# Download the script from our repo:
+# src/integrations/custom_mcp_servers/gmail/get_gmail_refresh_token.py
+
+# Run it
+python get_gmail_refresh_token.py
+```
+
+The script will:
+- Open a browser window
+- Ask you to log in with your Gmail account
+- Print the 3 values you need below
+
+### Step 6: Paste the values into the form below
+
+| Field | What it is |
+|-------|-----------|
+| **GMAIL_REFRESH_TOKEN** | The long token printed by the script (starts with `1//...`) |
+| **GMAIL_CLIENT_ID** | Your OAuth Client ID (ends with `...apps.googleusercontent.com`) |
+| **GMAIL_CLIENT_SECRET** | Your OAuth Client Secret (a 24-character random string) |
 """,
         requires_docker=True,
     ),
