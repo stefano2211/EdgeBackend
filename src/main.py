@@ -36,6 +36,19 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(broadcast.start_subscriber())
     except Exception as exc:
         logger.warning("SSE broadcast subscriber not started: %s", exc)
+
+    # Auto-seed integration catalog if empty
+    try:
+        from src.core.database import AsyncSessionLocal
+        from src.integrations.catalog_seed import seed_integration_catalog
+
+        async with AsyncSessionLocal() as session:
+            created, _ = await seed_integration_catalog(session)
+            if created:
+                logger.info("Auto-seeded %d integration catalog entries on startup", created)
+    except Exception as exc:
+        logger.warning("Integration catalog auto-seed skipped: %s", exc)
+
     yield
     try:
         await get_event_broadcast().stop_subscriber()

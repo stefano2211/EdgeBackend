@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv from official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # 1. Copiar solo pyproject.toml (capa cacheada mientras no cambien deps)
 COPY pyproject.toml ./
 
@@ -15,9 +18,8 @@ COPY pyproject.toml ./
 RUN mkdir -p src/edgebackend && touch src/edgebackend/__init__.py
 
 # 3. Instalar dependencias (CAPA CACHEADA — solo se invalida si cambia pyproject.toml)
-#    Usamos install normal (NO -e) para que Docker cachee esta capa correctamente.
-RUN pip install --upgrade pip && \
-    pip install .
+#    Usamos uv para mayor velocidad y resiliencia de red.
+RUN uv pip install --system .
 
 # 4. Copiar codigo real (solo invalida esta capa cuando cambia src/)
 COPY src/ ./src/
