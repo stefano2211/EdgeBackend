@@ -270,6 +270,7 @@ volumes:
 # ── Red ──────────────────────────────────────────────────────────
 networks:
   edge-network:
+    name: edge-network
     driver: bridge
     ipam:
       config:

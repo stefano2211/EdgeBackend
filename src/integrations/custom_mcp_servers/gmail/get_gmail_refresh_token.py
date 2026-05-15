@@ -22,11 +22,11 @@ def main() -> None:
     # Check for client_secret.json
     creds_path = "client_secret.json"
     if not os.path.exists(creds_path):
-        print("❌ Error: client_secret.json not found in current directory.")
+        print("ERROR: client_secret.json not found in current directory.")
         print()
         print("How to get it:")
         print("  1. Go to https://console.cloud.google.com/apis/credentials")
-        print("  2. Click 'Create Credentials' → 'OAuth client ID'")
+        print("  2. Click 'Create Credentials' -> 'OAuth client ID'")
         print("  3. Choose 'Desktop app' as application type")
         print("  4. Click 'Create', then click 'DOWNLOAD JSON'")
         print("  5. Rename the downloaded file to 'client_secret.json'")
@@ -36,7 +36,7 @@ def main() -> None:
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
     except ImportError:
-        print("❌ Error: google-auth-oauthlib is not installed.")
+        print("ERROR: google-auth-oauthlib is not installed.")
         print("Run: pip install google-auth-oauthlib")
         sys.exit(1)
 
@@ -67,7 +67,7 @@ def main() -> None:
 
     print()
     print("=" * 60)
-    print("✅ SUCCESS! Copy these values into the web form:")
+    print("SUCCESS! Copy these values into the web form:")
     print("=" * 60)
     print()
     print(f"GMAIL_REFRESH_TOKEN: {refresh_token}")

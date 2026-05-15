@@ -43,6 +43,24 @@ class DockerRunner(IDockerRunner):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._sync_create_and_start, cfg)
 
+    def _resolve_network(self, client, network_name: str) -> str:
+        """Return the exact Docker network name, handling Compose prefixes."""
+        try:
+            client.networks.get(network_name)
+            return network_name
+        except Exception:
+            pass
+
+        # Fallback: search for a network containing the base name
+        # (Docker Compose prepends the project dir, e.g. edgebackend_edge-network)
+        for net in client.networks.list():
+            if network_name in net.name:
+                logger.info("Resolved network '%s' -> '%s'", network_name, net.name)
+                return net.name
+
+        # Nothing found — return original and let Docker raise a clear error
+        return network_name
+
     def _sync_create_and_start(self, cfg: DockerConfig) -> ContainerInfo:
         client = self._ensure_client()
 
@@ -55,11 +73,13 @@ class DockerRunner(IDockerRunner):
         except Exception:
             pass
 
+        resolved_network = self._resolve_network(client, cfg.network)
+
         run_kwargs: dict[str, Any] = {
             "image": cfg.image,
             "name": cfg.name,
             "environment": cfg.env,
-            "network": cfg.network,
+            "network": resolved_network,
             "detach": True,
             "restart_policy": cfg.restart_policy or {"Name": "unless-stopped"},
         }
@@ -74,7 +94,7 @@ class DockerRunner(IDockerRunner):
                 "Started container '%s' image=%s network=%s",
                 cfg.name,
                 cfg.image,
-                cfg.network,
+                resolved_network,
             )
             # SSE endpoint is predictable because we control the internal port
             endpoint = f"http://{cfg.name}:8080/sse"
