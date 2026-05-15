@@ -13,6 +13,7 @@ mocked in tests.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -191,6 +192,9 @@ class IntegrationService:
         instance.container_status = container_info.status
         instance.container_endpoint = container_info.endpoint
         await self._instance_repo.update(instance)
+
+        # Allow container DNS to propagate before discovery
+        await asyncio.sleep(3)
 
         logger.info(
             "Credentials submitted and container running for instance id=%s endpoint=%s",
