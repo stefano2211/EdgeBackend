@@ -14,12 +14,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+import json
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.core.deps import get_current_user, get_db
 from src.integrations.catalog_service import CatalogService
 from src.integrations.integration_service import IntegrationService
+from src.integrations.oauth.gmail_flow import build_authorization_url, generate_pkce_pair
+from src.integrations.oauth.state_manager import get_state_manager
 from src.integrations.schemas import (
     CredentialsSubmit,
     IntegrationCatalogOut,
@@ -188,6 +196,146 @@ async def submit_credentials(
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# OAuth flows
+# ---------------------------------------------------------------------------
+
+class OAuthStartResponse(BaseModel):
+    authorization_url: str
+    state: str
+
+
+@router.post("/instances/{instance_id}/oauth/{provider}/start", response_model=OAuthStartResponse)
+async def oauth_start(
+    instance_id: int,
+    provider: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Start a managed OAuth2 flow for the given instance.
+
+    The backend uses its own Google Cloud credentials (GMAIL_CLIENT_ID /
+    GMAIL_CLIENT_SECRET from settings). The frontend only needs to open the
+    returned authorization_url in a popup.
+    """
+    if provider != "gmail":
+        raise HTTPException(status_code=400, detail=f"Unsupported OAuth provider: {provider}")
+
+    if not settings.GMAIL_CLIENT_ID or not settings.GMAIL_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=400,
+            detail="Gmail OAuth is not configured on the server. Please contact the administrator.",
+        )
+
+    service = _service(session)
+    try:
+        instance = await service.get_instance(instance_id, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    catalog = instance.catalog
+    if catalog.auth_type != "oauth2":
+        raise HTTPException(status_code=400, detail="This integration does not use OAuth2")
+
+    code_verifier, code_challenge = generate_pkce_pair()
+    state_manager = get_state_manager()
+    state = await state_manager.create(
+        instance_id=instance_id,
+        user_id=current_user.id,
+        client_id=settings.GMAIL_CLIENT_ID,
+        client_secret=settings.GMAIL_CLIENT_SECRET,
+        code_verifier=code_verifier,
+        provider=provider,
+    )
+
+    auth_url = build_authorization_url(
+        client_id=settings.GMAIL_CLIENT_ID,
+        redirect_uri=settings.OAUTH_REDIRECT_URL,
+        state=state,
+        code_challenge=code_challenge,
+    )
+
+    return OAuthStartResponse(authorization_url=auth_url, state=state)
+
+
+@router.get("/oauth/callback", response_class=HTMLResponse)
+async def oauth_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+):
+    """OAuth2 callback from Google (public endpoint).
+
+    Exchanges the authorization code for tokens, stores them, launches the
+    container, and returns an HTML page that posts a message back to the
+    opener window and closes the popup.
+    """
+    template_path = Path(__file__).parent / "oauth" / "callback_template.html"
+    template = template_path.read_text(encoding="utf-8")
+
+    if error:
+        payload = {"type": "oauth-error", "provider": "gmail", "error": error, "error_description": error_description}
+        html = (
+            template
+            .replace("{{icon}}", "❌")
+            .replace("{{title}}", "Authorization failed")
+            .replace("{{message}}", f"{error}. This window will close automatically.")
+            .replace("{{payload_json}}", json.dumps(payload))
+        )
+        return HTMLResponse(content=html, status_code=400)
+
+    if not code or not state:
+        payload = {"type": "oauth-error", "provider": "gmail", "error": "missing_params"}
+        html = (
+            template
+            .replace("{{icon}}", "❌")
+            .replace("{{title}}", "Invalid request")
+            .replace("{{message}}", "Missing code or state. This window will close automatically.")
+            .replace("{{payload_json}}", json.dumps(payload))
+        )
+        return HTMLResponse(content=html, status_code=400)
+
+    from src.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as session:
+        service = IntegrationService(session)
+        try:
+            await service.complete_oauth(
+                code=code,
+                state=state,
+            )
+            payload = {"type": "oauth-success", "provider": "gmail"}
+            html = (
+                template
+                .replace("{{icon}}", "✅")
+                .replace("{{title}}", "Authorization successful")
+                .replace("{{message}}", "Gmail connected successfully. This window will close automatically.")
+                .replace("{{payload_json}}", json.dumps(payload))
+            )
+            return HTMLResponse(content=html)
+        except ValueError as exc:
+            payload = {"type": "oauth-error", "provider": "gmail", "error": "validation", "detail": str(exc)}
+            html = (
+                template
+                .replace("{{icon}}", "❌")
+                .replace("{{title}}", "Authorization failed")
+                .replace("{{message}}", f"{exc}. This window will close automatically.")
+                .replace("{{payload_json}}", json.dumps(payload))
+            )
+            return HTMLResponse(content=html, status_code=400)
+        except RuntimeError as exc:
+            payload = {"type": "oauth-error", "provider": "gmail", "error": "runtime", "detail": str(exc)}
+            html = (
+                template
+                .replace("{{icon}}", "❌")
+                .replace("{{title}}", "Authorization failed")
+                .replace("{{message}}", f"{exc}. This window will close automatically.")
+                .replace("{{payload_json}}", json.dumps(payload))
+            )
+            return HTMLResponse(content=html, status_code=502)
 
 
 # ---------------------------------------------------------------------------

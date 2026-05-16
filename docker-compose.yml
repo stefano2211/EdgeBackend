@@ -185,6 +185,7 @@ services:
       target: production
     container_name: edge-backend
     restart: unless-stopped
+    user: root
     depends_on:
       - postgres
       - qdrant
@@ -224,6 +225,10 @@ services:
       MINIO_SECURE: "false"
       MINIO_REGION: us-east-1
       MAX_UPLOAD_SIZE: 104857600
+      # OAuth
+      OAUTH_REDIRECT_URL: ${OAUTH_REDIRECT_URL:-http://localhost:8000/api/v1/integrations/oauth/callback}
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:

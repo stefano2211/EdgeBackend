@@ -95,6 +95,16 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
         await self._session.delete(obj)
         await self._session.commit()
 
+    async def delete_credentials(self, instance_id: int) -> None:
+        stmt = (
+            select(IntegrationCredential)
+            .where(IntegrationCredential.instance_id == instance_id)
+        )
+        result = await self._session.execute(stmt)
+        for cred in result.scalars().all():
+            await self._session.delete(cred)
+        await self._session.commit()
+
     async def save_credentials(
         self, instance_id: int, encrypted: dict[str, bytes]
     ) -> None:

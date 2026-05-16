@@ -57,3 +57,16 @@ docker compose --profile ollama up -d ollama
 - **CORS**: `allow_origins=["*"]` with `allow_credentials=False` (wildcard + credentials is a browser violation).
 - **Playwright**: Browsers are installed inside the Docker image (`playwright install chromium`). Local Playwright usage may require `playwright install` if running outside Docker.
 - **Package boundaries**: `src/api/` (routes/schemas), `src/core/` (config, DB, security), `src/ia/` (LLM clients, prompts, tools, browser automation), `src/persistencia/` (SQLAlchemy models, vector store), `src/services/` (business logic), `src/workers/` (background jobs).
+
+## OAuth Integrations
+
+Managed OAuth2 flows (e.g. Gmail) use backend-stored credentials. No client secrets are exposed to the frontend.
+
+Required `.env` variables for Gmail:
+```
+GMAIL_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GMAIL_CLIENT_SECRET=your-google-client-secret
+OAUTH_REDIRECT_URL=http://localhost:8000/api/v1/integrations/oauth/callback
+```
+
+The redirect URL must be registered in Google Cloud Console → Credentials → OAuth 2.0 Client IDs → Authorized redirect URIs.

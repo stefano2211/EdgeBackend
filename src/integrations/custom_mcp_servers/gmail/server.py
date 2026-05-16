@@ -46,5 +46,5 @@ if __name__ == "__main__":
         raise SystemExit(1)
 
     server = create_server()
-    logger.info("Gmail MCP server starting on port 8080")
-    server.run(transport="sse")
+    logger.info("Gmail MCP server starting on 0.0.0.0:8080")
+    server.run(transport="sse", host="0.0.0.0", port=8080)

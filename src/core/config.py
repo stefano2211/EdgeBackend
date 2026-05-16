@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     EVENT_INGEST_API_KEY: str = "change-me-event-ingest-key"
 
+    # ── OAuth ──
+    OAUTH_REDIRECT_URL: str = "http://localhost:8000/api/v1/integrations/oauth/callback"
+    GMAIL_CLIENT_ID: str | None = None
+    GMAIL_CLIENT_SECRET: str | None = None
+
     # ── CORS ──
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 

@@ -204,6 +204,98 @@ class IntegrationService:
         return instance
 
     # ------------------------------------------------------------------
+    # OAuth completion
+    # ------------------------------------------------------------------
+
+    async def complete_oauth(
+        self,
+        code: str,
+        state: str,
+    ) -> IntegrationInstance:
+        """Finish an OAuth2 flow: exchange code, store tokens, launch container."""
+        from src.integrations.oauth.gmail_flow import exchange_code
+        from src.integrations.oauth.state_manager import get_state_manager
+        from src.core.config import settings
+
+        # Recover context from Redis (one-time read)
+        state_manager = get_state_manager()
+        ctx = await state_manager.get(state)
+        if not ctx:
+            raise ValueError("Invalid or expired OAuth state — the authorization session may have timed out. Please try again.")
+
+        instance_id = ctx["instance_id"]
+        user_id = ctx["user_id"]
+
+        instance = await self.get_instance(instance_id, user_id)
+        catalog = instance.catalog
+
+        # Exchange code for tokens
+        token_data = await exchange_code(
+            client_id=ctx["client_id"],
+            client_secret=ctx["client_secret"],
+            code=code,
+            redirect_uri=settings.OAUTH_REDIRECT_URL,
+            code_verifier=ctx["code_verifier"],
+        )
+
+        refresh_token = token_data.get("refresh_token")
+        if not refresh_token:
+            raise RuntimeError("Google did not return a refresh token. Ensure 'prompt=consent' was used.")
+
+        # Build credentials payload matching the catalog mapping
+        # For Gmail: {refresh_token, client_id, client_secret}
+        credentials_payload = {
+            catalog.auth_env_var_mapping.get("GMAIL_REFRESH_TOKEN", "refresh_token"): refresh_token,
+            catalog.auth_env_var_mapping.get("GMAIL_CLIENT_ID", "client_id"): ctx["client_id"],
+            catalog.auth_env_var_mapping.get("GMAIL_CLIENT_SECRET", "client_secret"): ctx["client_secret"],
+        }
+
+        # Delete previous credentials for this instance to avoid duplicates
+        await self._instance_repo.delete_credentials(instance_id)
+
+        # Encrypt and persist
+        encrypted = {
+            key: self._vault.encrypt(value)
+            for key, value in credentials_payload.items()
+        }
+        await self._instance_repo.save_credentials(instance_id, encrypted)
+
+        # Map to env vars for Docker
+        strategy = get_strategy(catalog.auth_type)
+        env_vars = strategy.to_env_vars(credentials_payload, catalog.auth_env_var_mapping)
+
+        # Build and start container (reuses existing logic)
+        if catalog.source_type == "custom" and catalog.docker_image:
+            if catalog.slug == "gmail":
+                await self._docker.build_image_if_missing(
+                    tag=catalog.docker_image,
+                    dockerfile_path="src/integrations/docker/gmail-mcp/Dockerfile",
+                    build_context=".",
+                )
+
+        server_config = create_server_config(catalog.source_type)
+        docker_cfg = server_config.get_docker_config(instance, env_vars)
+
+        container_info = await self._docker.create_and_start(docker_cfg)
+        if container_info.status == "error":
+            instance.container_status = "error"
+            await self._instance_repo.update(instance)
+            raise RuntimeError(f"Container failed to start: {container_info.error}")
+
+        instance.container_status = container_info.status
+        instance.container_endpoint = container_info.endpoint
+        await self._instance_repo.update(instance)
+
+        await asyncio.sleep(10)
+
+        logger.info(
+            "OAuth completed for instance id=%s endpoint=%s",
+            instance_id,
+            instance.container_endpoint,
+        )
+        return instance
+
+    # ------------------------------------------------------------------
     # Sync tools (MCP discovery → ToolConfig registration)
     # ------------------------------------------------------------------
 
