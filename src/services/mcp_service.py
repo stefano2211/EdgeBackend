@@ -465,6 +465,8 @@ class MCPService:
                     except Exception as sse_err:
                         last_err = sse_err
                         error_msg = str(sse_err).lower()
+                        if isinstance(sse_err, BaseExceptionGroup):
+                            error_msg = " ".join(str(e).lower() for e in sse_err.exceptions)
                         if "name resolution" in error_msg or "getaddrinfo" in error_msg or "connection" in error_msg:
                             if attempt < 3:
                                 logger.warning(

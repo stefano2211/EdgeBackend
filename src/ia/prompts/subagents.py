@@ -21,13 +21,15 @@ RAG_AGENT_SYSTEM_PROMPT = load_prompt("subagent_rag")
 
 # ── MCP Agent ──
 MCP_AGENT_DESCRIPTION = (
-    "Live data and API execution specialist. "
-    "Use ONLY when the user query requires current sensor readings, real-time equipment status, "
-    "live KPIs, SCADA data, or any external API call. "
+    "External integration and live data execution specialist. "
+    "Use when the user query requires: (1) executing actions via registered integrations "
+    "(send email, read inbox, manage calendar, call APIs, interact with external services like Gmail, Slack, GitHub, Notion, AWS), "
+    "or (2) real-time sensor/equipment readings, live KPIs, SCADA data. "
     "Has access to: mcp_execute (live API/tool execution). "
-    "ALWAYS delegate here for questions about 'current pressure', 'live temperature', "
-    "'what is the status of equipment X', or any real-time data request. "
-    "Do NOT use for: document search, historical trends, or web UI automation."
+    "ALWAYS delegate here for: sending emails, reading emails, replying, creating drafts, listing labels, "
+    "querying live sensors, checking equipment status, or any action on a connected integration. "
+    "Do NOT use for: document search (use rag-agent), historical trends (use historical-agent), "
+    "or navigating websites visually (use vl-agent)."
 )
 
 MCP_AGENT_SYSTEM_PROMPT = load_prompt("subagent_mcp")
@@ -53,8 +55,9 @@ VL_AGENT_DESCRIPTION = (
     "Vision-language web automation and browser interaction specialist. "
     "Use ONLY when the task requires navigating websites, interacting with web UIs, "
     "taking screenshots, filling forms, clicking buttons, visual verification, or reading web page content. "
-    "Can handle ANY website or web application: Gmail, Excel Online, Google Sheets, Salesforce, "
+    "Can handle ANY website or web application: Excel Online, Google Sheets, Salesforce, "
     "SAP web portals, SCADA HMI dashboards, ERP systems, social media, or any custom web app. "
+    "Do NOT use for sending/reading emails if a Gmail integration (MCP) is available — use mcp-agent instead. "
     "Has access to: browser_navigate, browser_dom, computer. "
     "Do NOT use for: document search (use rag-agent), live sensor API queries (use mcp-agent), "
     "or historical data analysis (use historical-agent). "

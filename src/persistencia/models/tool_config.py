@@ -17,6 +17,7 @@ class MCPSource(Base):
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     type: Mapped[str] = mapped_column(String(20), default="rest")
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    context_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="chat")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     tools: Mapped[list["ToolConfig"]] = relationship(

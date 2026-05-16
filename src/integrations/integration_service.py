@@ -316,10 +316,18 @@ class IntegrationService:
             logger.exception("Tool discovery failed for instance %s", instance_id)
             raise RuntimeError(f"Tool discovery failed: {exc}") from exc
 
+        # Determine context_mode based on instance availability flags
+        if instance.available_in_chat and instance.available_in_reactive:
+            context_mode = "both"
+        elif instance.available_in_reactive:
+            context_mode = "reactive"
+        else:
+            context_mode = "chat"
+
         # Register in proactive context
         mcp_source_id = None
         if instance.available_in_chat:
-            mcp_source_id = await self._register_in_chat_context(instance, catalog, discovered)
+            mcp_source_id = await self._register_in_chat_context(instance, catalog, discovered, context_mode)
 
         # Register in reactive context
         reactive_mcp_source_id = None
@@ -353,6 +361,7 @@ class IntegrationService:
         instance: IntegrationInstance,
         catalog: IntegrationCatalog,
         discovered: list[dict],
+        context_mode: str = "chat",
     ) -> int:
         from src.persistencia.models.tool_config import MCPSource, ToolConfig
         from src.persistencia.repositories.tool_repository import MCPSourceRepository, ToolRepository
@@ -368,6 +377,7 @@ class IntegrationService:
             url=instance.container_endpoint,
             type="sse",
             is_enabled=True,
+            context_mode=context_mode,
         )
         await source_repo.create(source)
         await self._session.flush()

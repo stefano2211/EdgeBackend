@@ -94,6 +94,7 @@ def create_ollama_chat_model(
         base_url=base_url,
         temperature=temperature,
         streaming=streaming,
+        num_ctx=settings.OLLAMA_NUM_CTX,
     )
 
 

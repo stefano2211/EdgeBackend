@@ -184,9 +184,14 @@ def create_mcp_tool(source: Literal["chat", "reactive"] = "chat") -> StructuredT
         coroutine=_bound_mcp_execute,
         name="mcp_execute",
         description=(
-            "Execute a registered MCP tool dynamically. "
-            "Use for real-time data, sensor readings, or external actions.\n"
-            "Input: tool_config_name, parameters, key_values (filter categorical), key_figures (filter numeric).\n"
-            "Rules: ALWAYS use filtering. NEVER fetch entire dataset unless asked."
+            "Execute a registered MCP integration tool by name.\n"
+            "Parameters:\n"
+            "  - tool_config_name (str): exact name of the registered tool (e.g. 'send_email', 'list_emails', 'get_email').\n"
+            "  - parameters (dict): tool-specific input arguments. For email tools: {\"to\": \"addr\", \"subject\": \"...\", \"body\": \"...\"}.\n"
+            "    For sensor tools: {\"equipment\": \"...\", \"metric\": \"...\"}. Pass ALL required fields here.\n"
+            "  - key_values (dict | None): optional filter for categorical fields in the response.\n"
+            "  - key_figures (list | None): optional filter for numeric fields in the response.\n"
+            "IMPORTANT: 'parameters' must contain ALL required arguments for the tool being called.\n"
+            "For send_email: parameters={\"to\": \"<recipient>\", \"subject\": \"<subject>\", \"body\": \"<body>\"} is MANDATORY."
         ),
     )

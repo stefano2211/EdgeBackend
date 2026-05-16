@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 
 def create_server() -> FastMCP:
     """Factory: build and configure the Gmail MCP server."""
-    mcp = FastMCP("gmail", json_response=True)
+    mcp = FastMCP("gmail", json_response=True, host="0.0.0.0", port=8080)
     register_tools(mcp)
     return mcp
 
@@ -47,4 +47,4 @@ if __name__ == "__main__":
 
     server = create_server()
     logger.info("Gmail MCP server starting on 0.0.0.0:8080")
-    server.run(transport="sse", host="0.0.0.0", port=8080)
+    server.run(transport="sse")

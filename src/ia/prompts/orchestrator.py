@@ -45,14 +45,27 @@ def build_orchestrator_prompt(
 
     if has_mcp:
         routing_rules += (
-            "[IF] Query needs live sensor data, real-time readings, API data, or equipment status\n"
+            "[IF] Query needs live sensor data, real-time readings, API data, equipment status,\n"
+            "     OR requires actions on external integrations (send/read email via Gmail,\n"
+            "     post to Slack, query GitHub, interact with Notion, AWS, etc.)\n"
             "     → [DELEGATE] to mcp-agent via task()\n"
-            "     → The mcp-agent executes live API calls for sensor values.\n\n"
+            "     → The mcp-agent executes live API calls and integration actions.\n"
+            "     → ALWAYS prefer mcp-agent over vl-agent for email operations when Gmail integration is registered.\n\n"
         )
         routing_examples += (
             '<example>\n'
             '<user_query>¿Cuál es la presión actual de la caldera 3?</user_query>\n'
             '<reasoning>Needs live sensor reading → delegate to mcp-agent.</reasoning>\n'
+            '<correct_action>task() → mcp-agent</correct_action>\n'
+            '</example>\n\n'
+            '<example>\n'
+            '<user_query>Send an email to john@example.com saying hello</user_query>\n'
+            '<reasoning>Send email via Gmail integration → delegate to mcp-agent, not vl-agent.</reasoning>\n'
+            '<correct_action>task() → mcp-agent</correct_action>\n'
+            '</example>\n\n'
+            '<example>\n'
+            '<user_query>Manda un correo a stefano@gmail.com usando el MCP de Gmail</user_query>\n'
+            '<reasoning>User explicitly asks for MCP Gmail → delegate to mcp-agent immediately.</reasoning>\n'
             '<correct_action>task() → mcp-agent</correct_action>\n'
             '</example>\n\n'
         )
