@@ -16,6 +16,14 @@ class ToolRepository(BaseRepository[ToolConfig]):
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
+    async def get_by_name_and_source(self, name: str, source_id: int) -> ToolConfig | None:
+        stmt = select(ToolConfig).where(
+            ToolConfig.name == name,
+            ToolConfig.source_id == source_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
     async def list_by_source(self, source_id: int) -> list[ToolConfig]:
         stmt = select(ToolConfig).where(ToolConfig.source_id == source_id)
         result = await self.session.execute(stmt)
