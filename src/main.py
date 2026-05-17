@@ -49,6 +49,13 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Integration catalog auto-seed skipped: %s", exc)
 
+    # Cleanup any orphaned stdio processes on shutdown
+    try:
+        from src.integrations.stdio_runner import StdioRunner
+        app.state.stdio_runner = StdioRunner()
+    except Exception as exc:
+        logger.warning("Stdio runner init skipped: %s", exc)
+
     yield
     try:
         await get_event_broadcast().stop_subscriber()

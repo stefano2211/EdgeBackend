@@ -128,11 +128,52 @@ async def _mcp_execute_impl(
             if any(domain in execution_url for domain in ["api.", "/api/"]):
                 transport_type = "rest"
 
+        # Resolve stdio config if needed
+        stdio_command = None
+        stdio_args = None
+        stdio_env = None
+        if transport_type == "stdio":
+            from sqlalchemy import select
+            from src.integrations.models import IntegrationInstance
+            from src.integrations.credentials import CredentialManager
+            from src.integrations.repositories.integration_repository import (
+                IntegrationInstanceRepository,
+            )
+
+            if source == "chat":
+                stmt = select(IntegrationInstance).where(
+                    IntegrationInstance.mcp_source_id == tool_config.source_id
+                )
+            else:
+                stmt = select(IntegrationInstance).where(
+                    IntegrationInstance.reactive_mcp_source_id == tool_config.source_id
+                )
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+
+            if instance and instance.catalog:
+                catalog = instance.catalog
+                stdio_command = catalog.command
+                stdio_args = catalog.args or []
+
+                cred_manager = CredentialManager(
+                    IntegrationInstanceRepository(session)
+                )
+                credentials = await cred_manager.get_credentials(instance)
+                stdio_env = cred_manager.inject_for_stdio(
+                    credentials,
+                    catalog.env_prefix,
+                    auth_env_var_mapping=catalog.auth_env_var_mapping,
+                )
+
         response = await mcp_service.execute_tool(
             base_url=execution_url,
             tool_name=tool_config_name,
             arguments=clean_arguments,
             is_stdio=(transport_type == "stdio"),
+            stdio_command=stdio_command,
+            stdio_args=stdio_args,
+            stdio_env=stdio_env,
             transport_type=transport_type,
             method=method,
             schema_hints=schema_hints or None,

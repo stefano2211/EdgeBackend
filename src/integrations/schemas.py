@@ -23,17 +23,13 @@ class IntegrationCatalogCreate(BaseModel):
     icon_url: str | None = None
     category: str | None = None
     source_type: str = Field(..., pattern=r"^(official|custom|rest_bridge)$")
-    official_package: str | None = None
-    official_command: str | None = None
-    official_args: list | None = None
-    custom_module_path: str | None = None
+    command: str | None = None
+    args: list | None = None
+    env_prefix: str | None = None
     rest_bridge_url_template: str | None = None
     auth_type: str = Field(..., pattern=r"^(token|oauth2|basic|api_key|none)$")
     auth_env_var_mapping: dict = Field(default_factory=dict)
     auth_setup_guide_markdown: str | None = None
-    docker_image: str | None = None
-    docker_command: list | None = None
-    requires_docker: bool = True
     is_enabled: bool = True
     is_official_verified: bool = False
 
@@ -45,7 +41,9 @@ class IntegrationCatalogUpdate(BaseModel):
     category: str | None = None
     is_enabled: bool | None = None
     auth_setup_guide_markdown: str | None = None
-    docker_image: str | None = None
+    command: str | None = None
+    args: list | None = None
+    env_prefix: str | None = None
 
 
 class IntegrationCatalogOut(BaseModel):
@@ -59,7 +57,9 @@ class IntegrationCatalogOut(BaseModel):
     auth_type: str
     auth_env_var_mapping: dict
     auth_setup_guide_markdown: str | None = None
-    requires_docker: bool
+    command: str | None = None
+    args: list | None = None
+    env_prefix: str | None = None
     is_enabled: bool
     is_official_verified: bool
     created_at: datetime
@@ -71,13 +71,7 @@ class IntegrationCatalogOut(BaseModel):
 class IntegrationCatalogDetailOut(IntegrationCatalogOut):
     """Full detail including sensitive setup config."""
 
-    official_package: str | None = None
-    official_command: str | None = None
-    official_args: list | None = None
-    custom_module_path: str | None = None
     rest_bridge_url_template: str | None = None
-    docker_image: str | None = None
-    docker_command: list | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -104,9 +98,9 @@ class IntegrationInstanceOut(BaseModel):
     catalog_id: int
     instance_name: str
     is_enabled: bool
-    container_name: str | None = None
-    container_status: str | None = None
-    container_endpoint: str | None = None
+    process_pid: int | None = None
+    process_status: str | None = None
+    last_used_at: datetime | None = None
     available_in_chat: bool
     available_in_reactive: bool
     mcp_source_id: int | None = None
@@ -156,7 +150,7 @@ class SyncResult(BaseModel):
 
 class InstanceStatusOut(BaseModel):
     instance: IntegrationInstanceOut
-    container: dict[str, Any] | None = None
+    process: dict[str, Any] | None = None
     tools_registered: list[dict[str, Any]] = Field(default_factory=list)
 
 

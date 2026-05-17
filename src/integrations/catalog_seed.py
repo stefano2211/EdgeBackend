@@ -24,11 +24,11 @@ CATALOG_SEED = [
         description="Access repositories, issues, pull requests and commits via the official GitHub MCP server.",
         category="development",
         source_type="official",
-        official_package="@modelcontextprotocol/server-github",
-        official_command="npx",
-        official_args=["-y", "@modelcontextprotocol/server-github"],
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-github"],
+        env_prefix="GITHUB_",
         auth_type="token",
-        auth_env_var_mapping={"GITHUB_PERSONAL_ACCESS_TOKEN": "token"},
+        auth_env_var_mapping={"PERSONAL_ACCESS_TOKEN": "token"},
         auth_setup_guide_markdown="""## GitHub Setup
 
 1. Go to [GitHub Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens)
@@ -37,7 +37,6 @@ CATALOG_SEED = [
 4. Copy the generated token (starts with `ghp_`)
 5. Paste it below in the **token** field.
 """,
-        requires_docker=True,
     ),
     IntegrationCatalogCreate(
         slug="slack",
@@ -45,11 +44,11 @@ CATALOG_SEED = [
         description="Send messages and read channel history via the official Slack MCP server.",
         category="communication",
         source_type="official",
-        official_package="@modelcontextprotocol/server-slack",
-        official_command="npx",
-        official_args=["-y", "@modelcontextprotocol/server-slack"],
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-slack"],
+        env_prefix="SLACK_",
         auth_type="token",
-        auth_env_var_mapping={"SLACK_BOT_TOKEN": "token", "SLACK_TEAM_ID": "team_id"},
+        auth_env_var_mapping={"BOT_TOKEN": "token", "TEAM_ID": "team_id"},
         auth_setup_guide_markdown="""## Slack Setup
 
 1. Go to [Slack API → Your Apps](https://api.slack.com/apps)
@@ -60,7 +59,6 @@ CATALOG_SEED = [
 6. Find your **Team ID** in Slack settings → Workspace settings
 7. Paste both values below.
 """,
-        requires_docker=True,
     ),
     IntegrationCatalogCreate(
         slug="postgres",
@@ -68,11 +66,11 @@ CATALOG_SEED = [
         description="Query PostgreSQL databases via the official MCP server.",
         category="database",
         source_type="official",
-        official_package="@modelcontextprotocol/server-postgres",
-        official_command="npx",
-        official_args=["-y", "@modelcontextprotocol/server-postgres"],
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-postgres"],
+        env_prefix="POSTGRES_",
         auth_type="basic",
-        auth_env_var_mapping={"POSTGRES_CONNECTION_STRING": "connection_string"},
+        auth_env_var_mapping={"CONNECTION_STRING": "connection_string"},
         auth_setup_guide_markdown="""## PostgreSQL Setup
 
 Provide a connection string in the format:
@@ -81,7 +79,6 @@ postgresql://user:password@host:port/database
 ```
 Paste it below in the **connection_string** field.
 """,
-        requires_docker=True,
     ),
     IntegrationCatalogCreate(
         slug="gmail",
@@ -89,13 +86,14 @@ Paste it below in the **connection_string** field.
         description="Send and read emails via a custom Gmail MCP server with OAuth2 support.",
         category="communication",
         source_type="custom",
-        custom_module_path="src.integrations.custom_mcp_servers.gmail.server",
-        docker_image="edgebackend/gmail-mcp-server",
+        command="python",
+        args=["-m", "src.integrations.custom_mcp_servers.gmail.server"],
+        env_prefix="GMAIL_",
         auth_type="oauth2",
         auth_env_var_mapping={
-            "GMAIL_REFRESH_TOKEN": "refresh_token",
-            "GMAIL_CLIENT_ID": "client_id",
-            "GMAIL_CLIENT_SECRET": "client_secret",
+            "REFRESH_TOKEN": "refresh_token",
+            "CLIENT_ID": "client_id",
+            "CLIENT_SECRET": "client_secret",
         },
         auth_setup_guide_markdown="""## Gmail Setup — Step by Step
 
@@ -150,11 +148,10 @@ The script will:
 
 | Field | What it is |
 |-------|-----------|
-| **GMAIL_REFRESH_TOKEN** | The long token printed by the script (starts with `1//...`) |
-| **GMAIL_CLIENT_ID** | Your OAuth Client ID (ends with `...apps.googleusercontent.com`) |
-| **GMAIL_CLIENT_SECRET** | Your OAuth Client Secret (a 24-character random string) |
+| **refresh_token** | The long token printed by the script (starts with `1//...`) |
+| **client_id** | Your OAuth Client ID (ends with `...apps.googleusercontent.com`) |
+| **client_secret** | Your OAuth Client Secret (a 24-character random string) |
 """,
-        requires_docker=True,
     ),
     IntegrationCatalogCreate(
         slug="aws",
@@ -162,14 +159,14 @@ The script will:
         description="Interact with AWS services (S3, CloudWatch, EC2) via the official AWS MCP server.",
         category="cloud",
         source_type="official",
-        official_package="@modelcontextprotocol/server-aws",
-        official_command="npx",
-        official_args=["-y", "@modelcontextprotocol/server-aws"],
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-aws"],
+        env_prefix="AWS_",
         auth_type="token",
         auth_env_var_mapping={
-            "AWS_ACCESS_KEY_ID": "access_key_id",
-            "AWS_SECRET_ACCESS_KEY": "secret_access_key",
-            "AWS_REGION": "region",
+            "ACCESS_KEY_ID": "access_key_id",
+            "SECRET_ACCESS_KEY": "secret_access_key",
+            "REGION": "region",
         },
         auth_setup_guide_markdown="""## AWS Setup
 
@@ -179,7 +176,6 @@ The script will:
 4. Copy **Access key ID** and **Secret access key**
 5. Paste both below along with your preferred AWS region (e.g. `us-east-1`).
 """,
-        requires_docker=True,
     ),
     IntegrationCatalogCreate(
         slug="notion",
@@ -187,11 +183,11 @@ The script will:
         description="Read and write Notion pages via the official Notion MCP server.",
         category="productivity",
         source_type="official",
-        official_package="@modelcontextprotocol/server-notion",
-        official_command="npx",
-        official_args=["-y", "@modelcontextprotocol/server-notion"],
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-notion"],
+        env_prefix="NOTION_",
         auth_type="api_key",
-        auth_env_var_mapping={"NOTION_API_TOKEN": "api_key"},
+        auth_env_var_mapping={"API_TOKEN": "api_key"},
         auth_setup_guide_markdown="""## Notion Setup
 
 1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
@@ -200,13 +196,14 @@ The script will:
 4. Share your Notion pages with the integration
 5. Paste the token below in the **api_key** field.
 """,
-        requires_docker=True,
     ),
 ]
 
 
 async def seed_integration_catalog(session: AsyncSession) -> tuple[int, int]:
     """Idempotently seed the catalog.  Returns (created_count, skipped_count)."""
+    from sqlalchemy.exc import IntegrityError
+
     service = CatalogService(session)
     created = 0
     skipped = 0
@@ -218,9 +215,14 @@ async def seed_integration_catalog(session: AsyncSession) -> tuple[int, int]:
             skipped += 1
             continue
 
-        await service.create(entry)
-        logger.info("Catalog seed: created entry '%s'", entry.slug)
-        created += 1
+        try:
+            await service.create(entry)
+            logger.info("Catalog seed: created entry '%s'", entry.slug)
+            created += 1
+        except IntegrityError:
+            logger.debug("Catalog seed: '%s' already exists (race) — skipping", entry.slug)
+            skipped += 1
+            await session.rollback()
 
     if created:
         logger.info("Catalog auto-seed complete: %d created, %d skipped", created, skipped)

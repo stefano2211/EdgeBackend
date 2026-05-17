@@ -12,8 +12,8 @@ Exposes tools:
   - list_labels
   - modify_labels
 
-Authentication: OAuth2 refresh token (env vars injected by Docker).
-Transport: SSE on port 8080.
+Authentication: OAuth2 refresh token (env vars injected by parent process).
+Transport: stdio (replaces SSE for zero-overhead execution).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 
 def create_server() -> FastMCP:
     """Factory: build and configure the Gmail MCP server."""
-    mcp = FastMCP("gmail", json_response=True, host="0.0.0.0", port=8080)
+    mcp = FastMCP("gmail", json_response=True)
     register_tools(mcp)
     return mcp
 
@@ -46,5 +46,5 @@ if __name__ == "__main__":
         raise SystemExit(1)
 
     server = create_server()
-    logger.info("Gmail MCP server starting on 0.0.0.0:8080")
-    server.run(transport="sse")
+    logger.info("Gmail MCP server starting on stdio")
+    server.run(transport="stdio")

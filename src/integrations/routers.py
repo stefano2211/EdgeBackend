@@ -4,10 +4,10 @@ Endpoints:
   /integrations/catalog          → browse available integrations
   /integrations/instances        → manage user instances
   /integrations/instances/{id}/setup-guide   → setup instructions
-  /integrations/instances/{id}/credentials   → submit secrets + launch container
+  /integrations/instances/{id}/credentials   → submit secrets + launch stdio process
   /integrations/instances/{id}/sync          → discover & register tools
-  /integrations/instances/{id}/start|stop    → container lifecycle
   /integrations/instances/{id}/status        → runtime status
+  /integrations/instances/{id}/stop          → stop stdio process
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ async def create_instance(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    """Create a new integration instance (container NOT started yet)."""
+    """Create a new integration instance (stdio process NOT started yet)."""
     service = _service(session)
     try:
         instance = await service.create_instance(current_user.id, data)
@@ -149,7 +149,7 @@ async def delete_instance(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    """Delete instance, container, credentials, and registered tools permanently."""
+    """Delete instance, process, credentials, and registered tools permanently."""
     service = _service(session)
     try:
         await service.delete_instance(instance_id, current_user.id)
@@ -188,7 +188,7 @@ async def submit_credentials(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    """Submit raw credentials, encrypt them, and launch the MCP container."""
+    """Submit raw credentials, encrypt them, and launch the MCP stdio process."""
     service = _service(session)
     try:
         return await service.submit_credentials(instance_id, current_user.id, data)
@@ -271,7 +271,7 @@ async def oauth_callback(
     """OAuth2 callback from Google (public endpoint).
 
     Exchanges the authorization code for tokens, stores them, launches the
-    container, and returns an HTML page that posts a message back to the
+    stdio process, and returns an HTML page that posts a message back to the
     opener window and closes the popup.
     """
     template_path = Path(__file__).parent / "oauth" / "callback_template.html"
@@ -348,7 +348,7 @@ async def sync_instance_tools(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    """Discover tools from the running MCP container and register them in DB."""
+    """Discover tools from the running MCP stdio process and register them in DB."""
     service = _service(session)
     try:
         return await service.sync_tools(instance_id, current_user.id)
@@ -359,35 +359,19 @@ async def sync_instance_tools(
 
 
 # ---------------------------------------------------------------------------
-# Container lifecycle
+# Process lifecycle
 # ---------------------------------------------------------------------------
 
-@router.post("/instances/{instance_id}/start", response_model=IntegrationInstanceOut)
-async def start_instance(
-    instance_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    """Start (or restart) the Docker container for this instance."""
-    service = _service(session)
-    try:
-        return await service.start_instance(instance_id, current_user.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-
 @router.post("/instances/{instance_id}/stop", response_model=IntegrationInstanceOut)
-async def stop_instance(
+async def stop_instance_process(
     instance_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    """Stop the Docker container (preserves data in DB)."""
+    """Stop the stdio process (preserves data in DB)."""
     service = _service(session)
     try:
-        return await service.stop_instance(instance_id, current_user.id)
+        return await service.stop_process(instance_id, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -398,7 +382,7 @@ async def get_instance_status(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Get container runtime status and registered tools."""
+    """Get stdio process runtime status."""
     service = _service(session)
     try:
         return await service.get_status(instance_id, current_user.id)

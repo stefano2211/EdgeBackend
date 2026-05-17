@@ -3,7 +3,7 @@
 Responsibilities:
   1. Create / update / delete IntegrationInstance records
   2. Encrypt and store credentials
-  3. Spin up / tear down Docker containers
+  3. Launch stdio MCP processes (replaces Docker containers)
   4. Discover and register MCP tools into the existing ToolConfig system
   5. Handle both proactive (chat) and reactive contexts
 
@@ -13,21 +13,15 @@ mocked in tests.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.integrations.auth_strategies import get_strategy
+from src.integrations.credentials import CredentialManager
 from src.integrations.credential_vault import CredentialVault
-from src.integrations.docker_runner import DockerRunner
-from src.integrations.interfaces import (
-    ICredentialVault,
-    IDockerRunner,
-    IMCPServerConfig,
-)
-from src.integrations.mcp_server_factory import create as create_server_config
+from src.integrations.interfaces import ICredentialVault
 from src.integrations.models import IntegrationCatalog, IntegrationInstance
 from src.integrations.repositories import IntegrationCatalogRepository, IntegrationInstanceRepository
 from src.integrations.schemas import (
@@ -36,6 +30,7 @@ from src.integrations.schemas import (
     IntegrationInstanceUpdate,
     SyncResult,
 )
+from src.integrations.stdio_runner import StdioRunner
 from src.services.mcp_service import MCPService
 
 logger = logging.getLogger(__name__)
@@ -49,13 +44,14 @@ class IntegrationService:
         session: AsyncSession,
         *,
         credential_vault: ICredentialVault | None = None,
-        docker_runner: IDockerRunner | None = None,
+        stdio_runner: StdioRunner | None = None,
     ) -> None:
         self._session = session
         self._catalog_repo = IntegrationCatalogRepository(session)
         self._instance_repo = IntegrationInstanceRepository(session)
         self._vault = credential_vault or CredentialVault()
-        self._docker = docker_runner or DockerRunner()
+        self._stdio = stdio_runner or StdioRunner()
+        self._credential_manager = CredentialManager(self._instance_repo, self._vault)
         self._mcp_service = MCPService()
 
     # ------------------------------------------------------------------
@@ -77,14 +73,8 @@ class IntegrationService:
             instance_name=data.instance_name,
             available_in_chat=data.available_in_chat,
             available_in_reactive=data.available_in_reactive,
-            container_name=f"mcp-{catalog.slug}-u{user_id}-tmp",
         )
-        # container_name is a placeholder until we have the real id
         instance = await self._instance_repo.create(instance)
-
-        # Update with the real id for a deterministic name
-        instance.container_name = f"mcp-{catalog.slug}-u{user_id}-i{instance.id}"
-        await self._instance_repo.update(instance)
 
         logger.info(
             "Created integration instance id=%s catalog=%s user=%s",
@@ -107,25 +97,50 @@ class IntegrationService:
         self, instance_id: int, user_id: int, data: IntegrationInstanceUpdate
     ) -> IntegrationInstance:
         instance = await self.get_instance(instance_id, user_id)
+        old_chat = instance.available_in_chat
+        old_reactive = instance.available_in_reactive
+
         update_dict = data.model_dump(exclude_unset=True)
         for field, value in update_dict.items():
             setattr(instance, field, value)
         await self._instance_repo.update(instance)
         logger.info("Updated integration instance id=%s", instance_id)
+
+        # Auto-sync if toggles changed and credentials exist
+        toggles_changed = (
+            old_chat != instance.available_in_chat
+            or old_reactive != instance.available_in_reactive
+        )
+        if toggles_changed and instance.credentials:
+            try:
+                # Reload instance to ensure fresh state (mcp_source_ids) after any previous commits
+                instance = await self.get_instance(instance_id, user_id)
+                await self.sync_tools(instance_id, user_id)
+            except Exception as exc:
+                logger.warning(
+                    "Auto-sync failed after toggle for instance id=%s: %s",
+                    instance_id,
+                    exc,
+                )
+                # Clean up session state so the endpoint can still return the instance
+                await self._session.rollback()
+
         return instance
 
     async def delete_instance(self, instance_id: int, user_id: int) -> None:
         instance = await self.get_instance(instance_id, user_id)
 
-        # 1. Tear down container
-        if instance.container_name:
+        # 1. Stop stdio process if running
+        if instance.process_pid:
             try:
-                await self._docker.stop(instance.container_name)
-                await self._docker.remove(instance.container_name)
+                self._stdio.stop(instance.process_pid)
             except Exception:
-                logger.warning("Container cleanup failed for '%s'", instance.container_name)
+                logger.warning("Process cleanup failed for pid=%s", instance.process_pid)
 
-        # 2. Delete DB record (cascades to credentials)
+        # 2. Delete associated MCP sources
+        await self._cleanup_previous_sources(instance)
+
+        # 3. Delete DB record (cascades to credentials)
         await self._instance_repo.delete(instance)
         logger.info("Deleted integration instance id=%s", instance_id)
 
@@ -145,7 +160,7 @@ class IntegrationService:
         }
 
     # ------------------------------------------------------------------
-    # Credentials submission + container launch
+    # Credentials submission + process launch
     # ------------------------------------------------------------------
 
     async def submit_credentials(
@@ -159,47 +174,32 @@ class IntegrationService:
         if not strategy.validate(data.credentials):
             raise ValueError(f"Invalid credentials for auth_type '{catalog.auth_type}'")
 
-        # 2. Encrypt and persist
+        # 2. Map to DB keys and encrypt
+        db_keys = strategy.to_db_keys(data.credentials)
         encrypted = {
             key: self._vault.encrypt(value)
-            for key, value in data.credentials.items()
+            for key, value in db_keys.items()
         }
-        await self._instance_repo.save_credentials(instance_id, encrypted)
 
-        # 3. Map to env vars
-        env_vars = strategy.to_env_vars(data.credentials, catalog.auth_env_var_mapping)
+        # Handle OAuth2 initial access_token + expiry if present
+        expires_at_map: dict[str, Any] | None = None
+        if strategy.supports_refresh() and "access_token" in db_keys:
+            from datetime import datetime, timedelta, timezone
+            expires_at_map = {
+                "access_token": datetime.now(timezone.utc) + timedelta(seconds=3300)  # 55 min buffer
+            }
 
-        # 4. Build image if custom and missing
-        if catalog.source_type == "custom" and catalog.docker_image:
-            if catalog.slug == "gmail":
-                # Build on-demand
-                await self._docker.build_image_if_missing(
-                    tag=catalog.docker_image,
-                    dockerfile_path="src/integrations/docker/gmail-mcp/Dockerfile",
-                    build_context=".",
-                )
+        await self._instance_repo.save_credentials(instance_id, encrypted, expires_at_map)
 
-        # 5. Create and start container
-        server_config: IMCPServerConfig = create_server_config(catalog.source_type)
-        docker_cfg = server_config.get_docker_config(instance, env_vars)
+        # 3. Refresh instance to pick up new credentials
+        instance = await self.get_instance(instance_id, user_id)
 
-        container_info = await self._docker.create_and_start(docker_cfg)
-        if container_info.status == "error":
-            instance.container_status = "error"
-            await self._instance_repo.update(instance)
-            raise RuntimeError(f"Container failed to start: {container_info.error}")
-
-        instance.container_status = container_info.status
-        instance.container_endpoint = container_info.endpoint
-        await self._instance_repo.update(instance)
-
-        # Allow container DNS to propagate before discovery
-        await asyncio.sleep(3)
+        # 4. Launch stdio process with credentials
+        await self._launch_stdio_process(instance)
 
         logger.info(
-            "Credentials submitted and container running for instance id=%s endpoint=%s",
+            "Credentials submitted and stdio process running for instance id=%s",
             instance_id,
-            instance.container_endpoint,
         )
         return instance
 
@@ -212,7 +212,7 @@ class IntegrationService:
         code: str,
         state: str,
     ) -> IntegrationInstance:
-        """Finish an OAuth2 flow: exchange code, store tokens, launch container."""
+        """Finish an OAuth2 flow: exchange code, store tokens, launch process."""
         from src.integrations.oauth.gmail_flow import exchange_code
         from src.integrations.oauth.state_manager import get_state_manager
         from src.core.config import settings
@@ -242,15 +242,15 @@ class IntegrationService:
         if not refresh_token:
             raise RuntimeError("Google did not return a refresh token. Ensure 'prompt=consent' was used.")
 
-        # Build credentials payload matching the catalog mapping
-        # For Gmail: {refresh_token, client_id, client_secret}
+        # Build credentials payload
         credentials_payload = {
-            catalog.auth_env_var_mapping.get("GMAIL_REFRESH_TOKEN", "refresh_token"): refresh_token,
-            catalog.auth_env_var_mapping.get("GMAIL_CLIENT_ID", "client_id"): ctx["client_id"],
-            catalog.auth_env_var_mapping.get("GMAIL_CLIENT_SECRET", "client_secret"): ctx["client_secret"],
+            "refresh_token": refresh_token,
+            "client_id": ctx["client_id"],
+            "client_secret": ctx["client_secret"],
+            "access_token": token_data.get("access_token", ""),
         }
 
-        # Delete previous credentials for this instance to avoid duplicates
+        # Delete previous credentials
         await self._instance_repo.delete_credentials(instance_id)
 
         # Encrypt and persist
@@ -258,40 +258,24 @@ class IntegrationService:
             key: self._vault.encrypt(value)
             for key, value in credentials_payload.items()
         }
-        await self._instance_repo.save_credentials(instance_id, encrypted)
 
-        # Map to env vars for Docker
-        strategy = get_strategy(catalog.auth_type)
-        env_vars = strategy.to_env_vars(credentials_payload, catalog.auth_env_var_mapping)
+        # Set expiry for access_token
+        from datetime import datetime, timedelta, timezone
+        expires_in = token_data.get("expires_in", 3600)
+        expires_at_map = {
+            "access_token": datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)
+        }
+        await self._instance_repo.save_credentials(instance_id, encrypted, expires_at_map)
 
-        # Build and start container (reuses existing logic)
-        if catalog.source_type == "custom" and catalog.docker_image:
-            if catalog.slug == "gmail":
-                await self._docker.build_image_if_missing(
-                    tag=catalog.docker_image,
-                    dockerfile_path="src/integrations/docker/gmail-mcp/Dockerfile",
-                    build_context=".",
-                )
+        # Refresh instance
+        instance = await self.get_instance(instance_id, user_id)
 
-        server_config = create_server_config(catalog.source_type)
-        docker_cfg = server_config.get_docker_config(instance, env_vars)
-
-        container_info = await self._docker.create_and_start(docker_cfg)
-        if container_info.status == "error":
-            instance.container_status = "error"
-            await self._instance_repo.update(instance)
-            raise RuntimeError(f"Container failed to start: {container_info.error}")
-
-        instance.container_status = container_info.status
-        instance.container_endpoint = container_info.endpoint
-        await self._instance_repo.update(instance)
-
-        await asyncio.sleep(10)
+        # Launch stdio process
+        await self._launch_stdio_process(instance)
 
         logger.info(
-            "OAuth completed for instance id=%s endpoint=%s",
+            "OAuth completed for instance id=%s",
             instance_id,
-            instance.container_endpoint,
         )
         return instance
 
@@ -301,22 +285,34 @@ class IntegrationService:
 
     async def sync_tools(self, instance_id: int, user_id: int) -> SyncResult:
         instance = await self.get_instance(instance_id, user_id)
+
+        # Ensure process is running
+        if not instance.process_pid or not self._stdio.is_running(instance.process_pid):
+            await self._launch_stdio_process(instance)
+
         catalog = instance.catalog
 
-        if not instance.container_endpoint:
-            raise ValueError("Instance has no container endpoint — submit credentials first")
-
-        # Discover tools from the running MCP server
+        # Discover tools from the running MCP server via stdio
         try:
             discovered = await self._mcp_service.discover_tools(
-                base_url=instance.container_endpoint,
-                is_stdio=False,
+                base_url=catalog.command or "",  # Not used for stdio
+                is_stdio=True,
+                stdio_command=catalog.command,
+                stdio_args=catalog.args,
+                stdio_env=self._credential_manager.inject_for_stdio(
+                    await self._credential_manager.get_credentials(instance),
+                    catalog.env_prefix,
+                    auth_env_var_mapping=catalog.auth_env_var_mapping,
+                ),
             )
         except Exception as exc:
             logger.exception("Tool discovery failed for instance %s", instance_id)
             raise RuntimeError(f"Tool discovery failed: {exc}") from exc
 
-        # Determine context_mode based on instance availability flags
+        # Cleanup previous sources to avoid duplicates
+        await self._cleanup_previous_sources(instance)
+
+        # Determine context_mode
         if instance.available_in_chat and instance.available_in_reactive:
             context_mode = "both"
         elif instance.available_in_reactive:
@@ -356,6 +352,60 @@ class IntegrationService:
             reactive_mcp_source_id=reactive_mcp_source_id,
         )
 
+    async def _cleanup_previous_sources(self, instance: IntegrationInstance) -> None:
+        """Delete previous MCP sources and their tools to avoid duplicates."""
+        mcp_source_id = instance.mcp_source_id
+        reactive_mcp_source_id = instance.reactive_mcp_source_id
+
+        if mcp_source_id or reactive_mcp_source_id:
+            instance.mcp_source_id = None
+            instance.reactive_mcp_source_id = None
+            await self._instance_repo.update(instance)
+
+        if mcp_source_id:
+            await self._delete_mcp_source(mcp_source_id)
+
+        if reactive_mcp_source_id:
+            await self._delete_reactive_mcp_source(reactive_mcp_source_id)
+
+    async def _delete_mcp_source(self, source_id: int) -> None:
+        from src.persistencia.repositories.tool_repository import (
+            MCPSourceRepository,
+            ToolRepository,
+        )
+
+        tool_repo = ToolRepository(self._session)
+        tools = await tool_repo.list_by_source(source_id)
+        for tool in tools:
+            await self._session.delete(tool)
+
+        source_repo = MCPSourceRepository(self._session)
+        source = await source_repo.get_by_id(source_id)
+        if source:
+            await self._session.delete(source)
+
+        await self._session.commit()
+        logger.info("Deleted MCP source id=%s with %d tools", source_id, len(tools))
+
+    async def _delete_reactive_mcp_source(self, source_id: int) -> None:
+        from src.persistencia.repositories.reactive_tool_repository import (
+            ReactiveMCPSourceRepository,
+            ReactiveToolRepository,
+        )
+
+        tool_repo = ReactiveToolRepository(self._session)
+        tools = await tool_repo.list_by_source(source_id)
+        for tool in tools:
+            await self._session.delete(tool)
+
+        source_repo = ReactiveMCPSourceRepository(self._session)
+        source = await source_repo.get_by_id(source_id)
+        if source:
+            await self._session.delete(source)
+
+        await self._session.commit()
+        logger.info("Deleted reactive MCP source id=%s with %d tools", source_id, len(tools))
+
     async def _register_in_chat_context(
         self,
         instance: IntegrationInstance,
@@ -369,13 +419,12 @@ class IntegrationService:
         source_repo = MCPSourceRepository(self._session)
         tool_repo = ToolRepository(self._session)
 
-        # Create or reuse MCPSource
         source_name = f"{catalog.slug}-u{instance.user_id}-i{instance.id}"
         source = MCPSource(
             name=source_name,
             description=f"{catalog.name} integration for user {instance.user_id}",
-            url=instance.container_endpoint,
-            type="sse",
+            url="stdio",  # stdio transport
+            type="stdio",
             is_enabled=True,
             context_mode=context_mode,
         )
@@ -392,7 +441,7 @@ class IntegrationService:
                 parameter_schema=tool_def.get("parameter_schema")
                 or tool_def.get("inputSchema")
                 or {},
-                config=tool_def.get("config", {"transport": "sse", "url": instance.container_endpoint}),
+                config=tool_def.get("config", {"transport": "stdio"}),
                 source_id=source.id,
                 is_enabled=True,
             )
@@ -419,10 +468,11 @@ class IntegrationService:
 
         source_name = f"{catalog.slug}-u{instance.user_id}-i{instance.id}-reactive"
         source = ReactiveMCPSource(
+            user_id=instance.user_id,
             name=source_name,
             description=f"{catalog.name} reactive integration for user {instance.user_id}",
-            url=instance.container_endpoint,
-            type="sse",
+            url="stdio",
+            type="stdio",
             is_enabled=True,
         )
         await source_repo.create(source)
@@ -433,12 +483,13 @@ class IntegrationService:
             if not name:
                 continue
             tool = ReactiveToolConfig(
+                user_id=instance.user_id,
                 name=name,
                 description=tool_def.get("description") or "",
                 parameter_schema=tool_def.get("parameter_schema")
                 or tool_def.get("inputSchema")
                 or {},
-                config=tool_def.get("config", {"transport": "sse", "url": instance.container_endpoint}),
+                config=tool_def.get("config", {"transport": "stdio"}),
                 source_id=source.id,
                 is_enabled=True,
             )
@@ -448,57 +499,70 @@ class IntegrationService:
         return source.id
 
     # ------------------------------------------------------------------
-    # Container lifecycle helpers
+    # Stdio process helpers
     # ------------------------------------------------------------------
 
-    async def start_instance(self, instance_id: int, user_id: int) -> IntegrationInstance:
-        instance = await self.get_instance(instance_id, user_id)
-        if not instance.container_name:
-            raise ValueError("Instance has no container name")
+    async def _launch_stdio_process(self, instance: IntegrationInstance) -> None:
+        """Launch or restart the stdio process for an instance."""
+        catalog = instance.catalog
 
-        container = await self._docker.inspect(instance.container_name)
-        if container.status == "running":
-            return instance
+        # Stop previous process if any
+        if instance.process_pid and self._stdio.is_running(instance.process_pid):
+            self._stdio.stop(instance.process_pid)
 
-        # Re-submit credentials to recreate container
-        # (credentials are still in DB, we just need to re-launch)
-        # For simplicity, we rebuild env vars from stored credentials
-        strategy = get_strategy(instance.catalog.auth_type)
-        decrypted = {
-            cred.credential_key: self._vault.decrypt(cred.encrypted_value)
-            for cred in instance.credentials
-        }
-        env_vars = strategy.to_env_vars(decrypted, instance.catalog.auth_env_var_mapping)
+        # Get fresh credentials (with auto-refresh)
+        credentials = await self._credential_manager.get_credentials(instance)
+        env = self._credential_manager.inject_for_stdio(
+            credentials,
+            catalog.env_prefix,
+            auth_env_var_mapping=catalog.auth_env_var_mapping,
+        )
 
-        server_config = create_server_config(instance.catalog.source_type)
-        docker_cfg = server_config.get_docker_config(instance, env_vars)
-        info = await self._docker.create_and_start(docker_cfg)
+        # Launch new process
+        process_info = self._stdio.start(
+            command=catalog.command or "",
+            args=catalog.args,
+            env=env,
+        )
 
-        instance.container_status = info.status
-        instance.container_endpoint = info.endpoint
+        if process_info.status == "error":
+            instance.process_status = "error"
+            await self._instance_repo.update(instance)
+            raise RuntimeError(f"Stdio process failed to start: {process_info.error}")
+
+        instance.process_pid = process_info.pid
+        instance.process_status = process_info.status
+        instance.last_used_at = datetime.now()
         await self._instance_repo.update(instance)
-        return instance
 
-    async def stop_instance(self, instance_id: int, user_id: int) -> IntegrationInstance:
-        instance = await self.get_instance(instance_id, user_id)
-        if instance.container_name:
-            await self._docker.stop(instance.container_name)
-        instance.container_status = "stopped"
-        await self._instance_repo.update(instance)
-        return instance
+    # ------------------------------------------------------------------
+    # Process lifecycle helpers (simplified)
+    # ------------------------------------------------------------------
 
     async def get_status(self, instance_id: int, user_id: int) -> dict[str, Any]:
         instance = await self.get_instance(instance_id, user_id)
-        container = None
-        if instance.container_name:
-            container_info = await self._docker.inspect(instance.container_name)
-            container = {
-                "name": container_info.name,
-                "status": container_info.status,
-                "endpoint": container_info.endpoint,
-                "error": container_info.error,
-            }
+        process = None
+        if instance.process_pid:
+            info = self._stdio.get_info(instance.process_pid)
+            if info:
+                process = {
+                    "pid": info.pid,
+                    "status": info.status,
+                    "command": info.command,
+                }
         return {
             "instance": instance,
-            "container": container,
+            "process": process,
         }
+
+    async def stop_process(self, instance_id: int, user_id: int) -> IntegrationInstance:
+        instance = await self.get_instance(instance_id, user_id)
+        if instance.process_pid:
+            self._stdio.stop(instance.process_pid)
+        instance.process_status = "stopped"
+        instance.process_pid = None
+        await self._instance_repo.update(instance)
+        return instance
+
+
+from datetime import datetime

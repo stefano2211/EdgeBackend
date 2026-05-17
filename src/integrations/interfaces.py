@@ -7,7 +7,6 @@ implementations.  This keeps the codebase testable and aligned with SOLID.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Any
 
 
@@ -30,53 +29,30 @@ class ICredentialVault(ABC):
 
 
 # ---------------------------------------------------------------------------
-# Docker runner
+# Stdio runner (replaces IDockerRunner)
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class DockerConfig:
-    """Immutable description of a container to run."""
-
-    image: str
-    name: str
-    env: dict[str, str]
-    network: str
-    command: list[str] | None = None
-    ports: dict[int, int] | None = None
-    restart_policy: dict[str, Any] | None = None
-
-
-@dataclass(frozen=True)
-class ContainerInfo:
-    """Lightweight snapshot of a running (or failed) container."""
-
-    name: str
-    status: str
-    endpoint: str | None = None
-    error: str | None = None
-
-
-class IDockerRunner(ABC):
-    """Lifecycle management for MCP server containers."""
+class IStdioRunner(ABC):
+    """Lifecycle management for MCP server stdio processes."""
 
     @abstractmethod
-    async def create_and_start(self, cfg: DockerConfig) -> ContainerInfo:
-        """Pull image if missing, create container, start it, return snapshot."""
+    def start(
+        self,
+        command: str,
+        args: list[str] | None,
+        env: dict[str, str] | None,
+    ) -> Any:
+        """Launch a stdio process and return a handle (e.g. ProcessInfo)."""
         ...
 
     @abstractmethod
-    async def stop(self, name: str) -> None:
-        """Gracefully stop a running container."""
+    def stop(self, pid: int) -> None:
+        """Gracefully stop a running process."""
         ...
 
     @abstractmethod
-    async def remove(self, name: str) -> None:
-        """Remove a stopped container permanently."""
-        ...
-
-    @abstractmethod
-    async def inspect(self, name: str) -> ContainerInfo:
-        """Return current snapshot (status + endpoint)."""
+    def is_running(self, pid: int) -> bool:
+        """Return True if the process is still alive."""
         ...
 
 
@@ -85,7 +61,7 @@ class IDockerRunner(ABC):
 # ---------------------------------------------------------------------------
 
 class IAuthStrategy(ABC):
-    """Transform raw user credentials into Docker env-vars."""
+    """Transform raw user credentials into a flat dict for storage / injection."""
 
     @abstractmethod
     def validate(self, credentials: dict[str, str]) -> bool:
@@ -93,27 +69,13 @@ class IAuthStrategy(ABC):
         ...
 
     @abstractmethod
-    def to_env_vars(
-        self, credentials: dict[str, str], mapping: dict[str, str]
-    ) -> dict[str, str]:
-        """Map internal credential keys to environment variable names."""
+    def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
+        """Return a flat dict ready for DB storage (keys = credential_key)."""
         ...
 
-
-# ---------------------------------------------------------------------------
-# MCP server configuration factory
-# ---------------------------------------------------------------------------
-
-class IMCPServerConfig(ABC):
-    """Produce Docker configuration for a specific MCP server flavour."""
-
     @abstractmethod
-    def get_docker_config(
-        self,
-        instance: Any,  # IntegrationInstance (avoid circular import)
-        env_vars: dict[str, str],
-    ) -> DockerConfig:
-        """Build a DockerConfig tailored to this server type."""
+    def supports_refresh(self) -> bool:
+        """Whether this strategy supports OAuth2-style token refresh."""
         ...
 
 

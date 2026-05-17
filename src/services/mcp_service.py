@@ -301,6 +301,9 @@ class MCPService:
         tool_name: str,
         arguments: Dict[str, Any],
         is_stdio: bool = False,
+        stdio_command: str | None = None,
+        stdio_args: list[str] | None = None,
+        stdio_env: dict[str, str] | None = None,
         transport_type: str = "mcp",
         method: str = "GET",
         schema_hints: Optional[dict] = None,
@@ -360,7 +363,11 @@ class MCPService:
                 )
 
             if is_stdio:
-                server_params = StdioServerParameters(command="python", args=[base_url])
+                server_params = StdioServerParameters(
+                    command=stdio_command or "python",
+                    args=stdio_args or [base_url],
+                    env=stdio_env,
+                )
                 async with stdio_client(server_params) as (read, write):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
@@ -433,6 +440,9 @@ class MCPService:
         self,
         base_url: str,
         is_stdio: bool = False,
+        stdio_command: str | None = None,
+        stdio_args: list[str] | None = None,
+        stdio_env: dict[str, str] | None = None,
         is_resource: bool = False,
         method: str = "GET",
     ) -> List[Dict[str, Any]]:
@@ -447,7 +457,11 @@ class MCPService:
 
         try:
             if is_stdio:
-                server_params = StdioServerParameters(command="python", args=[base_url])
+                server_params = StdioServerParameters(
+                    command=stdio_command or "python",
+                    args=stdio_args or [base_url],
+                    env=stdio_env,
+                )
                 async with stdio_client(server_params) as (read, write):
                     async with ClientSession(read, write) as session:
                         await session.initialize()

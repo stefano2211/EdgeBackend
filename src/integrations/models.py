@@ -43,13 +43,10 @@ class IntegrationCatalog(Base):
         String(20), nullable=False
     )  # "official" | "custom" | "rest_bridge"
 
-    # Official MCP server (npx / uvx)
-    official_package: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    official_command: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    official_args: Mapped[list | None] = mapped_column(JSON, nullable=True)
-
-    # Custom MCP server
-    custom_module_path: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # --- Runtime command (replaces Docker fields) ---
+    command: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    args: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    env_prefix: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # REST bridge fallback
     rest_bridge_url_template: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -60,11 +57,6 @@ class IntegrationCatalog(Base):
     )  # "token" | "oauth2" | "basic" | "api_key" | "none"
     auth_env_var_mapping: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     auth_setup_guide_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # --- Docker / runtime ---
-    docker_image: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    docker_command: Mapped[list | None] = mapped_column(JSON, nullable=True)
-    requires_docker: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # --- Flags ---
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -98,12 +90,12 @@ class IntegrationInstance(Base):
     instance_name: Mapped[str] = mapped_column(String(100), nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # --- Docker runtime ---
-    container_name: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
-    container_status: Mapped[str | None] = mapped_column(
+    # --- Stdio runtime (replaces Docker fields) ---
+    process_pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    process_status: Mapped[str | None] = mapped_column(
         String(20), nullable=True
-    )  # "created" | "running" | "stopped" | "error"
-    container_endpoint: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    )  # "running" | "stopped" | "error"
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # --- Context availability ---
     available_in_chat: Mapped[bool] = mapped_column(Boolean, default=True)

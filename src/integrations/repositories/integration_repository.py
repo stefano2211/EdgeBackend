@@ -6,6 +6,8 @@ All methods are async and accept / return domain models.
 
 from __future__ import annotations
 
+from datetime import timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -106,13 +108,17 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
         await self._session.commit()
 
     async def save_credentials(
-        self, instance_id: int, encrypted: dict[str, bytes]
+        self, instance_id: int, encrypted: dict[str, bytes], expires_at_map: dict[str, Any] | None = None
     ) -> None:
         for key, value in encrypted.items():
+            expires_at = expires_at_map.get(key) if expires_at_map else None
+            if expires_at is not None and expires_at.tzinfo is not None:
+                expires_at = expires_at.astimezone(timezone.utc).replace(tzinfo=None)
             cred = IntegrationCredential(
                 instance_id=instance_id,
                 credential_key=key,
                 encrypted_value=value,
+                expires_at=expires_at,
             )
             self._session.add(cred)
         await self._session.commit()

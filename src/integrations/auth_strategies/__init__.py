@@ -1,7 +1,7 @@
-"""Auth strategies — map raw credentials to Docker env vars.
+"""Auth strategies — map raw credentials to a flat dict for storage and injection.
 
 Each strategy knows how to validate a payload and translate it into the
-key names expected by the target MCP server container.
+key names expected by the target MCP server (via env_prefix).
 """
 
 from __future__ import annotations
@@ -16,19 +16,17 @@ logger = logging.getLogger(__name__)
 class TokenAuthStrategy(IAuthStrategy):
     """Simple bearer / PAT / API-key strategy."""
 
+    REQUIRED = {"token"}
+
     def validate(self, credentials: dict[str, str]) -> bool:
         return bool(credentials.get("token"))
 
-    def to_env_vars(
-        self, credentials: dict[str, str], mapping: dict[str, str]
-    ) -> dict[str, str]:
-        # mapping: {"GITHUB_PERSONAL_ACCESS_TOKEN": "token"}
-        # credentials: {"token": "ghp_xxx"}
-        env: dict[str, str] = {}
-        for env_var, cred_key in mapping.items():
-            if cred_key in credentials:
-                env[env_var] = credentials[cred_key]
-        return env
+    def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
+        """Return flat dict ready for DB."""
+        return {"token": credentials["token"]}
+
+    def supports_refresh(self) -> bool:
+        return False
 
 
 class OAuth2AuthStrategy(IAuthStrategy):
@@ -43,47 +41,60 @@ class OAuth2AuthStrategy(IAuthStrategy):
             return False
         return True
 
-    def to_env_vars(
-        self, credentials: dict[str, str], mapping: dict[str, str]
-    ) -> dict[str, str]:
-        # mapping: {"GMAIL_REFRESH_TOKEN": "refresh_token", ...}
-        env: dict[str, str] = {}
-        for env_var, cred_key in mapping.items():
-            if cred_key in credentials:
-                env[env_var] = credentials[cred_key]
-        return env
+    def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
+        """Return flat dict ready for DB.
+
+        For OAuth2 we store:
+          - refresh_token (long-lived)
+          - client_id
+          - client_secret
+          - access_token (short-lived, will be refreshed)
+        """
+        result = {
+            "refresh_token": credentials["refresh_token"],
+            "client_id": credentials["client_id"],
+            "client_secret": credentials["client_secret"],
+        }
+        # access_token may be present after an initial OAuth flow
+        if "access_token" in credentials:
+            result["access_token"] = credentials["access_token"]
+        return result
+
+    def supports_refresh(self) -> bool:
+        return True
 
 
 class BasicAuthStrategy(IAuthStrategy):
     """User + password strategy."""
 
+    REQUIRED = {"username", "password"}
+
     def validate(self, credentials: dict[str, str]) -> bool:
         return bool(credentials.get("username") and credentials.get("password"))
 
-    def to_env_vars(
-        self, credentials: dict[str, str], mapping: dict[str, str]
-    ) -> dict[str, str]:
-        env: dict[str, str] = {}
-        for env_var, cred_key in mapping.items():
-            if cred_key in credentials:
-                env[env_var] = credentials[cred_key]
-        return env
+    def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
+        return {
+            "username": credentials["username"],
+            "password": credentials["password"],
+        }
+
+    def supports_refresh(self) -> bool:
+        return False
 
 
 class ApiKeyAuthStrategy(IAuthStrategy):
     """Generic API-key strategy (e.g. Notion)."""
 
+    REQUIRED = {"api_key"}
+
     def validate(self, credentials: dict[str, str]) -> bool:
         return bool(credentials.get("api_key"))
 
-    def to_env_vars(
-        self, credentials: dict[str, str], mapping: dict[str, str]
-    ) -> dict[str, str]:
-        env: dict[str, str] = {}
-        for env_var, cred_key in mapping.items():
-            if cred_key in credentials:
-                env[env_var] = credentials[cred_key]
-        return env
+    def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
+        return {"api_key": credentials["api_key"]}
+
+    def supports_refresh(self) -> bool:
+        return False
 
 
 class NoAuthStrategy(IAuthStrategy):
@@ -92,10 +103,11 @@ class NoAuthStrategy(IAuthStrategy):
     def validate(self, credentials: dict[str, str]) -> bool:
         return True
 
-    def to_env_vars(
-        self, credentials: dict[str, str], mapping: dict[str, str]
-    ) -> dict[str, str]:
+    def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
         return {}
+
+    def supports_refresh(self) -> bool:
+        return False
 
 
 # ---------------------------------------------------------------------------
