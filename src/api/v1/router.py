@@ -23,6 +23,7 @@ from src.api.v1.routers import (
     system,
     tools,
     users,
+    webhooks,
 )
 from src.integrations import routers as integrations
 
@@ -48,4 +49,5 @@ router.include_router(admin.router)
 router.include_router(db_collector.router)
 router.include_router(domain_config.router)
 router.include_router(metrics.router)
+router.include_router(webhooks.router)
 router.include_router(integrations.router)

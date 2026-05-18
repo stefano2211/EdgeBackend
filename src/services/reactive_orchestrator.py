@@ -148,7 +148,7 @@ class ReactiveOrchestrator:
             await self._emit_log(event.id, f"Pipeline error: {exc}", level="error")
             event.status = "failed"
             await session.commit()
-            await self._broadcast_event(event)
+            await self._refresh_and_broadcast(event, session)
 
     async def execute(self, event: Event, session: AsyncSession) -> None:
         """Execute approved plan using the reactive orchestrator."""
@@ -264,7 +264,7 @@ class ReactiveOrchestrator:
             event.status = "failed"
             event.actions_taken = actions
             await session.commit()
-            await self._broadcast_event(event)
+            await self._refresh_and_broadcast(event, session)
 
             # ── Mandatory notification: execution failed ──
             from src.services.notification_service import NotificationService

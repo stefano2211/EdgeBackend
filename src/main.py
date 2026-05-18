@@ -114,7 +114,9 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     from src.api.v1.router import router as api_v1_router
+    from src.api.v1.routers.webhooks import public_router as webhook_public_router
     app.include_router(api_v1_router)
+    app.include_router(webhook_public_router)
 
     return app
 

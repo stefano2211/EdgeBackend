@@ -22,6 +22,7 @@ from src.persistencia.models.domain_config import DomainConfig
 from src.persistencia.models.event_correlation import EventCorrelationGroup
 from src.persistencia.models.event_metric import EventMetric
 from src.persistencia.models.event_job import EventJob
+from src.persistencia.models.webhook_source import WebhookSource
 from src.persistencia.models.user_feedback import UserFeedback
 
 __all__ = [
@@ -50,5 +51,6 @@ __all__ = [
     "EventCorrelationGroup",
     "EventMetric",
     "EventJob",
+    "WebhookSource",
     "UserFeedback",
 ]
