@@ -84,3 +84,21 @@ class EventRepository(BaseRepository[Event]):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_recent_by_dedup_key(
+        self, dedup_key: str, minutes: int = 5
+    ) -> Event | None:
+        """Check for a recent non-suppressed event with the same dedup key."""
+        from datetime import datetime, timedelta
+
+        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        stmt = (
+            select(Event)
+            .where(Event.dedup_key == dedup_key)
+            .where(Event.created_at >= cutoff)
+            .where(Event.status != "suppressed")
+            .order_by(Event.id.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

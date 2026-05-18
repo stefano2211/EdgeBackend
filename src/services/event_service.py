@@ -7,7 +7,6 @@ SOLID:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -34,22 +33,6 @@ from src.services.reactive_orchestrator import ReactiveOrchestrator
 from src.services._helpers import commit_and_refresh
 
 logger = logging.getLogger(__name__)
-
-
-async def _with_retry(coro_func, max_retries: int = 3, base_delay: float = 1.0):
-    """Run an async coroutine with exponential backoff retries."""
-    last_exc = None
-    for attempt in range(1, max_retries + 1):
-        try:
-            return await coro_func()
-        except Exception as exc:
-            last_exc = exc
-            if attempt == max_retries:
-                break
-            delay = base_delay * (2 ** (attempt - 1))
-            logger.warning("Retry %d/%d after %.1fs due to %s", attempt, max_retries, delay, exc)
-            await asyncio.sleep(delay)
-    raise last_exc
 
 
 class EventService:
@@ -196,12 +179,30 @@ class EventService:
 
     async def _persist_and_start(self, event: Event) -> None:
         """Persist event, broadcast creation, and start analysis pipeline."""
+        # Synchronous dedup check before expensive analysis
+        existing = await self.repo.get_recent_by_dedup_key(event.dedup_key, minutes=5)
+        if existing:
+            event.status = "suppressed"
+            event.suppression_reason = "duplicate"
+            await self.repo.create(event)
+            await commit_and_refresh(self.session, event)
+            await self._broadcast_event_update(event)
+            logger.info(
+                "Event deduplicated immediately | dedup_key=%s existing_event=%s",
+                event.dedup_key,
+                existing.id,
+            )
+            return
+
         await self.repo.create(event)
         await commit_and_refresh(self.session, event)
         await self._broadcast_event_update(event)
 
-        # Start analysis in background with isolated session
-        asyncio.create_task(self._run_analysis_background(event.id))
+        # Enqueue durable background job instead of fire-and-forget task
+        from src.services.event_job_tracker import get_job_tracker
+        await get_job_tracker().enqueue(
+            event.id, "analysis", self._build_analysis_coro(event.id)
+        )
 
     # ------------------------------------------------------------------
     # Pipeline Actions
@@ -218,7 +219,11 @@ class EventService:
         await self.session.commit()
         await self._refresh_and_broadcast(event)
 
-        asyncio.create_task(self._run_execution_background(event_id))
+        # Enqueue durable background job for execution
+        from src.services.event_job_tracker import get_job_tracker
+        await get_job_tracker().enqueue(
+            event_id, "execution", self._build_execution_coro(event_id)
+        )
         return event
 
     async def reject_event(self, event_id: int, payload: ApprovalPayload | None = None) -> Event:
@@ -251,34 +256,42 @@ class EventService:
         logger.info("Feedback recorded for event=%s: %s", event_id, payload.feedback_type)
 
     # ------------------------------------------------------------------
-    # Background tasks (isolated sessions)
+    # Background job factories (passed to EventJobTracker)
     # ------------------------------------------------------------------
 
-    async def _run_analysis_background(self, event_id: int) -> None:
+    def _build_analysis_coro(self, event_id: int):
+        """Return a coroutine factory for the analysis job."""
         async def _analysis():
             async with AsyncSessionLocal() as session:
                 orchestrator = ReactiveOrchestrator(get_event_broadcast())
                 event = await EventRepository(session).get_by_id(event_id)
-                if event:
+                if event and event.status not in ("suppressed", "failed"):
                     await orchestrator.analyze(event, session)
+                else:
+                    logger.warning(
+                        "Analysis skipped for event %s (status=%s)",
+                        event_id,
+                        event.status if event else "deleted",
+                    )
 
-        try:
-            await _with_retry(_analysis, max_retries=3, base_delay=1.0)
-        except Exception:
-            logger.exception("Background analysis failed for event %s after retries", event_id)
+        return _analysis
 
-    async def _run_execution_background(self, event_id: int) -> None:
+    def _build_execution_coro(self, event_id: int):
+        """Return a coroutine factory for the execution job."""
         async def _execution():
             async with AsyncSessionLocal() as session:
                 orchestrator = ReactiveOrchestrator(get_event_broadcast())
                 event = await EventRepository(session).get_by_id(event_id)
-                if event:
+                if event and event.status == "executing":
                     await orchestrator.execute(event, session)
+                else:
+                    logger.warning(
+                        "Execution skipped for event %s (status=%s)",
+                        event_id,
+                        event.status if event else "deleted",
+                    )
 
-        try:
-            await _with_retry(_execution, max_retries=3, base_delay=1.0)
-        except Exception:
-            logger.exception("Background execution failed for event %s after retries", event_id)
+        return _execution
 
     # ------------------------------------------------------------------
     # SSE helpers

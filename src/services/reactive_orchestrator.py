@@ -2,8 +2,8 @@
 
 Architecture (2-phase):
   Phase 1 — S2-Triage:      routing decision (fast LLM call, JSON)
-  Phase 2 — S2-Autonomous:  autonomous orchestrator delegates to rag-agent, mcp-agent,
-                             historical-agent and vl-agent via task() (flat hierarchy)
+  Phase 2 — S2-Autonomous:  autonomous orchestrator delegates to rag-agent, mcp-agent
+                             and historical-agent via task() (flat hierarchy)
 
 SOLID:
   - SRP: Each phase is a private method.
@@ -30,7 +30,6 @@ from src.ia.prompts.reactive import (
 )
 from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
-from src.services.browser_manager import BrowserManager
 from src.services.event_broadcast import EventBroadcastManager
 from src.services.reactive_config_service import ReactiveConfigService
 from src.services._helpers import commit_and_refresh
@@ -47,7 +46,6 @@ class ReactiveOrchestrator:
         broadcaster: EventBroadcastManager,
     ) -> None:
         self._broadcaster = broadcaster
-        self._browser_manager = BrowserManager.get_instance("reactive")
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  PUBLIC API
@@ -57,10 +55,15 @@ class ReactiveOrchestrator:
         """Run the 2-phase reactive analysis pipeline.
 
         Phase 1 — S2 Triage: fast LLM call producing routing hints (JSON).
-            Phase 2 — S2 Autonomous: DeepAgents orchestrator with rag-agent, mcp-agent,
-                  historical-agent and vl-agent as direct sub-agents. S2
-                  decides which to invoke via task() and synthesizes the results.
+            Phase 2 — S2 Autonomous: DeepAgents orchestrator with rag-agent, mcp-agent
+                  and historical-agent as direct sub-agents. S2 decides which
+                  to invoke via task() and synthesizes the results.
         """
+        # Transition to analyzing immediately so correlation engine can filter it
+        event.status = "analyzing"
+        await session.commit()
+        await self._refresh_and_broadcast(event, session)
+
         event_query = self._build_event_query(event)
 
         # Load user's reactive configuration
@@ -172,19 +175,6 @@ class ReactiveOrchestrator:
         )
 
 
-        # Set up isolated browser emitter for the reactive pipeline
-        controller = self._browser_manager.get_controller()
-
-        async def _reactive_emitter(payload: dict) -> None:
-            if "screenshot" in payload:
-                await self._emit("vl_screenshot", event.id, payload["screenshot"])
-            elif "thought" in payload:
-                await self._emit("vl_thought", event.id, {"thought": payload["thought"]})
-                await self._emit_log(event.id, f"VL thought: {payload['thought'][:120]}", level="debug")
-
-        controller.set_event_emitter(_reactive_emitter)
-        controller.set_active_thread_id(thread_id)
-
         config = {"configurable": {"thread_id": thread_id}}
         actions: list[dict] = []
         full_content = ""
@@ -254,9 +244,6 @@ class ReactiveOrchestrator:
                         if pending_task_agent == "historical-agent":
                             await self._emit("historical_result", event.id, {"result": str(result)})
                             await self._emit_log(event.id, "Historical analysis received", level="info")
-                        elif pending_task_agent == "vl-agent":
-                            await self._emit("vl_result", event.id, {"result": str(result)})
-                            await self._emit_log(event.id, "VL agent result received", level="info")
                         elif pending_task_agent == "rag-agent":
                             await self._emit("rag_result", event.id, {"result": str(result)})
                             await self._emit_log(event.id, "RAG result received", level="info")
@@ -376,15 +363,6 @@ class ReactiveOrchestrator:
         )
 
 
-        # Hook up the isolated reactive browser controller for vl-agent screenshots
-        controller = self._browser_manager.get_controller()
-        async def _vl_emitter(payload: dict) -> None:
-            if "screenshot" in payload:
-                await self._emit("vl_screenshot", event.id, payload["screenshot"])
-            elif "thought" in payload:
-                await self._emit("vl_thought", event.id, {"thought": payload["thought"]})
-        controller.set_event_emitter(_vl_emitter)
-
         # Pass triage hints + event as the user message so S2 can make
         # an informed delegation decision without being hardcoded to follow it.
         triage_str = json.dumps(triage, ensure_ascii=False, indent=2)
@@ -439,8 +417,6 @@ class ReactiveOrchestrator:
                         await self._emit("historical_result", event.id, {"result": str(msg.content)})
                         await self._emit_log(event.id, "Historical analysis received", level="info")
                         event.agent_analysis = str(msg.content)
-                    elif agent_name == "vl-agent":
-                        await self._emit("vl_result", event.id, {"result": str(msg.content)})
             
             return str(msgs[-1].content).strip() if msgs else ""
         except Exception as exc:

@@ -30,6 +30,15 @@ async def lifespan(app: FastAPI):
         await init_memory()
     except Exception as exc:
         logger.warning("Memory layer not available: %s", exc)
+    # Initialize durable job tracker for reactive event pipeline
+    try:
+        from src.services.event_job_tracker import init_job_tracker, get_job_tracker
+
+        await init_job_tracker()
+        await get_job_tracker().recover_on_startup()
+        logger.info("Event job tracker initialized and recovery completed")
+    except Exception as exc:
+        logger.warning("Event job tracker not started: %s", exc)
     # Start Redis-backed SSE subscriber for multi-worker broadcast
     try:
         broadcast = get_event_broadcast()

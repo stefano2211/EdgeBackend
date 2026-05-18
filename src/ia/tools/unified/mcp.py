@@ -17,17 +17,38 @@ from src.core.logging import logging
 logger = logging.getLogger(__name__)
 
 # ── Configuration maps per context ──
+class _LRUCache:
+    """Simple bounded dict cache with FIFO eviction."""
+
+    def __init__(self, maxsize: int = 256) -> None:
+        self._maxsize = maxsize
+        self._data: dict = {}
+        self._order: list = []
+
+    def get(self, key):
+        return self._data.get(key)
+
+    def set(self, key, value):
+        if key in self._data:
+            self._order.remove(key)
+        elif len(self._data) >= self._maxsize:
+            oldest = self._order.pop(0)
+            del self._data[oldest]
+        self._data[key] = value
+        self._order.append(key)
+
+
 _CONFIG = {
     "chat": {
         "repo_cls": "src.persistencia.repositories.tool_repository.ToolRepository",
         "source_cls": "src.persistencia.models.tool_config.MCPSource",
-        "cache": {},
+        "cache": _LRUCache(maxsize=256),
         "lock": asyncio.Lock(),
     },
     "reactive": {
         "repo_cls": "src.persistencia.repositories.reactive_tool_repository.ReactiveToolRepository",
         "source_cls": "src.persistencia.models.reactive_mcp_source.ReactiveMCPSource",
-        "cache": {},
+        "cache": _LRUCache(maxsize=256),
         "lock": asyncio.Lock(),
     },
 }
@@ -106,8 +127,9 @@ async def _mcp_execute_impl(
         # URL resolution with per-context cache
         if execution_url and "://" not in execution_url:
             cache_key = f"{tool_config.source_id}:{execution_url}"
-            if cache_key in cache:
-                execution_url = cache[cache_key]
+            cached_url = cache.get(cache_key)
+            if cached_url is not None:
+                execution_url = cached_url
             else:
                 source_obj = await session.get(SourceCls, tool_config.source_id)
                 if source_obj and source_obj.url:
@@ -115,7 +137,7 @@ async def _mcp_execute_impl(
                     path = execution_url.lstrip("/")
                     execution_url = f"{base}/{path}"
                     async with lock:
-                        cache[cache_key] = execution_url
+                        cache.set(cache_key, execution_url)
 
         if execution_url and "://" in execution_url:
             scheme, rest = execution_url.split("://", 1)
