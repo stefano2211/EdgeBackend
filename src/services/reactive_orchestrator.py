@@ -474,13 +474,29 @@ class ReactiveOrchestrator:
         plan = ""
         execute = ""
 
-        if "---PLAN---" in content:
-            parts = content.split("---PLAN---", 1)
+        # Buscar el separador de plan con fallback a formatos comunes
+        plan_tokens = ["---PLAN---", "## Plan de Remediación", "## Plan de Ejecución", "Plan de Remediación", "Plan de Ejecución", "## Plan de Remediación / Ejecución"]
+        plan_token_used = None
+        for token in plan_tokens:
+            if token in content:
+                plan_token_used = token
+                break
+
+        if plan_token_used:
+            parts = content.split(plan_token_used, 1)
             analysis = parts[0].strip()
             rest = parts[1].strip()
 
-            if "---EXECUTE---" in rest:
-                plan_parts = rest.split("---EXECUTE---", 1)
+            # Buscar el separador de ejecución autónoma con fallback
+            execute_tokens = ["---EXECUTE---", "## Instrucción de Ejecución Autónoma", "Instrucción de Ejecución Autónoma"]
+            execute_token_used = None
+            for token in execute_tokens:
+                if token in rest:
+                    execute_token_used = token
+                    break
+
+            if execute_token_used:
+                plan_parts = rest.split(execute_token_used, 1)
                 plan = plan_parts[0].strip()
                 execute = plan_parts[1].strip()
             else:

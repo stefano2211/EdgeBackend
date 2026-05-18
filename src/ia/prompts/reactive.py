@@ -111,10 +111,8 @@ def build_reactive_s2_orchestrator_prompt(
     )
 
     subagent_lines.append(
-        '- task("vl-agent", ...) → Agente autónomo de Computer Use (Observe-Think-Act). '
-        "Puede navegar cualquier GUI (navegador web, dashboards, SAP/ERP, email, interfaces de monitoreo), "
-        "leer valores, llenar formularios, hacer clicks. "
-        "Es el ÚNICO agente que puede interactuar con pantallas y sitios web."
+        '- task("vl-agent", ...) [DESACTIVADO TEMPORALMENTE] → Agente autónomo de Computer Use. '
+        "ESTÁ DESACTIVADO POR MANTENIMIENTO. NO DELEGAR TAREAS A ESTE AGENTE."
     )
 
     subagents_section = "\n".join(subagent_lines)
