@@ -49,6 +49,15 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Integration catalog auto-seed skipped: %s", exc)
 
+    # Start correlation worker (periodic event dedup/grouping)
+    try:
+        from src.workers.correlation_worker import correlation_worker
+
+        asyncio.create_task(correlation_worker())
+        logger.info("Correlation worker started")
+    except Exception as exc:
+        logger.warning("Correlation worker not started: %s", exc)
+
     # Cleanup any orphaned stdio processes on shutdown
     try:
         from src.integrations.stdio_runner import StdioRunner
@@ -66,7 +75,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="EdgeBackend",
-        description="Edge AI Monolith with Digital Optimus Architecture",
+        description="Aura AI — Event-Driven AIOps Backend",
         version="0.1.0",
         lifespan=lifespan,
     )

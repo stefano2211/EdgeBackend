@@ -58,6 +58,7 @@ def create_orchestrator(
     enable_knowledge: bool = True,
     enable_mcp: bool = True,
     enabled_tool_names: list[str] | None = None,
+    domain: str = "generic",
 ):
     """Create a DeepAgents orchestrator with registered sub-agents.
 
@@ -109,7 +110,9 @@ def create_orchestrator(
     if system_prompt_override:
         prompt = system_prompt_override
     elif context == "reactive":
-        prompt = build_reactive_s2_orchestrator_prompt(has_rag=has_rag, has_mcp=has_mcp)
+        prompt = build_reactive_s2_orchestrator_prompt(
+            has_rag=has_rag, has_mcp=has_mcp, domain=domain
+        )
     else:
         prompt = build_orchestrator_prompt(
             subagent_descriptions=SubagentRegistry.get_descriptions(names=actual_names),
@@ -150,6 +153,7 @@ def create_reactive_orchestrator(
     enable_mcp: bool = True,
     enabled_tool_names: list[str] | None = None,
     system_prompt_override: str | None = None,
+    domain: str = "generic",
 ):
     """Backward-compatible wrapper for reactive orchestrator creation."""
     return create_orchestrator(
@@ -159,4 +163,5 @@ def create_reactive_orchestrator(
         enable_mcp=enable_mcp,
         enabled_tool_names=enabled_tool_names,
         system_prompt_override=system_prompt_override,
+        domain=domain,
     )

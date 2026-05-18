@@ -9,8 +9,10 @@ from src.api.v1.routers import (
     conversations,
     db_collector,
     documents,
+    domain_config,
     events,
     knowledge,
+    metrics,
     models,
     prompts,
     reactive_config,
@@ -44,4 +46,6 @@ router.include_router(reactive_credentials.router)
 router.include_router(system.router)
 router.include_router(admin.router)
 router.include_router(db_collector.router)
+router.include_router(domain_config.router)
+router.include_router(metrics.router)
 router.include_router(integrations.router)

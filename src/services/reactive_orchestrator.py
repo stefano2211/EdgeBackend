@@ -1,4 +1,4 @@
-"""Reactive event pipeline — Digital Optimus v2.
+"""Reactive event pipeline — Aura AI.
 
 Architecture (2-phase):
   Phase 1 — S2-Triage:      routing decision (fast LLM call, JSON)
@@ -86,8 +86,8 @@ class ReactiveOrchestrator:
             await self._emit_log(
                 event.id,
                 f"Phase 1: Triage → urgency={triage.get('urgency')} "
-                f"needs_historical={triage.get('needs_s1')} "
-                f"needs_industrial={triage.get('needs_industrial')}",
+                f"needs_historical={triage.get('needs_historical')} "
+                f"needs_realtime={triage.get('needs_realtime_data')}",
                 level="info",
             )
 
@@ -106,6 +106,8 @@ class ReactiveOrchestrator:
             )
 
 
+            if not synthesis.strip():
+                raise RuntimeError("El orquestador no pudo generar un plan (posible fallo interno del agente o timeout).")
             analysis_text, plan, execute = self._parse_sections(synthesis)
 
             if analysis_text:
@@ -128,6 +130,16 @@ class ReactiveOrchestrator:
             await self._refresh_and_broadcast(event, session)
             await self._emit_log(event.id, "DEV_MODE PAUSED — awaiting approval", level="info")
 
+            # ── Mandatory notification: analysis complete ──
+            from src.services.notification_service import NotificationService
+            ns = NotificationService(session)
+            try:
+                await ns.notify_analysis_complete(event)
+                await self._emit_log(event.id, "Notification sent: analysis complete", level="info")
+            except Exception as notify_exc:
+                logger.warning("Failed to send analysis notification: %s", notify_exc)
+                await self._emit_log(event.id, f"Notification failed: {notify_exc}", level="warn")
+
         except Exception as exc:
             logger.exception("Analysis pipeline failed for event %s", event.id)
             await self._emit_log(event.id, f"Pipeline error: {exc}", level="error")
@@ -136,51 +148,13 @@ class ReactiveOrchestrator:
             await self._broadcast_event(event)
 
     async def execute(self, event: Event, session: AsyncSession) -> None:
-        """Execute approved plan using orchestrator + VL agent for Gmail report."""
+        """Execute approved plan using the reactive orchestrator."""
         thread_id = f"event-{event.id}"
         base_instruction = self._extract_execute_instruction(event) or event.agent_plan or "Execute the plan."
 
-        # Fetch available credentials so the agent knows what keys exist
-        from src.services.credential_service import CredentialService
-        cred_service = CredentialService(session)
-        user_creds = await cred_service.list_for_user(event.triggered_by_user_id)
-        cred_keys = [c.key_identifier for c in user_creds]
-        cred_catalog = "\n".join(
-            f"  - {c.key_identifier}: {c.name}" + (f" ({c.description})" if c.description else "")
-            for c in user_creds
-        ) if user_creds else "  (No credentials configured)"
+        messages = [{"role": "user", "content": base_instruction}]
 
-        instruction = (
-            f"{base_instruction}\n\n"
-            "---\n"
-            "MANDATORY FINAL STEP — Gmail Report:\n"
-            "After completing all other steps above, you MUST delegate to the "
-            "vl-agent (via task()) to send a summary report by email.\n\n"
-            "AVAILABLE CREDENTIALS (use get_secret_credential tool to retrieve values):\n"
-            f"{cred_catalog}\n\n"
-            "The vl-agent must:\n"
-            "1. Open a browser and navigate to https://mail.google.com\n"
-            "2. Log in using stored credentials:\n"
-            "   - Call get_secret_credential(key_identifier='GMAIL_CREDS') (or the relevant key from the catalog above).\n"
-            "   - The tool will return a JSON object with fields like 'email' and 'password'.\n"
-            "   - Use those fields to type the email, click Next, and type the password.\n"
-            "   - NEVER use ask_user for credentials — always use get_secret_credential\n"
-            f"3. Compose a new email to erastellius@gmail.com\n"
-            f"4. Subject: '[Digital Optimus] Incident Report — {event.title}'\n"
-            "5. Body: A professional summary of this event including:\n"
-            f"   - Event: {event.title}\n"
-            f"   - Severity: {event.severity}\n"
-            f"   - Description: {event.description}\n"
-            "   - Analysis summary (from the System-2 reasoning above)\n"
-            "   - Actions taken / remediation plan\n"
-            "   - Timestamp of resolution\n"
-            "6. Send the email\n"
-            "This step is NON-NEGOTIABLE. Do NOT skip it.\n"
-        )
-
-        messages = [{"role": "user", "content": instruction}]
-
-        await self._emit("vlm_prompt", event.id, {"prompt": instruction})
+        await self._emit("vlm_prompt", event.id, {"prompt": base_instruction})
         await self._emit_log(event.id, "Execution pipeline started", level="info")
 
         # Load user's reactive configuration
@@ -304,6 +278,14 @@ class ReactiveOrchestrator:
             event.actions_taken = actions
             await session.commit()
             await self._broadcast_event(event)
+
+            # ── Mandatory notification: execution failed ──
+            from src.services.notification_service import NotificationService
+            ns = NotificationService(session)
+            try:
+                await ns.notify_execution_failed(event, exc)
+            except Exception as notify_exc:
+                logger.warning("Failed to send failure notification: %s", notify_exc)
             return
 
         # Success
@@ -313,6 +295,16 @@ class ReactiveOrchestrator:
         await session.commit()
         await self._refresh_and_broadcast(event, session)
         await self._emit_log(event.id, "Event completed successfully", level="info")
+
+        # ── Mandatory notification: execution complete ──
+        from src.services.notification_service import NotificationService
+        ns = NotificationService(session)
+        try:
+            await ns.notify_execution_complete(event)
+            await self._emit_log(event.id, "Notification sent: execution complete", level="info")
+        except Exception as notify_exc:
+            logger.warning("Failed to send execution notification: %s", notify_exc)
+            await self._emit_log(event.id, f"Notification failed: {notify_exc}", level="warn")
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  PHASE 1 — S2 TRIAGE
@@ -349,16 +341,16 @@ class ReactiveOrchestrator:
             triage = {
                 "event_type": "general",
                 "urgency": "medium",
-                "needs_s1": True,
-                "needs_industrial": True,
-                "needs_vl_post_approval": False,
+                "needs_historical": True,
+                "needs_realtime_data": True,
+                "needs_visual_verification": False,
                 "justification": "Parse error — defaulting to full analysis.",
             }
 
         # Ensure defaults
-        triage.setdefault("needs_s1", True)
-        triage.setdefault("needs_industrial", True)
-        triage.setdefault("needs_vl_post_approval", False)
+        triage.setdefault("needs_historical", True)
+        triage.setdefault("needs_realtime_data", True)
+        triage.setdefault("needs_visual_verification", False)
         return triage
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -380,6 +372,7 @@ class ReactiveOrchestrator:
             enable_knowledge=bool(enabled_kb_ids),
             enable_mcp=bool(enabled_tool_names),
             enabled_tool_names=enabled_tool_names,
+            domain=event.domain or "generic",
         )
 
 
@@ -460,16 +453,19 @@ class ReactiveOrchestrator:
 
     def _build_event_query(self, event: Event) -> str:
         payload_str = ""
-        if event.raw_payload:
-            payload_str = json.dumps(event.raw_payload, indent=2)
+        if event.body:
+            payload_str = json.dumps(event.body, indent=2)
 
         return (
             f"Event ID: {event.id}\n"
-            f"Severity: {event.severity}\n"
+            f"Event Type: {event.event_type}\n"
+            f"Domain: {event.domain or 'generic'}\n"
+            f"Source: {event.source}\n"
+            f"Severity: {event.severity_text} ({event.severity_number})\n"
             f"Title: {event.title}\n"
             f"Description: {event.description}\n"
             f"Payload:\n{payload_str}\n\n"
-            "Analyze this industrial event, identify the root cause, and produce a structured remediation plan."
+            "Analyze this event, identify the root cause, and produce a structured remediation plan."
         )
 
     def _parse_sections(self, content: str) -> tuple[str, str, str]:
@@ -524,7 +520,8 @@ class ReactiveOrchestrator:
             "data": {
                 "id": event.id,
                 "status": event.status,
-                "severity": event.severity,
+                "severity_text": event.severity_text,
+                "severity_number": event.severity_number,
                 "title": event.title,
                 "updated_at": event.updated_at.isoformat() if event.updated_at else None,
             },

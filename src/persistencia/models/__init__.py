@@ -17,6 +17,11 @@ from src.persistencia.models.reactive_document import ReactiveDocument
 from src.persistencia.models.reactive_mcp_source import ReactiveMCPSource
 from src.persistencia.models.reactive_tool_config import ReactiveToolConfig
 from src.persistencia.models.reactive_credential import ReactiveCredential
+from src.persistencia.models.notification_log import NotificationLog
+from src.persistencia.models.domain_config import DomainConfig
+from src.persistencia.models.event_correlation import EventCorrelationGroup
+from src.persistencia.models.event_metric import EventMetric
+from src.persistencia.models.user_feedback import UserFeedback
 
 __all__ = [
     "Base",
@@ -39,4 +44,9 @@ __all__ = [
     "ReactiveMCPSource",
     "ReactiveToolConfig",
     "ReactiveCredential",
+    "NotificationLog",
+    "DomainConfig",
+    "EventCorrelationGroup",
+    "EventMetric",
+    "UserFeedback",
 ]

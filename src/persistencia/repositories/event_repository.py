@@ -1,4 +1,9 @@
-"""Event repository with filtering and status lookups."""
+"""Event repository with filtering and status lookups.
+
+Follows Repository pattern: thin async wrapper around SQLAlchemy queries.
+"""
+
+from __future__ import annotations
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,39 +18,69 @@ class EventRepository(BaseRepository[Event]):
 
     async def list_with_filters(
         self,
-        severity: str | None = None,
+        severity_text: str | None = None,
         status: str | None = None,
-        source_type: str | None = None,
+        domain: str | None = None,
+        event_type: str | None = None,
+        source: str | None = None,
         skip: int = 0,
         limit: int = 100,
     ) -> list[Event]:
         stmt = select(Event).order_by(Event.created_at.desc())
-        if severity:
-            stmt = stmt.where(Event.severity == severity)
+        if severity_text:
+            stmt = stmt.where(Event.severity_text == severity_text)
         if status:
             stmt = stmt.where(Event.status == status)
-        if source_type:
-            stmt = stmt.where(Event.source_type == source_type)
+        if domain:
+            stmt = stmt.where(Event.domain == domain)
+        if event_type:
+            stmt = stmt.where(Event.event_type == event_type)
+        if source:
+            stmt = stmt.where(Event.source == source)
         stmt = stmt.offset(skip).limit(limit)
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def count_with_filters(
         self,
-        severity: str | None = None,
+        severity_text: str | None = None,
         status: str | None = None,
-        source_type: str | None = None,
+        domain: str | None = None,
+        event_type: str | None = None,
+        source: str | None = None,
     ) -> int:
         stmt = select(func.count()).select_from(Event)
-        if severity:
-            stmt = stmt.where(Event.severity == severity)
+        if severity_text:
+            stmt = stmt.where(Event.severity_text == severity_text)
         if status:
             stmt = stmt.where(Event.status == status)
-        if source_type:
-            stmt = stmt.where(Event.source_type == source_type)
+        if domain:
+            stmt = stmt.where(Event.domain == domain)
+        if event_type:
+            stmt = stmt.where(Event.event_type == event_type)
+        if source:
+            stmt = stmt.where(Event.source == source)
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
     async def get_by_id(self, id: int) -> Event | None:
-        """Override to ensure Event is loaded (id is int primary key)."""
+        """Fetch event by integer primary key."""
         return await self.session.get(Event, id)
+
+    async def get_by_event_id(self, event_id: str) -> Event | None:
+        """Fetch event by CloudEvents event_id (UUID string)."""
+        stmt = select(Event).where(Event.event_id == event_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_pending_for_correlation(self, limit: int = 100) -> list[Event]:
+        """Fetch events eligible for correlation processing."""
+        stmt = (
+            select(Event)
+            .where(Event.status.in_(["pending", "analyzing"]))
+            .where(Event.suppression_reason.is_(None))
+            .order_by(Event.created_at.asc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

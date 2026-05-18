@@ -1,4 +1,6 @@
-"""Events router — CRUD + SSE streaming + approval pipeline."""
+"""Events router — CRUD, SSE streaming, approval pipeline, and feedback."""
+
+from __future__ import annotations
 
 import logging
 
@@ -12,6 +14,7 @@ from src.api.v1.schemas.event import (
     ManualEventPayload,
     EventIngestPayload,
     ApprovalPayload,
+    EventFeedbackPayload,
 )
 from src.core.deps import get_db, get_current_user, get_current_user_flexible, verify_api_key
 from src.persistencia.models.user import User
@@ -20,22 +23,29 @@ from src.services.event_broadcast import get_event_broadcast
 
 router = APIRouter(prefix="/events", tags=["events"])
 
+logger = logging.getLogger(__name__)
+
 
 @router.get("", response_model=EventListResponse)
 async def list_events(
-    severity: str | None = Query(None),
+    severity_text: str | None = Query(None),
     status: str | None = Query(None),
-    source_type: str | None = Query(None),
+    domain: str | None = Query(None),
+    event_type: str | None = Query(None),
+    source: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> EventListResponse:
+    """List events with filtering."""
     service = EventService(session)
     items, total = await service.list_events(
-        severity=severity,
+        severity_text=severity_text,
         status=status,
-        source_type=source_type,
+        domain=domain,
+        event_type=event_type,
+        source=source,
         skip=offset,
         limit=limit,
     )
@@ -48,7 +58,8 @@ async def list_events(
 # ── SSE stream (MUST be before /{event_id} to avoid path param capture) ──
 
 @router.get("/stream")
-async def event_stream(current_user: User = Depends(get_current_user_flexible)):
+async def event_stream(current_user: User = Depends(get_current_user_flexible)) -> StreamingResponse:
+    """Server-Sent Events stream for real-time event updates."""
     broadcast = get_event_broadcast()
     queue = broadcast.connect()
 
@@ -56,14 +67,13 @@ async def event_stream(current_user: User = Depends(get_current_user_flexible)):
         try:
             while True:
                 data = await queue.get()
-                # Ensure SSE data: prefix if not already formatted
                 if isinstance(data, str) and data.startswith("data:"):
                     yield data
                 else:
                     import json
                     yield f"data: {json.dumps(data)}\n\n"
         except Exception as exc:
-            logging.getLogger(__name__).exception("Event SSE stream error: %s", exc)
+            logger.exception("Event SSE stream error: %s", exc)
         finally:
             broadcast.disconnect(queue)
 
@@ -81,7 +91,8 @@ async def get_event(
     event_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> EventOut:
+    """Get a single event by ID."""
     service = EventService(session)
     event = await service.get_event(event_id)
     return EventOut.model_validate(event)
@@ -92,11 +103,14 @@ async def ingest_external_event(
     payload: EventIngestPayload,
     api_key: str = Depends(verify_api_key),
     session: AsyncSession = Depends(get_db),
-):
-    """Ingest an event from external sensor/webhook (X-API-Key required)."""
+) -> EventOut:
+    """Ingest an event from external sensor/webhook (X-API-Key required).
+
+    Supports CloudEvents (ce-* headers or application/cloudevents+json)
+    as well as generic JSON payloads.
+    """
     service = EventService(session)
     event = await service.ingest_event(payload)
-    await service.start_analysis(event.id)
     return EventOut.model_validate(event)
 
 
@@ -105,11 +119,10 @@ async def create_manual_event(
     payload: ManualEventPayload,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> EventOut:
+    """Create a manual event (auto-starts analysis)."""
     service = EventService(session)
     event = await service.create_manual_event(payload, triggered_by_user_id=current_user.id)
-    # Auto-start analysis in background
-    await service.start_analysis(event.id)
     return EventOut.model_validate(event)
 
 
@@ -119,7 +132,8 @@ async def approve_event(
     payload: ApprovalPayload | None = None,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> EventOut:
+    """Approve an event for execution."""
     service = EventService(session)
     event = await service.approve_event(event_id, payload)
     return EventOut.model_validate(event)
@@ -131,7 +145,20 @@ async def reject_event(
     payload: ApprovalPayload | None = None,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-):
+) -> EventOut:
+    """Reject an event."""
     service = EventService(session)
     event = await service.reject_event(event_id, payload)
     return EventOut.model_validate(event)
+
+
+@router.post("/{event_id}/feedback", status_code=status.HTTP_204_NO_CONTENT)
+async def submit_event_feedback(
+    event_id: int,
+    payload: EventFeedbackPayload,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Submit feedback for an event (false positive, incorrect diagnosis, etc.)."""
+    service = EventService(session)
+    await service.submit_feedback(event_id, payload)

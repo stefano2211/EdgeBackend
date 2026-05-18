@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "edgebackend"
 version = "0.1.0"
-description = "Edge AI Backend with Digital Optimus Architecture — vLLM + PostgreSQL + Qdrant + FastAPI"
+description = "Aura AI Backend — vLLM + PostgreSQL + Qdrant + FastAPI"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

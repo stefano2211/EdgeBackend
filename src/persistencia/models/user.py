@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import String, DateTime, func, Integer, Boolean
+from sqlalchemy import String, DateTime, func, Integer, Boolean, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.persistencia.models.base import Base
@@ -17,6 +17,14 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # ── Notification preferences ──
+    # Per-user override for reactive pipeline notifications.
+    # If NULL, falls back to settings.REACTIVE_NOTIFICATION_EMAIL.
+    notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Extensible settings JSON for future channels (slack, sms, pagerduty, etc.)
+    notification_settings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -39,4 +47,7 @@ class User(Base):
     )
     reactive_mcp_sources: Mapped[list["ReactiveMCPSource"]] = relationship(
         "ReactiveMCPSource", back_populates="user", lazy="selectin"
+    )
+    domain_configs: Mapped[list["DomainConfig"]] = relationship(
+        "DomainConfig", back_populates="user", lazy="selectin", cascade="all, delete-orphan"
     )

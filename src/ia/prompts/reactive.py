@@ -1,6 +1,7 @@
 """Reactive Event Processing Prompts — loaded from Jinja2 templates.
 
 Replaces monolithic strings with renderable .md templates.
+All prompts are now domain-agnostic.
 """
 
 from typing import List
@@ -37,15 +38,15 @@ REACTIVE_S1_COORDINATOR_PROMPT = build_s1_coordinator_prompt()
 def build_reactive_synthesis_prompt(
     subagent_descriptions: str = "",
     system1_analysis: str = "",
-    industrial_data: str = "",
+    domain_data: str = "",
     event_context: str = "",
 ) -> str:
     """Build the System-2 synthesis prompt dynamically."""
     input_sections = ""
     if system1_analysis:
         input_sections += f"<system1_analysis>\n{system1_analysis}\n</system1_analysis>\n\n"
-    if industrial_data:
-        input_sections += f"<industrial_data>\n{industrial_data}\n</industrial_data>\n\n"
+    if domain_data:
+        input_sections += f"<domain_data>\n{domain_data}\n</domain_data>\n\n"
 
     return load_prompt(
         "reactive_synthesis",
@@ -61,6 +62,7 @@ def build_reactive_synthesis_prompt(
 def build_reactive_s2_orchestrator_prompt(
     has_rag: bool = True,
     has_mcp: bool = True,
+    domain: str = "generic",
 ) -> str:
     """Build the S2 autonomous orchestrator prompt — unified entry point."""
     subagent_lines = []
@@ -69,37 +71,37 @@ def build_reactive_s2_orchestrator_prompt(
     if has_rag:
         delegation_rules.append(
             "[DELEGAR a rag-agent] cuando:\n"
-            "  - Se necesitan SOPs, procedimientos de emergencia, manuales o documentación.\n"
-            "  - El evento menciona normas, regulaciones o límites de seguridad.\n"
+            "  - Se necesitan procedimientos, manuales, documentación o normativas.\n"
+            "  - El evento menciona políticas, regulaciones o límites de seguridad.\n"
             "  - El triage indica que se necesita contexto documental.\n"
         )
         subagent_lines.append(
             '- task("rag-agent", ...) → Especialista en búsqueda documental. '
-            "Busca en manuales, SOPs, normas ISO y documentación técnica usando RAG. "
+            "Busca en manuales, procedimientos, normas y documentación técnica usando RAG. "
             "Usa filtros precisos y devuelve citas completas con texto extraído."
         )
     else:
         delegation_rules.append(
             "NOTA CRÍTICA: El sub-agente rag-agent (búsqueda documental) está DESACTIVADO.\n"
-            "No puedes consultar manuales ni SOPs. Si el evento lo requiere, indica la limitación.\n"
+            "No puedes consultar manuales ni procedimientos. Si el evento lo requiere, indica la limitación.\n"
         )
 
     if has_mcp:
         delegation_rules.append(
             "[DELEGAR a mcp-agent] cuando:\n"
-            "  - Se necesitan lecturas actuales de sensores (temperatura, presión, flujo, nivel).\n"
-            "  - Se requiere el estado en tiempo real de equipos o sistemas.\n"
-            "  - El triage indica needs_industrial=true (tratar como pista fuerte).\n"
+            "  - Se necesitan lecturas actuales de métricas, estado de recursos, o datos en tiempo real.\n"
+            "  - Se requiere el estado en tiempo real de sistemas o servicios.\n"
+            "  - El triage indica needs_realtime_data=true (tratar como pista fuerte).\n"
         )
         subagent_lines.append(
             '- task("mcp-agent", ...) → Especialista en datos en tiempo real. '
-            "Ejecuta APIs y consulta sensores SCADA/PLC usando MCP. "
-            "Usa filtros específicos por equipo y métrica. Devuelve TODOS los registros."
+            "Ejecuta APIs y consulta sistemas externos usando MCP. "
+            "Usa filtros específicos por recurso y métrica. Devuelve TODOS los registros."
         )
     else:
         delegation_rules.append(
             "NOTA CRÍTICA: El sub-agente mcp-agent (datos en tiempo real) está DESACTIVADO.\n"
-            "No puedes obtener lecturas de sensores ni estados de equipos. Si el evento lo requiere, indica la limitación.\n"
+            "No puedes obtener lecturas de métricas ni estados de sistemas. Si el evento lo requiere, indica la limitación.\n"
         )
 
     subagent_lines.append(
@@ -110,8 +112,8 @@ def build_reactive_s2_orchestrator_prompt(
 
     subagent_lines.append(
         '- task("vl-agent", ...) → Agente autónomo de Computer Use (Observe-Think-Act). '
-        "Puede navegar cualquier GUI (navegador web, SCADA HMI, SAP/ERP, email, dashboards), "
-        "leer valores, llenar formularios, hacer clicks, enviar emails. "
+        "Puede navegar cualquier GUI (navegador web, dashboards, SAP/ERP, email, interfaces de monitoreo), "
+        "leer valores, llenar formularios, hacer clicks. "
         "Es el ÚNICO agente que puede interactuar con pantallas y sitios web."
     )
 
@@ -121,7 +123,7 @@ def build_reactive_s2_orchestrator_prompt(
     return load_prompt(
         "reactive_orchestrator",
         subagents_section=subagents_section,
-        industrial_delegation_rules=data_delegation_rules,
+        domain_delegation_rules=data_delegation_rules,
     )
 
 
@@ -129,28 +131,27 @@ def build_reactive_s2_orchestrator_prompt(
 #  LEGACY BACKWARD COMPATIBILITY
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_REACTIVE_SUBAGENT_DESCRIPTIONS = {
+_LEGACY_SUBAGENT_DESCRIPTIONS = {
     "rag-agent": (
         "Document search and knowledge retrieval specialist. "
-        "Searches manuals, SOPs, regulations, technical specs, and compliance documents. "
+        "Searches manuals, procedures, regulations, technical specs, and compliance documents. "
         "Has access to rag_retrieve for RAG knowledge base queries."
     ),
     "mcp-agent": (
         "Live data and API execution specialist. "
-        "Fetches real-time sensor readings, equipment status, and SCADA data. "
+        "Fetches real-time metrics, resource status, and system state. "
         "Has access to mcp_execute for live API/tool calls."
     ),
     "historical-agent": (
-        "Historical industrial data: past sensor trends, "
-        "equipment failure history, incident reports, long-term operational KPIs, "
-        "seasonal patterns, and production baselines. "
+        "Historical data pattern matcher. "
+        "Identifies precedents, recurring failure patterns, and correlations with past incidents. "
         "Knowledge baked into fine-tuned weights — does NOT use external tools."
     ),
     "vl-agent": (
         "Autonomous Computer Use agent implementing the Observe-Think-Act loop. "
-        "Capabilities: open any GUI application (web browser, SCADA HMI, SAP/ERP, "
-        "email client, Excel Online, dashboards), navigate screens step by step, "
-        "read values, fill forms, click buttons, send emails, update records. "
+        "Capabilities: open any GUI application (web browser, dashboards, SAP/ERP, "
+        "email client, Excel Online), navigate screens step by step, "
+        "read values, fill forms, click buttons. "
         "Pass a single, precise, self-contained instruction. "
         "This is the ONLY agent that can interact with screens and websites."
     ),
@@ -162,12 +163,12 @@ _UNAVAILABLE_MSG = "(NOT AVAILABLE — do not use)"
 def build_reactive_orchestrator_prompt(available_subagents: List[str]) -> str:
     """Build the legacy Reactive Orchestrator system prompt.
 
-    DEPRECATED: Use build_reactive_synthesis_prompt for new reactive pipeline.
+    DEPRECATED: Use build_reactive_s2_orchestrator_prompt for new reactive pipeline.
     Kept for backward compatibility with existing tests/calls.
     """
     available_set = set(available_subagents)
     lines = []
-    for name, desc in _REACTIVE_SUBAGENT_DESCRIPTIONS.items():
+    for name, desc in _LEGACY_SUBAGENT_DESCRIPTIONS.items():
         if name in available_set:
             lines.append(f'- subagent_type="{name}" [AVAILABLE] → {desc}')
         else:
@@ -189,9 +190,8 @@ S1_COORDINATOR_DESCRIPTION = (
     "System-1 Fast Intuition Coordinator. "
     "Delegates in parallel to historical-agent (pattern matching >6 months) "
     "and vl-agent (visual verification + web automation). "
-    "This coordinator is RESPONSIBLE for sending anomaly reports via Gmail "
-    "and performing visual verification of dashboards. "
-    "Use ALWAYS when an alarm or problem is detected to get fast patterns and automated reporting."
+    "Performs visual verification of dashboards and web interfaces when required. "
+    "Use ALWAYS when an alarm or problem is detected to get fast patterns and visual confirmation."
 )
 
 
