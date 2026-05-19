@@ -74,10 +74,14 @@ class ReactiveOrchestrator:
         enabled_kb_names = config_res["kb_names"]
         enabled_tool_names = config_res["tool_names"]
 
+        # Resolve dynamic tool schemas for prompt injection
+        tool_schemas = await self._resolve_tool_schemas(session, event.triggered_by_user_id)
+
         await self._emit_log(event.id, "Phase 0: Pipeline started", level="info")
         await self._emit_log(
             event.id,
-            f"Config: {len(enabled_tool_ids)} tools, {len(enabled_kb_ids)} KBs enabled",
+            f"Config: {len(enabled_tool_ids)} tools, {len(enabled_kb_ids)} KBs enabled, "
+            f"{len(tool_schemas)} tool schemas resolved",
             level="info",
         )
 
@@ -106,6 +110,7 @@ class ReactiveOrchestrator:
                 enabled_kb_ids=[str(k) for k in enabled_kb_ids],
                 enabled_kb_names=enabled_kb_names,
                 enabled_tool_names=enabled_tool_names,
+                tool_schemas=tool_schemas,
             )
 
 
@@ -164,7 +169,11 @@ class ReactiveOrchestrator:
         config_service = ReactiveConfigService(session)
         config_res = await config_service.get_enabled_resources(event.triggered_by_user_id)
         enabled_kb_ids = config_res["kb_ids"]
+        enabled_kb_names = config_res["kb_names"]
         enabled_tool_names = config_res["tool_names"]
+
+        # Resolve dynamic tool schemas for prompt injection
+        tool_schemas = await self._resolve_tool_schemas(session, event.triggered_by_user_id)
 
         # Create isolated reactive orchestrator
         orchestrator = create_reactive_orchestrator(
@@ -172,6 +181,8 @@ class ReactiveOrchestrator:
             enable_knowledge=bool(enabled_kb_ids),
             enable_mcp=bool(enabled_tool_names),
             enabled_tool_names=enabled_tool_names,
+            tool_schemas=tool_schemas,
+            kb_names=enabled_kb_names,
         )
 
 
@@ -352,6 +363,7 @@ class ReactiveOrchestrator:
         enabled_kb_ids: list[str],
         enabled_kb_names: list[str],
         enabled_tool_names: list[str],
+        tool_schemas: list[dict] | None = None,
     ) -> str:
         """Phase 2: S2 autonomous orchestrator."""
         orchestrator = create_reactive_orchestrator(
@@ -360,6 +372,8 @@ class ReactiveOrchestrator:
             enable_mcp=bool(enabled_tool_names),
             enabled_tool_names=enabled_tool_names,
             domain=event.domain or "generic",
+            tool_schemas=tool_schemas,
+            kb_names=enabled_kb_names,
         )
 
 
@@ -486,6 +500,33 @@ class ReactiveOrchestrator:
         if "---EXECUTE---" in text:
             return text.split("---EXECUTE---", 1)[1].strip()
         return None
+
+    async def _resolve_tool_schemas(
+        self, session: AsyncSession, user_id: int | None
+    ) -> list[dict]:
+        """Resolve MCP tool schemas from DB for dynamic prompt injection."""
+        try:
+            from src.persistencia.repositories.reactive_tool_repository import (
+                ReactiveToolRepository,
+            )
+            repo = ReactiveToolRepository(session)
+            if user_id is not None:
+                tools = await repo.list_enabled_by_user(user_id)
+            else:
+                tools = await repo.list()
+                tools = [t for t in tools if t.is_enabled]
+
+            return [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameter_schema": t.parameter_schema,
+                }
+                for t in tools
+            ]
+        except Exception as e:
+            logger.warning("Failed to resolve tool schemas: %s", e)
+            return []
 
     async def _emit(self, event_type: str, event_id: int, data: dict) -> None:
         payload = {

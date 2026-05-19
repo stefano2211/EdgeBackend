@@ -1,6 +1,7 @@
 """Subagent builders — parametrized by context.
 
 Each builder receives (context, tools, kb_ids) and returns a DeepAgents subagent dict.
+System prompts for MCP and RAG are built dynamically with tool/KB catalogs.
 """
 
 from __future__ import annotations
@@ -9,9 +10,9 @@ from src.core.logging import logging
 from src.ia.langchain_models import get_chat_model, get_multimodal_chat_model
 from src.ia.prompts.subagents import (
     RAG_AGENT_DESCRIPTION,
-    RAG_AGENT_SYSTEM_PROMPT,
+    build_rag_system_prompt,
     MCP_AGENT_DESCRIPTION,
-    MCP_AGENT_SYSTEM_PROMPT,
+    build_mcp_system_prompt,
     HISTORICAL_AGENT_DESCRIPTION,
     HISTORICAL_AGENT_SYSTEM_PROMPT,
     VL_AGENT_DESCRIPTION,
@@ -32,12 +33,21 @@ def _build_rag_subagent(
     context: str,
     tools: list,
     kb_ids: list[str] | None = None,
+    kb_names: list[str] | None = None,
     **_,
 ) -> dict:
+    # Build dynamic KB catalog for the prompt
+    kb_catalog = ""
+    if kb_names:
+        lines = ["Active knowledge bases:\n"]
+        for i, name in enumerate(kb_names, 1):
+            lines.append(f"{i}. {name}")
+        kb_catalog = "\n".join(lines)
+
     return {
         "name": "rag-agent",
         "description": RAG_AGENT_DESCRIPTION,
-        "system_prompt": RAG_AGENT_SYSTEM_PROMPT,
+        "system_prompt": build_rag_system_prompt(kb_catalog=kb_catalog),
         "tools": tools,
         "model": get_chat_model(),
     }
@@ -47,12 +57,39 @@ def _build_mcp_subagent(
     context: str,
     tools: list,
     kb_ids: list[str] | None = None,
+    tool_schemas: list[dict] | None = None,
     **_,
 ) -> dict:
+    # Build dynamic tool catalog for the prompt
+    tool_catalog = ""
+    if tool_schemas:
+        lines = ["Available tools (call via mcp_execute):\n"]
+        for i, t in enumerate(tool_schemas, 1):
+            name = t.get("name", "unknown")
+            desc = t.get("description") or "No description provided."
+            schema = t.get("parameter_schema") or {}
+
+            line = f"{i}. {name} — {desc}"
+            params = schema.get("parameters") or schema.get("properties")
+            if params:
+                param_parts = []
+                for pname, pinfo in params.items():
+                    ptype = pinfo.get("type", "any") if isinstance(pinfo, dict) else "any"
+                    param_parts.append(f"{pname}: {ptype}")
+                line += f"\n   Parameters: {{{', '.join(param_parts)}}}"
+
+            lines.append(line)
+        tool_catalog = "\n".join(lines)
+    else:
+        tool_catalog = (
+            "No integration tools are currently registered.\n"
+            "If a task requires external data or actions, report this limitation clearly."
+        )
+
     return {
         "name": "mcp-agent",
         "description": MCP_AGENT_DESCRIPTION,
-        "system_prompt": MCP_AGENT_SYSTEM_PROMPT,
+        "system_prompt": build_mcp_system_prompt(tool_catalog=tool_catalog),
         "tools": tools,
         "model": get_chat_model(),
     }

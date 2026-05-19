@@ -9,6 +9,7 @@ DeepAgents best practices applied:
 - Subagent descriptions explain WHEN to delegate
 - Tools registered via StructuredTool.from_function(coroutine=...)
 - Conditional tool registration based on user toggles (RAG/MCP)
+- Dynamic tool/KB catalogs injected into prompts at runtime
 """
 
 from __future__ import annotations
@@ -59,6 +60,8 @@ def create_orchestrator(
     enable_mcp: bool = True,
     enabled_tool_names: list[str] | None = None,
     domain: str = "generic",
+    tool_schemas: list[dict] | None = None,
+    kb_names: list[str] | None = None,
 ):
     """Create a DeepAgents orchestrator with registered sub-agents.
 
@@ -71,6 +74,10 @@ def create_orchestrator(
         enable_knowledge: Whether to enable the RAG tool.
         enable_mcp: Whether to enable MCP tools.
         enabled_tool_names: Optional list of tool names to limit MCP tools.
+        domain: Domain hint for prompt context.
+        tool_schemas: List of {name, description, parameter_schema} dicts for
+                      dynamic MCP prompt injection.
+        kb_names: List of KB names for dynamic RAG prompt injection.
 
     Returns:
         Compiled DeepAgent (LangGraph StateGraph) ready for streaming.
@@ -99,34 +106,45 @@ def create_orchestrator(
     subagents = SubagentRegistry.build_all(
         context=context,
         kb_ids=kb_ids,
+        kb_names=kb_names,
         tool_names=enabled_tool_names,
+        tool_schemas=tool_schemas,
         enable_mcp=enable_mcp,
         enable_knowledge=enable_knowledge,
     )
     # Filter to requested names
     subagents = [s for s in subagents if s.get("name", "").replace("-agent", "") in actual_names]
 
+    # Build tool catalog hint for orchestrator prompt
+    tool_catalog_hint = ""
+    if tool_schemas:
+        tool_catalog_hint = ", ".join(t.get("name", "?") for t in tool_schemas)
+
     # Build prompt
     if system_prompt_override:
         prompt = system_prompt_override
     elif context == "reactive":
         prompt = build_reactive_s2_orchestrator_prompt(
-            has_rag=has_rag, has_mcp=has_mcp, domain=domain
+            has_rag=has_rag, has_mcp=has_mcp, domain=domain,
+            tool_schemas=tool_schemas,
         )
     else:
         prompt = build_orchestrator_prompt(
             subagent_descriptions=SubagentRegistry.get_descriptions(names=actual_names),
             has_rag=has_rag,
             has_mcp=has_mcp,
+            tool_catalog_hint=tool_catalog_hint,
         )
 
     logger.info(
         "Creating DeepAgents orchestrator | context=%s sub-agents=%d "
-        "enable_knowledge=%s enable_mcp=%s",
+        "enable_knowledge=%s enable_mcp=%s tool_schemas=%d kb_names=%d",
         context,
         len(subagents),
         enable_knowledge,
         enable_mcp,
+        len(tool_schemas) if tool_schemas else 0,
+        len(kb_names) if kb_names else 0,
     )
 
     checkpointer, store = _resolve_memory()
@@ -154,6 +172,8 @@ def create_reactive_orchestrator(
     enabled_tool_names: list[str] | None = None,
     system_prompt_override: str | None = None,
     domain: str = "generic",
+    tool_schemas: list[dict] | None = None,
+    kb_names: list[str] | None = None,
 ):
     """Backward-compatible wrapper for reactive orchestrator creation."""
     return create_orchestrator(
@@ -164,4 +184,6 @@ def create_reactive_orchestrator(
         enabled_tool_names=enabled_tool_names,
         system_prompt_override=system_prompt_override,
         domain=domain,
+        tool_schemas=tool_schemas,
+        kb_names=kb_names,
     )

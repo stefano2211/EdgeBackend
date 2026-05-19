@@ -1,7 +1,7 @@
 """Reactive Event Processing Prompts — loaded from Jinja2 templates.
 
 Replaces monolithic strings with renderable .md templates.
-All prompts are now domain-agnostic.
+All prompts are domain-agnostic — no hardcoded industry references.
 """
 
 from typing import List
@@ -63,56 +63,73 @@ def build_reactive_s2_orchestrator_prompt(
     has_rag: bool = True,
     has_mcp: bool = True,
     domain: str = "generic",
+    tool_schemas: list[dict] | None = None,
 ) -> str:
-    """Build the S2 autonomous orchestrator prompt — unified entry point."""
+    """Build the S2 autonomous orchestrator prompt — unified entry point.
+
+    Args:
+        has_rag: Whether RAG sub-agent is available.
+        has_mcp: Whether MCP sub-agent is available.
+        domain: Domain hint (unused in agnostic prompts, kept for context).
+        tool_schemas: Optional list of {name, description, parameter_schema} dicts
+                      for dynamic MCP tool documentation.
+    """
     subagent_lines = []
     delegation_rules = []
 
     if has_rag:
         delegation_rules.append(
-            "[DELEGAR a rag-agent] cuando:\n"
-            "  - Se necesitan procedimientos, manuales, documentación o normativas.\n"
-            "  - El evento menciona políticas, regulaciones o límites de seguridad.\n"
-            "  - El triage indica que se necesita contexto documental.\n"
+            "[DELEGATE to rag-agent] when:\n"
+            "  - Procedures, manuals, documentation, or regulatory information is needed.\n"
+            "  - The event references policies, standards, or operational limits defined in documents.\n"
+            "  - The triage indicates needs_document_lookup=true.\n"
         )
         subagent_lines.append(
-            '- task("rag-agent", ...) → Especialista en búsqueda documental. '
-            "Busca en manuales, procedimientos, normas y documentación técnica usando RAG. "
-            "Usa filtros precisos y devuelve citas completas con texto extraído."
+            '- task("rag-agent", ...) → Document search specialist. '
+            "Searches manuals, procedures, standards, and technical documentation using RAG. "
+            "Uses precise filters and returns complete citations with extracted text."
         )
     else:
         delegation_rules.append(
-            "NOTA CRÍTICA: El sub-agente rag-agent (búsqueda documental) está DESACTIVADO.\n"
-            "No puedes consultar manuales ni procedimientos. Si el evento lo requiere, indica la limitación.\n"
+            "NOTE: The rag-agent (document search) is DISABLED.\n"
+            "You cannot consult manuals or procedures. If the event requires it, note this limitation.\n"
         )
 
     if has_mcp:
+        # Build dynamic tool hint from schemas if available
+        tool_hint = ""
+        if tool_schemas:
+            tool_names = [t.get("name", "?") for t in tool_schemas]
+            tool_hint = f" Available tools: {', '.join(tool_names)}."
+
         delegation_rules.append(
-            "[DELEGAR a mcp-agent] cuando:\n"
-            "  - Se necesitan lecturas actuales de métricas, estado de recursos, o datos en tiempo real.\n"
-            "  - Se requiere el estado en tiempo real de sistemas o servicios.\n"
-            "  - El triage indica needs_realtime_data=true (tratar como pista fuerte).\n"
+            "[DELEGATE to mcp-agent] when:\n"
+            "  - Current metrics, resource status, or real-time data is needed.\n"
+            "  - Actions on external systems or registered integrations are required.\n"
+            "  - The triage indicates needs_realtime_data=true (treat as a strong hint).\n"
+            f"{f'  - {tool_hint}' if tool_hint else ''}\n"
         )
         subagent_lines.append(
-            '- task("mcp-agent", ...) → Especialista en datos en tiempo real. '
-            "Ejecuta APIs y consulta sistemas externos usando MCP. "
-            "Usa filtros específicos por recurso y métrica. Devuelve TODOS los registros."
+            '- task("mcp-agent", ...) → Live data and integration specialist. '
+            "Executes APIs and queries external systems via registered integrations. "
+            f"Uses specific filters per resource and metric. Returns ALL records.{tool_hint}"
         )
     else:
         delegation_rules.append(
-            "NOTA CRÍTICA: El sub-agente mcp-agent (datos en tiempo real) está DESACTIVADO.\n"
-            "No puedes obtener lecturas de métricas ni estados de sistemas. Si el evento lo requiere, indica la limitación.\n"
+            "NOTE: The mcp-agent (live data & integrations) is DISABLED.\n"
+            "You cannot obtain live metrics or interact with external systems. "
+            "If the event requires it, note this limitation.\n"
         )
 
     subagent_lines.append(
-        '- task("historical-agent", ...) → Especialista en diagnóstico histórico. '
-        "Identifica precedentes, patrones de falla recurrentes y correlaciones con incidentes pasados. "
-        "Usa pesos fine-tuned (LoRA), no necesita herramientas externas. Siempre es rápido y barato de invocar."
+        '- task("historical-agent", ...) → Historical diagnosis specialist. '
+        "Identifies precedents, recurring failure patterns, and correlations with past incidents. "
+        "Uses fine-tuned weights, no external tools. Always fast and cheap to invoke."
     )
 
     subagent_lines.append(
-        '- task("vl-agent", ...) [DESACTIVADO TEMPORALMENTE] → Agente autónomo de Computer Use. '
-        "ESTÁ DESACTIVADO POR MANTENIMIENTO. NO DELEGAR TAREAS A ESTE AGENTE."
+        '- task("vl-agent", ...) [TEMPORARILY DISABLED] → Autonomous Computer Use agent. '
+        "DISABLED FOR MAINTENANCE. DO NOT DELEGATE TASKS TO THIS AGENT."
     )
 
     subagents_section = "\n".join(subagent_lines)
@@ -147,8 +164,8 @@ _LEGACY_SUBAGENT_DESCRIPTIONS = {
     ),
     "vl-agent": (
         "Autonomous Computer Use agent implementing the Observe-Think-Act loop. "
-        "Capabilities: open any GUI application (web browser, dashboards, SAP/ERP, "
-        "email client, Excel Online), navigate screens step by step, "
+        "Capabilities: open any GUI application (web browser, dashboards, portals, "
+        "email clients), navigate screens step by step, "
         "read values, fill forms, click buttons. "
         "Pass a single, precise, self-contained instruction. "
         "This is the ONLY agent that can interact with screens and websites."

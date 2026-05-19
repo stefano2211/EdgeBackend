@@ -1,6 +1,7 @@
 """Orchestrator system prompt — loaded from Jinja2 template.
 
 Replaces the monolithic string with a renderable .md template.
+All routing rules and examples are domain-agnostic.
 """
 
 from src.ia.prompts.loader import load_prompt
@@ -10,9 +11,16 @@ def build_orchestrator_prompt(
     subagent_descriptions: str,
     has_rag: bool = True,
     has_mcp: bool = True,
+    tool_catalog_hint: str = "",
 ) -> str:
-    """Build the orchestrator system prompt from template."""
-    # Build routing rules based on available data agents
+    """Build the orchestrator system prompt from template.
+
+    Args:
+        subagent_descriptions: Formatted string of available sub-agents.
+        has_rag: Whether the RAG sub-agent is available.
+        has_mcp: Whether the MCP sub-agent is available.
+        tool_catalog_hint: Optional summary of registered MCP tools for routing hints.
+    """
     routing_rules = ""
     routing_examples = ""
 
@@ -24,7 +32,7 @@ def build_orchestrator_prompt(
         )
         routing_examples += (
             '<example>\n'
-            '<user_query>Dame la información de los manuales técnicos sobre calderas</user_query>\n'
+            '<user_query>Find the documentation about operational limits</user_query>\n'
             '<reasoning>Asks for document content → delegate to rag-agent.</reasoning>\n'
             '<correct_action>task() → rag-agent</correct_action>\n'
             '</example>\n\n'
@@ -35,61 +43,46 @@ def build_orchestrator_prompt(
             "     → [ANSWER DIRECTLY] Explain that the Document Knowledge module is currently DISABLED.\n"
             "     → Do NOT attempt to guess, hallucinate or use any tools for this.\n\n"
         )
-        routing_examples += (
-            '<example>\n'
-            '<user_query>¿Qué dice el manual sobre calderas?</user_query>\n'
-            '<reasoning>Needs document search, but rag-agent is disabled.</reasoning>\n'
-            '<correct_action>Direct answer: El módulo de búsqueda documental está desactivado. No puedo consultar manuales ni SOPs.</correct_action>\n'
-            '</example>\n\n'
-        )
 
     if has_mcp:
+        mcp_capability_hint = ""
+        if tool_catalog_hint:
+            mcp_capability_hint = f"\n     → Available integrations: {tool_catalog_hint}\n"
+
         routing_rules += (
-            "[IF] Query needs live sensor data, real-time readings, API data, equipment status,\n"
-            "     OR requires actions on external integrations (send/read email via Gmail,\n"
-            "     post to Slack, query GitHub, interact with Notion, AWS, etc.)\n"
+            "[IF] Query needs live data, real-time readings, API calls, external system actions,\n"
+            "     OR requires actions on registered integrations (messaging, data queries, etc.)\n"
             "     → [DELEGATE] to mcp-agent via task()\n"
             "     → The mcp-agent executes live API calls and integration actions.\n"
-            "     → ALWAYS prefer mcp-agent over vl-agent for email operations when Gmail integration is registered.\n\n"
+            f"{mcp_capability_hint}"
+            "     → ALWAYS prefer mcp-agent over vl-agent when an integration is registered for the task.\n\n"
         )
         routing_examples += (
             '<example>\n'
-            '<user_query>¿Cuál es la presión actual de la caldera 3?</user_query>\n'
-            '<reasoning>Needs live sensor reading → delegate to mcp-agent.</reasoning>\n'
+            '<user_query>Get the current status from the system</user_query>\n'
+            '<reasoning>Needs live data reading → delegate to mcp-agent.</reasoning>\n'
             '<correct_action>task() → mcp-agent</correct_action>\n'
             '</example>\n\n'
             '<example>\n'
-            '<user_query>Send an email to john@example.com saying hello</user_query>\n'
-            '<reasoning>Send email via Gmail integration → delegate to mcp-agent, not vl-agent.</reasoning>\n'
-            '<correct_action>task() → mcp-agent</correct_action>\n'
-            '</example>\n\n'
-            '<example>\n'
-            '<user_query>Manda un correo a stefano@gmail.com usando el MCP de Gmail</user_query>\n'
-            '<reasoning>User explicitly asks for MCP Gmail → delegate to mcp-agent immediately.</reasoning>\n'
+            '<user_query>Send a message to the team about the update</user_query>\n'
+            '<reasoning>Requires action via registered integration → delegate to mcp-agent.</reasoning>\n'
             '<correct_action>task() → mcp-agent</correct_action>\n'
             '</example>\n\n'
         )
     else:
         routing_rules += (
-            "[IF] Query requires live sensor data, real-time readings, or API calls\n"
+            "[IF] Query requires live data, real-time readings, or API calls\n"
             "     → [ANSWER DIRECTLY] Explain that the Live Data module is currently DISABLED.\n"
             "     → Do NOT attempt to guess, hallucinate or use any tools for this.\n\n"
         )
-        routing_examples += (
-            '<example>\n'
-            '<user_query>¿Cuál es la presión actual de la caldera 3?</user_query>\n'
-            '<reasoning>Needs live sensor data, but mcp-agent is disabled.</reasoning>\n'
-            '<correct_action>Direct answer: El módulo de datos en tiempo real está desactivado. No puedo proveer lecturas actuales.</correct_action>\n'
-            '</example>\n\n'
-        )
 
-    # RAG + MCP parallel example
+    # Parallel example when both available
     if has_rag and has_mcp:
         routing_examples += (
             '<example>\n'
-            '<user_query>¿Cuál es la presión actual de la caldera 3 y qué dice el manual sobre límites seguros?</user_query>\n'
-            '<reasoning>Needs BOTH live sensor data AND document lookup → delegate to mcp-agent AND rag-agent in parallel.</reasoning>\n'
-            '<correct_action>task() → mcp-agent (for pressure reading) + task() → rag-agent (for manual limits)</correct_action>\n'
+            '<user_query>What is the current value and what does the documentation say about its limits?</user_query>\n'
+            '<reasoning>Needs BOTH live data AND document lookup → delegate to mcp-agent AND rag-agent in parallel.</reasoning>\n'
+            '<correct_action>task() → mcp-agent (for live reading) + task() → rag-agent (for documentation)</correct_action>\n'
             '</example>\n\n'
         )
 
@@ -108,12 +101,12 @@ def build_orchestrator_prompt(
 
     routing_examples += (
         '<example>\n'
-        '<user_query>¿Cuál fue el promedio de eficiencia en Q2 2023 comparado con Q2 2024?</user_query>\n'
+        '<user_query>What were the trends last year compared to this year?</user_query>\n'
         '<reasoning>Historical time-series comparison → delegate to historical-agent.</reasoning>\n'
         '<correct_action>task() → historical-agent</correct_action>\n'
         '</example>\n\n'
         '<example>\n'
-        '<user_query>Navigate to the SCADA dashboard and take a screenshot</user_query>\n'
+        '<user_query>Navigate to the dashboard and take a screenshot</user_query>\n'
         '<reasoning>Requires browser navigation and screenshots → delegate to vl-agent.</reasoning>\n'
         '<correct_action>task() → vl-agent</correct_action>\n'
         '</example>\n\n'

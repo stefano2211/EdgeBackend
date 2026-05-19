@@ -45,11 +45,24 @@ class SubagentRegistry:
         context: Literal["proactive", "reactive"],
         *,
         kb_ids: list[str] | None = None,
+        kb_names: list[str] | None = None,
         tool_names: list[str] | None = None,
+        tool_schemas: list[dict] | None = None,
         enable_mcp: bool = True,
         enable_knowledge: bool = True,
     ) -> list[dict]:
-        """Build subagent configs for the given context."""
+        """Build subagent configs for the given context.
+
+        Args:
+            context: 'proactive' or 'reactive'.
+            kb_ids: Knowledge base IDs for RAG tool binding.
+            kb_names: Knowledge base names for prompt injection.
+            tool_names: Optional filter for MCP tool names.
+            tool_schemas: List of {name, description, parameter_schema} dicts
+                          for dynamic MCP prompt injection.
+            enable_mcp: Whether MCP tools are enabled.
+            enable_knowledge: Whether RAG tools are enabled.
+        """
         result = []
         for plugin in cls._plugins.values():
             if context not in plugin.applies_to:
@@ -70,6 +83,8 @@ class SubagentRegistry:
                 context=context,
                 tools=tools,
                 kb_ids=kb_ids,
+                kb_names=kb_names,
+                tool_schemas=tool_schemas,
             )
             result.append(cfg)
         return result
