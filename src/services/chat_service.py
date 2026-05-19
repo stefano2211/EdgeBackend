@@ -104,7 +104,7 @@ class ChatService:
         reasoning_content = ""
         agents_used: list[str] = []
 
-        async for event in self.orchestrator.stream(request, messages, conv.thread_id):
+        async for event in self.orchestrator.stream(request, messages, conv.thread_id, session=self.session):
             if event.get("_internal"):
                 full_content = event["full_content"]
                 reasoning_content = event.get("reasoning_content") or ""
@@ -118,7 +118,7 @@ class ChatService:
 
     async def process_non_stream(self, request: ChatRequest, user_id: int) -> dict:
         conv, messages = await self._prepare_chat(request, user_id)
-        result = await self.orchestrator.non_stream(request, messages, conv.thread_id)
+        result = await self.orchestrator.non_stream(request, messages, conv.thread_id, session=self.session)
 
         await self._persist_assistant_message(
             conv.id,

@@ -111,9 +111,9 @@ def build_orchestrator_prompt(
         '<correct_action>task() → vl-agent</correct_action>\n'
         '</example>\n\n'
         '<example>\n'
-        '<user_query>Convert 327 PSI to bar</user_query>\n'
+        '<user_query>Convert 100 km/h to mph</user_query>\n'
         '<reasoning>Simple math, no external data → answer directly.</reasoning>\n'
-        '<correct_action>Direct answer: 327 PSI ≈ 22.5 bar</correct_action>\n'
+        '<correct_action>Direct answer: 100 km/h ≈ 62.14 mph</correct_action>\n'
         '</example>'
     )
 
