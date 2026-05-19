@@ -285,6 +285,7 @@ async def oauth_callback(
             .replace("{{title}}", "Authorization failed")
             .replace("{{message}}", f"{error}. This window will close automatically.")
             .replace("{{payload_json}}", json.dumps(payload))
+            .replace("{{origin}}", settings.FRONTEND_ORIGIN)
         )
         return HTMLResponse(content=html, status_code=400)
 
@@ -296,6 +297,7 @@ async def oauth_callback(
             .replace("{{title}}", "Invalid request")
             .replace("{{message}}", "Missing code or state. This window will close automatically.")
             .replace("{{payload_json}}", json.dumps(payload))
+            .replace("{{origin}}", settings.FRONTEND_ORIGIN)
         )
         return HTMLResponse(content=html, status_code=400)
 
@@ -314,6 +316,7 @@ async def oauth_callback(
                 .replace("{{title}}", "Authorization successful")
                 .replace("{{message}}", "Gmail connected successfully. This window will close automatically.")
                 .replace("{{payload_json}}", json.dumps(payload))
+                .replace("{{origin}}", settings.FRONTEND_ORIGIN)
             )
             return HTMLResponse(content=html)
         except ValueError as exc:
@@ -324,6 +327,7 @@ async def oauth_callback(
                 .replace("{{title}}", "Authorization failed")
                 .replace("{{message}}", f"{exc}. This window will close automatically.")
                 .replace("{{payload_json}}", json.dumps(payload))
+                .replace("{{origin}}", settings.FRONTEND_ORIGIN)
             )
             return HTMLResponse(content=html, status_code=400)
         except RuntimeError as exc:
@@ -334,6 +338,7 @@ async def oauth_callback(
                 .replace("{{title}}", "Authorization failed")
                 .replace("{{message}}", f"{exc}. This window will close automatically.")
                 .replace("{{payload_json}}", json.dumps(payload))
+                .replace("{{origin}}", settings.FRONTEND_ORIGIN)
             )
             return HTMLResponse(content=html, status_code=502)
 

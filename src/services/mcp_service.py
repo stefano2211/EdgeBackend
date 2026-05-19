@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import re
+import time as _time
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -295,6 +297,20 @@ class MCPService:
     # Tool execution
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _is_transient_error(exc: Exception) -> bool:
+        """Classify whether an error is transient (retryable)."""
+        if isinstance(exc, (ConnectionError, TimeoutError, asyncio.TimeoutError)):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500:
+            return True
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+            return True
+        error_msg = str(exc).lower()
+        if any(kw in error_msg for kw in ("connection", "timeout", "reset", "broken pipe", "eof")):
+            return True
+        return False
+
     async def execute_tool(
         self,
         base_url: str,
@@ -321,79 +337,93 @@ class MCPService:
             method,
         )
 
-        try:
-            if transport_type == "rest":
-                async with httpx.AsyncClient() as client:
-                    method = method.upper()
-                    target_url = base_url
+        max_attempts = 3
+        last_exc = None
 
-                    # URL Parameter Substitution
-                    url_params = re.findall(r"\{(.*?)\}", target_url)
-                    remaining_args = arguments.copy()
+        for attempt in range(1, max_attempts + 1):
+            try:
+                if transport_type == "rest":
+                    async with httpx.AsyncClient() as client:
+                        method = method.upper()
+                        target_url = base_url
 
-                    for p in url_params:
-                        if p in remaining_args:
-                            val = str(remaining_args.pop(p))
-                            target_url = target_url.replace(f"{{{p}}}", val)
+                        # URL Parameter Substitution
+                        url_params = re.findall(r"\{(.*?)\}", target_url)
+                        remaining_args = arguments.copy()
+
+                        for p in url_params:
+                            if p in remaining_args:
+                                val = str(remaining_args.pop(p))
+                                target_url = target_url.replace(f"{{{p}}}", val)
+                            else:
+                                logger.warning("[MCP Service] Missing URL parameter '%s' for %s", p, base_url)
+
+                        logger.info("[MCP Service] Final target URL: %s", target_url)
+
+                        if method == "GET":
+                            response = await client.get(target_url, params=remaining_args, timeout=30.0)
                         else:
-                            logger.warning("[MCP Service] Missing URL parameter '%s' for %s", p, base_url)
+                            response = await client.request(
+                                method, target_url, json=remaining_args, timeout=30.0
+                            )
 
-                    logger.info("[MCP Service] Final target URL: %s", target_url)
+                        response.raise_for_status()
+                        raw_data = response.json()
 
-                    if method == "GET":
-                        response = await client.get(target_url, params=remaining_args, timeout=30.0)
-                    else:
-                        response = await client.request(
-                            method, target_url, json=remaining_args, timeout=30.0
-                        )
+                        # Pre-filter BEFORE mapping
+                        if isinstance(raw_data, list) and (key_values_filter or key_figures_filter):
+                            raw_data = self._apply_filters(raw_data, key_values_filter, key_figures_filter)
 
-                    response.raise_for_status()
-                    raw_data = response.json()
+                        return await self._auto_map_response(tool_name, raw_data, schema_hints=schema_hints)
 
-                    # Pre-filter BEFORE mapping
-                    if isinstance(raw_data, list) and (key_values_filter or key_figures_filter):
-                        raw_data = self._apply_filters(raw_data, key_values_filter, key_figures_filter)
+                if not _MCP_SDK_AVAILABLE:
+                    return MCPResponse(
+                        source=tool_name,
+                        error="mcp SDK not installed. Cannot use stdio/sse transport.",
+                    )
 
-                    return await self._auto_map_response(tool_name, raw_data, schema_hints=schema_hints)
+                if is_stdio:
+                    server_params = StdioServerParameters(
+                        command=stdio_command or "python",
+                        args=stdio_args or [base_url],
+                        env=stdio_env,
+                    )
+                    async with stdio_client(server_params) as (read, write):
+                        async with ClientSession(read, write) as session:
+                            await session.initialize()
+                            result = await session.call_tool(tool_name, arguments)
+                            return await self._auto_map_response(tool_name, result.content)
+                else:
+                    async with sse_client(base_url) as (read, write):
+                        async with ClientSession(read, write) as session:
+                            await session.initialize()
+                            result = await session.call_tool(tool_name, arguments)
+                            content = result.content[0].text if result.content else "{}"
+                            try:
+                                data = json.loads(content)
+                            except Exception:
+                                data = {"text": content}
+                            return await self._auto_map_response(tool_name, data)
 
-            if not _MCP_SDK_AVAILABLE:
-                return MCPResponse(
-                    source=tool_name,
-                    error="mcp SDK not installed. Cannot use stdio/sse transport.",
-                )
+            except (json.JSONDecodeError, ValueError) as e:
+                # Non-transient: fail immediately
+                logger.error("[MCP Service] Data parsing failed: %s", str(e))
+                return MCPResponse(source=tool_name, error=f"Parse error: {e}")
+            except Exception as e:
+                last_exc = e
+                if attempt < max_attempts and self._is_transient_error(e):
+                    delay = (2 ** (attempt - 1)) + random.uniform(0, 0.5)
+                    logger.warning(
+                        "[MCP Service] Transient error on attempt %d/%d for '%s': %s. Retrying in %.1fs...",
+                        attempt, max_attempts, tool_name, e, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.error("[MCP Service] Execution failed: %s", str(e))
+                return MCPResponse(source=tool_name, error=str(e))
 
-            if is_stdio:
-                server_params = StdioServerParameters(
-                    command=stdio_command or "python",
-                    args=stdio_args or [base_url],
-                    env=stdio_env,
-                )
-                async with stdio_client(server_params) as (read, write):
-                    async with ClientSession(read, write) as session:
-                        await session.initialize()
-                        result = await session.call_tool(tool_name, arguments)
-                        return await self._auto_map_response(tool_name, result.content)
-            else:
-                async with sse_client(base_url) as (read, write):
-                    async with ClientSession(read, write) as session:
-                        await session.initialize()
-                        result = await session.call_tool(tool_name, arguments)
-                        content = result.content[0].text if result.content else "{}"
-                        try:
-                            data = json.loads(content)
-                        except Exception:
-                            data = {"text": content}
-                        return await self._auto_map_response(tool_name, data)
-
-        except httpx.HTTPError as e:
-            logger.error("[MCP Service] HTTP execution failed: %s", str(e))
-            return MCPResponse(source=tool_name, error=f"HTTP error: {e}")
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error("[MCP Service] Data parsing failed: %s", str(e))
-            return MCPResponse(source=tool_name, error=f"Parse error: {e}")
-        except Exception as e:
-            logger.error("[MCP Service] Execution failed: %s", str(e))
-            return MCPResponse(source=tool_name, error=str(e))
+        logger.error("[MCP Service] All %d attempts failed for '%s'", max_attempts, tool_name)
+        return MCPResponse(source=tool_name, error=f"Failed after {max_attempts} attempts: {last_exc}")
 
     # ------------------------------------------------------------------
     # LLM Bridge helper

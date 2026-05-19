@@ -10,6 +10,8 @@ Responsibilities:
 from __future__ import annotations
 
 import logging
+
+from src.integrations.credential_audit import log_credential_event, CredentialAction
 from datetime import datetime, timezone
 from typing import Any
 
@@ -69,6 +71,21 @@ class CredentialManager:
                 )
                 creds[access_token_cred.credential_key] = new_access
 
+        # Audit: log credential access (fire-and-forget, values never logged)
+        try:
+            from sqlalchemy.ext.asyncio import AsyncSession
+            session = self._repo._session  # Access the underlying session
+            await log_credential_event(
+                session,
+                CredentialAction.ACCESSED,
+                user_id=instance.user_id,
+                instance_id=instance.id,
+                credential_key=",".join(creds.keys()),
+                details=f"Decrypted {len(creds)} credentials for catalog '{instance.catalog.slug}'",
+            )
+        except Exception:
+            pass  # Audit must never break the main flow
+
         return creds
 
     def _is_expired(self, cred: IntegrationCredential) -> bool:
@@ -112,21 +129,52 @@ class CredentialManager:
             await self._repo.update(instance)  # This will commit the session
 
             logger.info("OAuth2 token refreshed for instance=%s", instance.id)
+            try:
+                await log_credential_event(
+                    self._repo._session,
+                    CredentialAction.REFRESHED,
+                    user_id=instance.user_id,
+                    instance_id=instance.id,
+                    credential_key="access_token",
+                    details=f"OAuth2 token refreshed, expires_in={expires_in}s",
+                )
+            except Exception:
+                pass
             return new_access_token
         except Exception as exc:
             logger.exception("OAuth2 refresh failed for instance=%s: %s", instance.id, exc)
+            try:
+                await log_credential_event(
+                    self._repo._session,
+                    CredentialAction.REFRESH_FAILED,
+                    user_id=instance.user_id,
+                    instance_id=instance.id,
+                    credential_key="access_token",
+                    details=f"Refresh failed: {exc}",
+                )
+            except Exception:
+                pass
             # Return existing (possibly expired) token — caller will likely fail,
             # but we don't want to crash the whole flow.
             return self._vault.decrypt(access_token_cred.encrypted_value)
 
     def _detect_provider(self, instance: IntegrationInstance) -> str:
-        """Heuristic to detect OAuth provider from catalog slug."""
+        """Detect OAuth provider from catalog metadata."""
         slug = instance.catalog.slug.lower()
         if "google" in slug or "gmail" in slug:
             return "google"
         if "microsoft" in slug or "azure" in slug or "outlook" in slug:
             return "microsoft"
-        return "google"  # Default fallback
+        if "github" in slug:
+            return "github"
+        if "slack" in slug:
+            return "slack"
+        # Explicit error instead of silent fallback to Google
+        logger.warning(
+            "Unknown OAuth provider for catalog '%s' — no refresh handler available",
+            instance.catalog.slug,
+        )
+        return "unknown"
 
     # ------------------------------------------------------------------
     # Injection helpers

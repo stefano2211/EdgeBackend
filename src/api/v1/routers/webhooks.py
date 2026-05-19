@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.webhook import (
@@ -138,7 +138,7 @@ async def test_webhook_mapping(
 )
 async def receive_webhook(
     slug: str,
-    payload: dict,
+    request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Public endpoint for external systems to push events.
@@ -146,9 +146,22 @@ async def receive_webhook(
     Accepts **any JSON payload**. The engine maps it dynamically.
     If no mapping exists, auto-discovery runs via LLM and persists the result.
     """
+    raw_body = await request.body()
+    try:
+        import json as _json
+        payload = _json.loads(raw_body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    signature_header = (
+        request.headers.get("X-Hub-Signature-256")
+        or request.headers.get("X-Webhook-Signature")
+        or request.headers.get("X-Signature")
+    )
+
     service = WebhookService(session)
     try:
-        result = await service.receive(slug, payload)
+        result = await service.receive(slug, payload, raw_body=raw_body, signature_header=signature_header)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except PermissionError as exc:

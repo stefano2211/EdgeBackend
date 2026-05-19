@@ -69,7 +69,7 @@ CATALOG_SEED = [
         command="npx",
         args=["-y", "@modelcontextprotocol/server-postgres"],
         env_prefix="POSTGRES_",
-        auth_type="basic",
+        auth_type="connection_string",
         auth_env_var_mapping={"CONNECTION_STRING": "connection_string"},
         auth_setup_guide_markdown="""## PostgreSQL Setup
 

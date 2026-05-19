@@ -27,7 +27,7 @@ class IntegrationCatalogCreate(BaseModel):
     args: list | None = None
     env_prefix: str | None = None
     rest_bridge_url_template: str | None = None
-    auth_type: str = Field(..., pattern=r"^(token|oauth2|basic|api_key|none)$")
+    auth_type: str = Field(..., pattern=r"^(token|oauth2|basic|connection_string|api_key|none)$")
     auth_env_var_mapping: dict = Field(default_factory=dict)
     auth_setup_guide_markdown: str | None = None
     is_enabled: bool = True

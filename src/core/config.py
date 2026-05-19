@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     GMAIL_CLIENT_ID: str | None = None
     GMAIL_CLIENT_SECRET: str | None = None
 
+    # ── Credential Encryption ──
+    CREDENTIAL_ENCRYPTION_KEY: str | None = None  # If not set, falls back to SECRET_KEY
+    CREDENTIAL_ENCRYPTION_KEY_PREVIOUS: str | None = None  # For key rotation
+
+    # ── Frontend ──
+    FRONTEND_ORIGIN: str = "http://localhost:5173"
+
     # ── CORS ──
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 

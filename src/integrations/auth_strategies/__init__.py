@@ -82,6 +82,21 @@ class BasicAuthStrategy(IAuthStrategy):
         return False
 
 
+class ConnectionStringAuthStrategy(IAuthStrategy):
+    """Connection-string strategy (e.g. PostgreSQL, MongoDB, Redis)."""
+
+    REQUIRED = {"connection_string"}
+
+    def validate(self, credentials: dict[str, str]) -> bool:
+        return bool(credentials.get("connection_string"))
+
+    def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
+        return {"connection_string": credentials["connection_string"]}
+
+    def supports_refresh(self) -> bool:
+        return False
+
+
 class ApiKeyAuthStrategy(IAuthStrategy):
     """Generic API-key strategy (e.g. Notion)."""
 
@@ -118,6 +133,7 @@ AUTH_STRATEGIES: dict[str, IAuthStrategy] = {
     "token": TokenAuthStrategy(),
     "oauth2": OAuth2AuthStrategy(),
     "basic": BasicAuthStrategy(),
+    "connection_string": ConnectionStringAuthStrategy(),
     "api_key": ApiKeyAuthStrategy(),
     "none": NoAuthStrategy(),
 }

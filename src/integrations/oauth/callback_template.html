@@ -29,7 +29,7 @@
     (function() {
       const payload = {{payload_json}};
       if (window.opener) {
-        window.opener.postMessage(payload, '*');
+        window.opener.postMessage(payload, '{{origin}}');
       }
       // Auto-close after a short delay so the user sees the success/error message
       setTimeout(function() {

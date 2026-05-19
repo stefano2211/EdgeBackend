@@ -14,6 +14,7 @@ mocked in tests.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,7 @@ from src.integrations.schemas import (
 )
 from src.integrations.stdio_runner import StdioRunner
 from src.services.mcp_service import MCPService
+from src.integrations.credential_audit import log_credential_event, CredentialAction
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +142,20 @@ class IntegrationService:
         # 2. Delete associated MCP sources
         await self._cleanup_previous_sources(instance)
 
+        # Audit: credential deletion
+        try:
+            cred_keys = [c.credential_key for c in instance.credentials]
+            await log_credential_event(
+                self._session,
+                CredentialAction.DELETED,
+                user_id=user_id,
+                instance_id=instance_id,
+                credential_key=",".join(cred_keys) if cred_keys else None,
+                details=f"Instance deleted, {len(cred_keys)} credentials removed",
+            )
+        except Exception:
+            pass
+
         # 3. Delete DB record (cascades to credentials)
         await self._instance_repo.delete(instance)
         logger.info("Deleted integration instance id=%s", instance_id)
@@ -201,6 +217,20 @@ class IntegrationService:
             "Credentials submitted and stdio process running for instance id=%s",
             instance_id,
         )
+
+        # Audit: credential creation
+        try:
+            await log_credential_event(
+                self._session,
+                CredentialAction.CREATED,
+                user_id=user_id,
+                instance_id=instance_id,
+                credential_key=",".join(data.credentials.keys()),
+                details=f"Credentials submitted for catalog '{instance.catalog.slug}'",
+            )
+        except Exception:
+            pass
+
         return instance
 
     # ------------------------------------------------------------------
@@ -277,6 +307,20 @@ class IntegrationService:
             "OAuth completed for instance id=%s",
             instance_id,
         )
+
+        # Audit: OAuth credential creation
+        try:
+            await log_credential_event(
+                self._session,
+                CredentialAction.CREATED,
+                user_id=user_id,
+                instance_id=instance_id,
+                credential_key="refresh_token,client_id,client_secret,access_token",
+                details=f"OAuth2 flow completed for catalog '{instance.catalog.slug}'",
+            )
+        except Exception:
+            pass
+
         return instance
 
     # ------------------------------------------------------------------
@@ -518,7 +562,7 @@ class IntegrationService:
             auth_env_var_mapping=catalog.auth_env_var_mapping,
         )
 
-        # Launch new process
+        # Launch new process (with one retry on failure)
         process_info = self._stdio.start(
             command=catalog.command or "",
             args=catalog.args,
@@ -526,9 +570,22 @@ class IntegrationService:
         )
 
         if process_info.status == "error":
-            instance.process_status = "error"
-            await self._instance_repo.update(instance)
-            raise RuntimeError(f"Stdio process failed to start: {process_info.error}")
+            # Retry once after a short delay
+            import asyncio
+            logger.warning(
+                "Stdio process failed to start for instance=%s, retrying in 1s...",
+                instance.id,
+            )
+            await asyncio.sleep(1)
+            process_info = self._stdio.start(
+                command=catalog.command or "",
+                args=catalog.args,
+                env=env,
+            )
+            if process_info.status == "error":
+                instance.process_status = "error"
+                await self._instance_repo.update(instance)
+                raise RuntimeError(f"Stdio process failed to start: {process_info.error}")
 
         instance.process_pid = process_info.pid
         instance.process_status = process_info.status
@@ -563,6 +620,3 @@ class IntegrationService:
         instance.process_pid = None
         await self._instance_repo.update(instance)
         return instance
-
-
-from datetime import datetime

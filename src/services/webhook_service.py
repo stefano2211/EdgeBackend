@@ -9,6 +9,8 @@ Public endpoint /webhooks/{slug}/receive is fully agnostic:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -100,7 +102,11 @@ class WebhookService:
     #  Reception (public endpoint)
     # ═══════════════════════════════════════════════════════════════════════
 
-    async def receive(self, slug: str, raw_payload: dict[str, Any]) -> dict[str, Any]:
+    async def receive(
+        self, slug: str, raw_payload: dict[str, Any],
+        raw_body: bytes | None = None,
+        signature_header: str | None = None,
+    ) -> dict[str, Any]:
         """Receive a payload from an external webhook and create an event.
 
         This is the PUBLIC entrypoint — no Bearer auth required.
@@ -110,6 +116,20 @@ class WebhookService:
             raise ValueError(f"Webhook '{slug}' not found")
         if not source.is_enabled:
             raise ValueError(f"Webhook '{slug}' is disabled")
+
+        # HMAC signature verification (optional — only if webhook has signing_secret)
+        signing_secret = getattr(source, "signing_secret", None)
+        if signing_secret and raw_body is not None:
+            if not signature_header:
+                raise PermissionError("Missing webhook signature header")
+            expected = "sha256=" + hmac.new(
+                signing_secret.encode(),
+                raw_body,
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(expected, signature_header):
+                logger.warning("Webhook '%s': HMAC signature mismatch", slug)
+                raise PermissionError("Invalid webhook signature")
 
         # Rate limiting
         rate_key = f"webhook:rate:{source.id}"
