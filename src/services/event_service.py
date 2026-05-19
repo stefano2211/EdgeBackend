@@ -21,7 +21,6 @@ from src.persistencia.repositories.event_repository import EventRepository
 from src.persistencia.repositories.domain_config_repository import DomainConfigRepository
 from src.services.domain_detector import DomainDetector
 from src.api.v1.schemas.event import (
-    ManualEventPayload,
     EventIngestPayload,
     ApprovalPayload,
     EventFeedbackPayload,
@@ -85,23 +84,6 @@ class EventService:
     # ------------------------------------------------------------------
     # Creation with normalization
     # ------------------------------------------------------------------
-
-    async def create_manual_event(
-        self, payload: ManualEventPayload, triggered_by_user_id: int
-    ) -> Event:
-        """Create a manually-triggered event with domain detection."""
-        event = await self._build_event(
-            event_type="manual",
-            source="user",
-            title=payload.title,
-            description=payload.description,
-            body=payload.data,
-            severity_number=severity_text_to_number(payload.severity_text.value),
-            severity_text=payload.severity_text.value,
-            triggered_by_user_id=triggered_by_user_id,
-        )
-        await self._persist_and_start(event)
-        return event
 
     async def ingest_event(
         self, payload: EventIngestPayload, triggered_by_user_id: int | None = None

@@ -11,12 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.v1.schemas.event import (
     EventListResponse,
     EventOut,
-    ManualEventPayload,
-    EventIngestPayload,
     ApprovalPayload,
     EventFeedbackPayload,
 )
-from src.core.deps import get_db, get_current_user, get_current_user_flexible, verify_api_key
+from src.core.deps import get_db, get_current_user, get_current_user_flexible
 from src.persistencia.models.user import User
 from src.services.event_service import EventService
 from src.services.event_broadcast import get_event_broadcast
@@ -95,34 +93,6 @@ async def get_event(
     """Get a single event by ID."""
     service = EventService(session)
     event = await service.get_event(event_id)
-    return EventOut.model_validate(event)
-
-
-@router.post("/ingest", response_model=EventOut, status_code=status.HTTP_202_ACCEPTED)
-async def ingest_external_event(
-    payload: EventIngestPayload,
-    api_key: str = Depends(verify_api_key),
-    session: AsyncSession = Depends(get_db),
-) -> EventOut:
-    """Ingest an event from external sensor/webhook (X-API-Key required).
-
-    Supports CloudEvents (ce-* headers or application/cloudevents+json)
-    as well as generic JSON payloads.
-    """
-    service = EventService(session)
-    event = await service.ingest_event(payload)
-    return EventOut.model_validate(event)
-
-
-@router.post("/manual", response_model=EventOut, status_code=status.HTTP_202_ACCEPTED)
-async def create_manual_event(
-    payload: ManualEventPayload,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-) -> EventOut:
-    """Create a manual event (auto-starts analysis)."""
-    service = EventService(session)
-    event = await service.create_manual_event(payload, triggered_by_user_id=current_user.id)
     return EventOut.model_validate(event)
 
 
