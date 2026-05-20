@@ -10,6 +10,7 @@ from src.api.v1.schemas.tool import (
     MCPSourceCreate,
     MCPSourceUpdate,
     MCPSourceOut,
+    MCPRegistryItem,
 )
 from src.core.deps import get_db, get_current_user
 from src.persistencia.models.user import User
@@ -113,6 +114,116 @@ async def delete_source(
     service = MCPSourceService(session)
     await service.delete(source_id)
     return None
+
+
+# ── Registry (unified view of all MCP tools) ──
+
+@router.get("/registry", response_model=list[MCPRegistryItem])
+async def list_registry(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Return all active MCP tools across chat and reactive contexts."""
+    from sqlalchemy import select
+    from src.persistencia.models.tool_config import ToolConfig, MCPSource
+    from src.persistencia.models.reactive_tool_config import ReactiveToolConfig
+    from src.persistencia.models.reactive_mcp_source import ReactiveMCPSource
+    from src.integrations.models import IntegrationInstance, IntegrationCatalog
+
+    registry: list[dict] = []
+
+    # ── Chat tools (ToolConfig + MCPSource) ──
+    chat_stmt = (
+        select(ToolConfig, MCPSource)
+        .join(MCPSource, ToolConfig.source_id == MCPSource.id)
+        .where(ToolConfig.is_enabled == True)
+    )
+    chat_result = await session.execute(chat_stmt)
+
+    for tool, source in chat_result.all():
+        # Determine if this source is tied to an integration instance
+        inst_stmt = (
+            select(IntegrationInstance, IntegrationCatalog)
+            .join(IntegrationCatalog, IntegrationInstance.catalog_id == IntegrationCatalog.id)
+            .where(IntegrationInstance.mcp_source_id == source.id)
+        )
+        inst_result = await session.execute(inst_stmt)
+        row = inst_result.first()
+
+        if row:
+            instance, catalog = row
+            source_type = catalog.source_type
+            instance_name = instance.instance_name
+            category = catalog.category
+        else:
+            source_type = "rest_bridge"
+            instance_name = None
+            category = None
+
+        transport = tool.config.get("transport", source.type) if tool.config else source.type
+
+        registry.append(
+            {
+                "id": tool.id,
+                "name": tool.name,
+                "description": tool.description,
+                "source_name": source.name,
+                "source_type": source_type,
+                "context": source.context_mode,
+                "transport": transport,
+                "is_enabled": tool.is_enabled,
+                "category": category,
+                "instance_name": instance_name,
+                "created_at": tool.created_at,
+            }
+        )
+
+    # ── Reactive tools (ReactiveToolConfig + ReactiveMCPSource) ──
+    reactive_stmt = (
+        select(ReactiveToolConfig, ReactiveMCPSource)
+        .join(ReactiveMCPSource, ReactiveToolConfig.source_id == ReactiveMCPSource.id)
+        .where(ReactiveToolConfig.is_enabled == True)
+    )
+    reactive_result = await session.execute(reactive_stmt)
+
+    for tool, source in reactive_result.all():
+        inst_stmt = (
+            select(IntegrationInstance, IntegrationCatalog)
+            .join(IntegrationCatalog, IntegrationInstance.catalog_id == IntegrationCatalog.id)
+            .where(IntegrationInstance.reactive_mcp_source_id == source.id)
+        )
+        inst_result = await session.execute(inst_stmt)
+        row = inst_result.first()
+
+        if row:
+            instance, catalog = row
+            source_type = catalog.source_type
+            instance_name = instance.instance_name
+            category = catalog.category
+        else:
+            source_type = "rest_bridge"
+            instance_name = None
+            category = None
+
+        transport = tool.config.get("transport", source.type) if tool.config else source.type
+
+        registry.append(
+            {
+                "id": tool.id,
+                "name": tool.name,
+                "description": tool.description,
+                "source_name": source.name,
+                "source_type": source_type,
+                "context": "reactive",
+                "transport": transport,
+                "is_enabled": tool.is_enabled,
+                "category": category,
+                "instance_name": instance_name,
+                "created_at": tool.created_at,
+            }
+        )
+
+    return registry
 
 
 # ── Discovery (real MCP Service) ──

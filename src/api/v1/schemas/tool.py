@@ -59,3 +59,21 @@ class ToolConfigOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MCPRegistryItem(BaseModel):
+    """Unified view of all active MCP tools across chat and reactive contexts."""
+
+    id: int
+    name: str
+    description: str | None = None
+    source_name: str
+    source_type: str  # "official" | "custom" | "rest_bridge"
+    context: str  # "chat" | "reactive" | "both"
+    transport: str  # "stdio" | "rest" | "sse"
+    is_enabled: bool
+    category: str | None = None
+    instance_name: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
