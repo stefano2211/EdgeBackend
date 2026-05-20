@@ -62,21 +62,62 @@ def _build_mcp_subagent(
 ) -> dict:
     # Build dynamic tool catalog for the prompt
     tool_catalog = ""
+    has_rest_tools = False
     if tool_schemas:
         lines = ["Available tools (call via mcp_execute):\n"]
         for i, t in enumerate(tool_schemas, 1):
             name = t.get("name", "unknown")
             desc = t.get("description") or "No description provided."
             schema = t.get("parameter_schema") or {}
+            config = t.get("config") or {}
+            transport = config.get("transport", "stdio")
+
+            # Detect REST auto-discovered tools
+            is_rest = transport == "rest" or bool(schema.get("filterable_schema"))
+            if is_rest:
+                has_rest_tools = True
 
             line = f"{i}. {name} — {desc}"
+            line += f"\n   Transport: {transport.upper()}"
+
+            # Input parameters
             params = schema.get("parameters") or schema.get("properties")
             if params:
                 param_parts = []
                 for pname, pinfo in params.items():
                     ptype = pinfo.get("type", "any") if isinstance(pinfo, dict) else "any"
                     param_parts.append(f"{pname}: {ptype}")
-                line += f"\n   Parameters: {{{', '.join(param_parts)}}}"
+                line += f"\n   Input: {{{', '.join(param_parts)}}}"
+
+            # REST-specific: response fields and filterable schema
+            if is_rest:
+                response_fields = schema.get("response") or {}
+                if response_fields:
+                    resp_parts = []
+                    for fname, fdef in response_fields.items():
+                        if isinstance(fdef, dict):
+                            ftype = fdef.get("type", "any")
+                            unit = fdef.get("unit", "")
+                            fdesc = fdef.get("description", "")
+                            unit_str = f", {unit}" if unit else ""
+                            resp_parts.append(f"{fname} ({ftype}{unit_str}) — {fdesc}")
+                        else:
+                            resp_parts.append(f"{fname}: {fdef}")
+                    if resp_parts:
+                        line += "\n   Returns:\n      - " + "\n      - ".join(resp_parts)
+
+                filterable = schema.get("filterable_schema") or {}
+                if filterable:
+                    kv = filterable.get("key_values") or {}
+                    kf = filterable.get("key_figures") or []
+                    filt_parts = []
+                    if kv:
+                        kv_str = ", ".join(f"{k}: {v}" for k, v in kv.items())
+                        filt_parts.append(f"key_values: {{{kv_str}}}")
+                    if kf:
+                        filt_parts.append(f"key_figures: [{', '.join(str(x) for x in kf)}]")
+                    if filt_parts:
+                        line += "\n   Filterable:\n      - " + "\n      - ".join(filt_parts)
 
             lines.append(line)
         tool_catalog = "\n".join(lines)
@@ -89,7 +130,7 @@ def _build_mcp_subagent(
     return {
         "name": "mcp-agent",
         "description": MCP_AGENT_DESCRIPTION,
-        "system_prompt": build_mcp_system_prompt(tool_catalog=tool_catalog),
+        "system_prompt": build_mcp_system_prompt(tool_catalog=tool_catalog, has_rest_tools=has_rest_tools),
         "tools": tools,
         "model": get_chat_model(),
     }

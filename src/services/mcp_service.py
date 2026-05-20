@@ -623,7 +623,7 @@ Sample response data (first 1000 chars):
 
 Return ONLY this JSON structure:
 {{
-  "description": "<one sentence, max 20 words, describing what this endpoint does>",
+  "description": "<one sentence, max 25 words, describing what this endpoint returns. Must mention the TYPE of data (metrics, status, configuration, records, etc.)>",
   "params": {{
     "<param_name>": {{
       "type": "<string|integer|number|boolean|object>",
@@ -646,6 +646,7 @@ Rules:
 - In "response_fields" include only the top-level fields visible in the sample response (max 10).
 - If the sample is a list, describe fields of ONE item.
 - Do not include internal/system fields (e.g. _id, __v).
+- The "description" MUST mention what kind of data the endpoint returns (e.g. "equipment metrics", "alert records", "system status", "user configuration").
 """
 
             llm_result = await self._analyze_with_llm(analysis_prompt)

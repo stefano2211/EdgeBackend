@@ -39,9 +39,9 @@ MCP_AGENT_DESCRIPTION = (
 )
 
 
-def build_mcp_system_prompt(tool_catalog: str = "") -> str:
+def build_mcp_system_prompt(tool_catalog: str = "", has_rest_tools: bool = False) -> str:
     """Build MCP agent system prompt with dynamic tool catalog."""
-    return load_prompt("subagent_mcp", tool_catalog=tool_catalog)
+    return load_prompt("subagent_mcp", tool_catalog=tool_catalog, has_rest_tools=has_rest_tools)
 
 
 MCP_AGENT_SYSTEM_PROMPT = build_mcp_system_prompt()

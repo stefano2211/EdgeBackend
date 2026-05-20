@@ -44,9 +44,39 @@ Consult the <tool_catalog> above for the exact parameter names and types each to
 Pass ALL required fields — never call with empty parameters when the tool requires input.
 
 For filtering response data:
-  - key_values (dict | null): optional filter for categorical fields in the response.
-  - key_figures (list | null): optional filter for numeric fields in the response.
+  - key_values (dict | null): filter for categorical fields in the response.
+  - key_figures (list | null): filter for numeric fields in the response.
 </parameter_rules>
+
+{% if has_rest_tools %}
+<rest_tools_protocol>
+The tool catalog above contains REST auto-discovered APIs (marked with "Transport: REST").
+These are different from stdio integrations — they return structured data that MUST be filtered.
+
+MANDATORY FILTER RULES for REST tools:
+- You MUST always pass key_values and/or key_figures when calling a REST tool.
+- If you do not filter, the API may return too much data and you will waste tokens.
+- Use the "Filterable" section of each REST tool to know which fields support filtering.
+
+How to build filters:
+1. key_values (dict): maps field name → list of allowed values.
+   Example: {"status": ["running"], "priority": ["high"]}
+   This is applied server-side BEFORE the response reaches you.
+
+2. key_figures (list of dicts): each dict has "field", optionally "min" and/or "max".
+   Example: [{"field": "temperature", "min": 50, "max": 100}]
+   This is also applied server-side BEFORE the response reaches you.
+
+3. If a field appears in both key_values and key_figures, prefer key_values for categorical
+   fields and key_figures for numeric fields.
+
+4. If the user request implies a specific subset of data, ALWAYS construct the narrowest
+   filter that satisfies the request.
+
+IMPORTANT: Never call a REST tool without at least one filter unless the user explicitly
+asks for "all" or "every" record.
+</rest_tools_protocol>
+{% endif %}
 
 <hard_limits>
 - Call mcp_execute AT MOST 3 times per request.
