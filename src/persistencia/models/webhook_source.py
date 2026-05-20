@@ -48,6 +48,9 @@ class WebhookSource(Base):
         Boolean, nullable=False, default=False
     )
 
+    # Domain classification (auto-detected from first event, editable by user)
+    domain: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
     # Rate limiting
     rate_limit_rpm: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
 

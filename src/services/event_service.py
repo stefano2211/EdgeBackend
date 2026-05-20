@@ -86,9 +86,19 @@ class EventService:
     # ------------------------------------------------------------------
 
     async def ingest_event(
-        self, payload: EventIngestPayload, triggered_by_user_id: int | None = None
+        self,
+        payload: EventIngestPayload,
+        triggered_by_user_id: int | None = None,
+        domain: str | None = None,
     ) -> Event:
-        """Ingest an external event (CloudEvents-compatible or generic JSON)."""
+        """Ingest an external event (CloudEvents-compatible or generic JSON).
+
+        Args:
+            payload: Normalized event payload.
+            triggered_by_user_id: User who owns the webhook/source.
+            domain: Optional pre-resolved domain (e.g. from webhook cache).
+                    When provided, skips automatic domain detection.
+        """
         event = await self._build_event(
             event_type=payload.type or "generic",
             source=payload.source or "unknown",
@@ -100,6 +110,7 @@ class EventService:
             timestamp=payload.time,
             subject=payload.subject,
             triggered_by_user_id=triggered_by_user_id,
+            domain=domain,
         )
         await self._persist_and_start(event)
         return event
@@ -120,17 +131,34 @@ class EventService:
         timestamp: datetime | None = None,
         subject: str | None = None,
         triggered_by_user_id: int | None = None,
+        domain: str | None = None,
     ) -> Event:
-        """Construct an Event with domain detection and dedup key generation."""
-        # Domain detection
-        domain_result = await self.domain_detector.detect(
-            payload=body or {},
-            user_id=triggered_by_user_id,
-            source=source,
-        )
+        """Construct an Event with domain detection and dedup key generation.
+
+        If *domain* is provided (e.g. cached on the webhook), detection is skipped.
+        Otherwise falls back to automatic rule-based + LLM detection.
+        """
+        if domain:
+            # Use pre-resolved domain — skip expensive detection
+            detected_domain = domain
+            subdomain = None
+            logger.debug(
+                "Event builder using pre-resolved domain='%s' for source='%s'",
+                domain,
+                source,
+            )
+        else:
+            # Domain detection (rules + LLM fallback)
+            domain_result = await self.domain_detector.detect(
+                payload=body or {},
+                user_id=triggered_by_user_id,
+                source=source,
+            )
+            detected_domain = domain_result.get("domain")
+            subdomain = domain_result.get("subdomain")
 
         # Dedup key: hash of source + type + title + domain (configurable)
-        dedup_key = self._generate_dedup_key(source, event_type, title, domain_result["domain"])
+        dedup_key = self._generate_dedup_key(source, event_type, title, detected_domain)
 
         return Event(
             event_id=str(uuid.uuid4()),
@@ -143,8 +171,8 @@ class EventService:
             title=title,
             description=description,
             body=body,
-            domain=domain_result.get("domain"),
-            subdomain=domain_result.get("subdomain"),
+            domain=detected_domain,
+            subdomain=subdomain,
             dedup_key=dedup_key,
             resource={"ingested_at": datetime.now(timezone.utc).isoformat()},
             status="pending",

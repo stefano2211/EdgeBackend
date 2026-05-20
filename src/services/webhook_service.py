@@ -110,6 +110,7 @@ class WebhookService:
         """Receive a payload from an external webhook and create an event.
 
         This is the PUBLIC entrypoint — no Bearer auth required.
+        Domain is auto-detected from the first event and cached on the webhook.
         """
         source = await self.repo.get_by_slug(slug)
         if not source:
@@ -170,12 +171,36 @@ class WebhookService:
         # Force source to match webhook slug
         payload.source = source.slug
 
-        # Persist auto-discovered mapping before creating event
-        if auto_discovered:
+        # Domain resolution: use cached domain if available, otherwise auto-detect and cache
+        webhook_domain = source.domain
+        domain_auto_learned = False
+        if not webhook_domain:
+            # First event — auto-detect domain from payload
+            from src.services.domain_detector import DomainDetector
+            from src.persistencia.repositories.domain_config_repository import DomainConfigRepository
+            detector = DomainDetector(DomainConfigRepository(self.session))
+            domain_result = await detector.detect(
+                payload=raw_payload,
+                user_id=source.user_id,
+                source=source.slug,
+            )
+            webhook_domain = domain_result.get("domain")
+            source.domain = webhook_domain
+            domain_auto_learned = True
+            logger.info(
+                "Webhook '%s' auto-learned domain='%s' (source=%s, confidence=%s)",
+                slug,
+                webhook_domain,
+                domain_result.get("source"),
+                domain_result.get("confidence"),
+            )
+
+        # Persist auto-discovered mapping and/or domain before creating event
+        if auto_discovered or domain_auto_learned:
             await self.session.commit()
 
         # Create event via EventService (isolated session)
-        event = await self._create_event(source.user_id, payload)
+        event = await self._create_event(source.user_id, payload, domain=webhook_domain)
 
         # Update statistics
         source.last_payload_preview = self._truncate_preview(raw_payload)
@@ -187,6 +212,8 @@ class WebhookService:
             "event_id": event.id if event else None,
             "status": "accepted",
             "auto_discovered": auto_discovered,
+            "domain": webhook_domain,
+            "domain_auto_learned": domain_auto_learned,
         }
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -241,11 +268,11 @@ class WebhookService:
     # ═══════════════════════════════════════════════════════════════════════
 
     async def _create_event(
-        self, user_id: int, payload: EventIngestPayload
+        self, user_id: int, payload: EventIngestPayload, domain: str | None = None
     ) -> Any:
-        """Delegate event creation to EventService."""
+        """Delegate event creation to EventService with optional domain override."""
         service = EventService(self.session)
-        return await service.ingest_event(payload, triggered_by_user_id=user_id)
+        return await service.ingest_event(payload, triggered_by_user_id=user_id, domain=domain)
 
     @staticmethod
     def _truncate_preview(payload: dict[str, Any], max_size: int = 2048) -> dict[str, Any]:

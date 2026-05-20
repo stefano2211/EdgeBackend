@@ -15,6 +15,7 @@ class WebhookSourceCreate(BaseModel):
     is_enabled: bool = True
     mapping_config: dict | None = None
     rate_limit_rpm: int = Field(60, ge=1, le=10000)
+    domain: str | None = Field(None, max_length=50, description="Optional domain override. If not set, auto-detected from first event payload.")
 
 
 class WebhookSourceUpdate(BaseModel):
@@ -23,6 +24,7 @@ class WebhookSourceUpdate(BaseModel):
     is_enabled: bool | None = None
     mapping_config: dict | None = None
     rate_limit_rpm: int | None = Field(None, ge=1, le=10000)
+    domain: str | None = Field(None, max_length=50, description="Set to auto-learn from first event, or provide explicit domain.")
 
 
 class WebhookSourceOut(BaseModel):
@@ -34,6 +36,7 @@ class WebhookSourceOut(BaseModel):
     is_enabled: bool
     mapping_config: dict | None
     auto_discovered: bool
+    domain: str | None
     rate_limit_rpm: int
     last_payload_preview: dict | None
     last_received_at: datetime | None
