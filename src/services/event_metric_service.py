@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
+from typing import Any
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,6 +109,45 @@ class EventMetricService:
             stmt = stmt.where(EventMetric.date_bucket <= date_to)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    def aggregate_metrics(self, metrics: list[EventMetric]) -> dict[str, Any]:
+        """Aggregate a list of metric rows into a single summary dict.
+
+        Returns keys:
+            total_events, events_analyzed, events_auto_resolved, events_failed,
+            false_positives, false_positive_rate, avg_ttd_seconds, avg_ttr_seconds
+        """
+        total_events = sum(m.total_events for m in metrics)
+        events_analyzed = sum(m.events_analyzed for m in metrics)
+        events_auto_resolved = sum(m.events_auto_resolved for m in metrics)
+        events_failed = sum(m.events_failed for m in metrics)
+        false_positives = sum(m.false_positives for m in metrics)
+
+        avg_ttd = (
+            sum(m.avg_ttd or 0 for m in metrics)
+            / len([m for m in metrics if m.avg_ttd is not None])
+            if any(m.avg_ttd is not None for m in metrics)
+            else None
+        )
+        avg_ttr = (
+            sum(m.avg_ttr or 0 for m in metrics)
+            / len([m for m in metrics if m.avg_ttr is not None])
+            if any(m.avg_ttr is not None for m in metrics)
+            else None
+        )
+
+        fp_rate = false_positives / total_events if total_events > 0 else 0.0
+
+        return {
+            "total_events": total_events,
+            "events_analyzed": events_analyzed,
+            "events_auto_resolved": events_auto_resolved,
+            "events_failed": events_failed,
+            "false_positives": false_positives,
+            "false_positive_rate": round(fp_rate, 4),
+            "avg_ttd_seconds": round(avg_ttd, 2) if avg_ttd is not None else None,
+            "avg_ttr_seconds": round(avg_ttr, 2) if avg_ttr is not None else None,
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers

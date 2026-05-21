@@ -13,11 +13,20 @@ from src.api.v1.schemas.tool import (
     MCPRegistryItem,
 )
 from src.core.deps import get_db, get_current_user
+from src.core.exceptions import NotFoundError
+from src.core.logging import logging
 from src.persistencia.models.user import User
 from src.services.tool_config_service import ToolConfigService
 from src.services.mcp_source_service import MCPSourceService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tools", tags=["tools"])
+
+
+# ── Helpers ──
+
+def _raise_not_found(entity: str, entity_id: int) -> None:
+    raise HTTPException(status_code=404, detail=f"{entity} {entity_id} not found")
 
 
 # ── ToolConfig ──
@@ -38,7 +47,10 @@ async def get_tool(
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
-    return await service.get(tool_id)
+    try:
+        return await service.get(tool_id)
+    except NotFoundError:
+        _raise_not_found("ToolConfig", tool_id)
 
 
 @router.post("", response_model=ToolConfigOut, status_code=201)
@@ -59,7 +71,10 @@ async def update_tool(
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
-    return await service.update(tool_id, data)
+    try:
+        return await service.update(tool_id, data)
+    except NotFoundError:
+        _raise_not_found("ToolConfig", tool_id)
 
 
 @router.delete("/{tool_id}", status_code=204)
@@ -69,7 +84,10 @@ async def delete_tool(
     session: AsyncSession = Depends(get_db),
 ):
     service = ToolConfigService(session)
-    await service.delete(tool_id)
+    try:
+        await service.delete(tool_id)
+    except NotFoundError:
+        _raise_not_found("ToolConfig", tool_id)
     return None
 
 
@@ -102,7 +120,10 @@ async def update_source(
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
-    return await service.update(source_id, data)
+    try:
+        return await service.update(source_id, data)
+    except NotFoundError:
+        _raise_not_found("MCPSource", source_id)
 
 
 @router.delete("/sources/{source_id}", status_code=204)
@@ -112,7 +133,10 @@ async def delete_source(
     session: AsyncSession = Depends(get_db),
 ):
     service = MCPSourceService(session)
-    await service.delete(source_id)
+    try:
+        await service.delete(source_id)
+    except NotFoundError:
+        _raise_not_found("MCPSource", source_id)
     return None
 
 
@@ -124,106 +148,10 @@ async def list_registry(
     session: AsyncSession = Depends(get_db),
 ):
     """Return all active MCP tools across chat and reactive contexts."""
-    from sqlalchemy import select
-    from src.persistencia.models.tool_config import ToolConfig, MCPSource
-    from src.persistencia.models.reactive_tool_config import ReactiveToolConfig
-    from src.persistencia.models.reactive_mcp_source import ReactiveMCPSource
-    from src.integrations.models import IntegrationInstance, IntegrationCatalog
+    from src.services.tool_registry_service import ToolRegistryService
 
-    registry: list[dict] = []
-
-    # ── Chat tools (ToolConfig + MCPSource) ──
-    chat_stmt = (
-        select(ToolConfig, MCPSource)
-        .join(MCPSource, ToolConfig.source_id == MCPSource.id)
-        .where(ToolConfig.is_enabled == True)
-    )
-    chat_result = await session.execute(chat_stmt)
-
-    for tool, source in chat_result.all():
-        # Determine if this source is tied to an integration instance
-        inst_stmt = (
-            select(IntegrationInstance, IntegrationCatalog)
-            .join(IntegrationCatalog, IntegrationInstance.catalog_id == IntegrationCatalog.id)
-            .where(IntegrationInstance.mcp_source_id == source.id)
-        )
-        inst_result = await session.execute(inst_stmt)
-        row = inst_result.first()
-
-        if row:
-            instance, catalog = row
-            source_type = catalog.source_type
-            instance_name = instance.instance_name
-            category = catalog.category
-        else:
-            source_type = "rest_bridge"
-            instance_name = None
-            category = None
-
-        transport = tool.config.get("transport", source.type) if tool.config else source.type
-
-        registry.append(
-            {
-                "id": tool.id,
-                "name": tool.name,
-                "description": tool.description,
-                "source_name": source.name,
-                "source_type": source_type,
-                "context": source.context_mode,
-                "transport": transport,
-                "is_enabled": tool.is_enabled,
-                "category": category,
-                "instance_name": instance_name,
-                "created_at": tool.created_at,
-            }
-        )
-
-    # ── Reactive tools (ReactiveToolConfig + ReactiveMCPSource) ──
-    reactive_stmt = (
-        select(ReactiveToolConfig, ReactiveMCPSource)
-        .join(ReactiveMCPSource, ReactiveToolConfig.source_id == ReactiveMCPSource.id)
-        .where(ReactiveToolConfig.is_enabled == True)
-    )
-    reactive_result = await session.execute(reactive_stmt)
-
-    for tool, source in reactive_result.all():
-        inst_stmt = (
-            select(IntegrationInstance, IntegrationCatalog)
-            .join(IntegrationCatalog, IntegrationInstance.catalog_id == IntegrationCatalog.id)
-            .where(IntegrationInstance.reactive_mcp_source_id == source.id)
-        )
-        inst_result = await session.execute(inst_stmt)
-        row = inst_result.first()
-
-        if row:
-            instance, catalog = row
-            source_type = catalog.source_type
-            instance_name = instance.instance_name
-            category = catalog.category
-        else:
-            source_type = "rest_bridge"
-            instance_name = None
-            category = None
-
-        transport = tool.config.get("transport", source.type) if tool.config else source.type
-
-        registry.append(
-            {
-                "id": tool.id,
-                "name": tool.name,
-                "description": tool.description,
-                "source_name": source.name,
-                "source_type": source_type,
-                "context": "reactive",
-                "transport": transport,
-                "is_enabled": tool.is_enabled,
-                "category": category,
-                "instance_name": instance_name,
-                "created_at": tool.created_at,
-            }
-        )
-
-    return registry
+    service = ToolRegistryService(session)
+    return await service.list_registry()
 
 
 # ── Discovery (real MCP Service) ──
@@ -241,9 +169,18 @@ async def discover_tools(
 
     service = MCPService()
     try:
-        return await service.discover_tools(url, is_stdio=is_stdio, is_resource=is_resource, method=method)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return await service.discover_tools(
+            url, is_stdio=is_stdio, is_resource=is_resource, method=method
+        )
+    except ValueError as exc:
+        logger.warning("Discovery validation error: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid discovery parameters.")
+    except RuntimeError as exc:
+        logger.error("Discovery runtime error: %s", exc)
+        raise HTTPException(status_code=502, detail="Discovery failed. Check server logs.")
+    except Exception:
+        logger.exception("Discovery unexpected error for url=%s", url)
+        raise HTTPException(status_code=500, detail="Discovery failed. Check server logs.")
 
 
 @router.get("/sources/{source_id}/discover")
@@ -257,14 +194,28 @@ async def discover_source_tools(
     from src.services.mcp_service import MCPService
 
     service = MCPSourceService(session)
-    source = await service.get(source_id)
+    try:
+        source = await service.get(source_id)
+    except NotFoundError:
+        _raise_not_found("MCPSource", source_id)
+
     mcp_service = MCPService()
     try:
         return await mcp_service.discover_tools(
-            source.url, is_stdio=(source.type == "stdio"), method=method
+            source.url,
+            is_stdio=(source.type == "stdio"),
+            method=method,
+            is_resource=False,
         )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as exc:
+        logger.warning("Discovery validation error for source_id=%s: %s", source_id, exc)
+        raise HTTPException(status_code=400, detail="Invalid discovery parameters.")
+    except RuntimeError as exc:
+        logger.error("Discovery runtime error for source_id=%s: %s", source_id, exc)
+        raise HTTPException(status_code=502, detail="Discovery failed. Check server logs.")
+    except Exception:
+        logger.exception("Discovery unexpected error for source_id=%s", source_id)
+        raise HTTPException(status_code=500, detail="Discovery failed. Check server logs.")
 
 
 @router.post("/sources/{source_id}/sync")
@@ -277,5 +228,14 @@ async def sync_source_tools(
     service = MCPSourceService(session)
     try:
         return await service.sync_source_tools(source_id)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except NotFoundError:
+        _raise_not_found("MCPSource", source_id)
+    except ValueError as exc:
+        logger.warning("Sync validation error for source_id=%s: %s", source_id, exc)
+        raise HTTPException(status_code=400, detail="Invalid sync parameters.")
+    except RuntimeError as exc:
+        logger.error("Sync runtime error for source_id=%s: %s", source_id, exc)
+        raise HTTPException(status_code=502, detail="Sync failed. Check server logs.")
+    except Exception:
+        logger.exception("Sync unexpected error for source_id=%s", source_id)
+        raise HTTPException(status_code=500, detail="Sync failed. Check server logs.")

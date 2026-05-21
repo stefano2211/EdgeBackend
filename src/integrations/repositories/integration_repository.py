@@ -131,3 +131,12 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
             .order_by(IntegrationInstance.created_at.desc())
         )
         return list(result.scalars().all())
+
+    async def list_all(self) -> list[IntegrationInstance]:
+        """Return every integration instance in the system (used by health loops)."""
+        result = await self._session.execute(
+            select(IntegrationInstance)
+            .options(selectinload(IntegrationInstance.catalog))
+            .order_by(IntegrationInstance.created_at.desc())
+        )
+        return list(result.scalars().all())

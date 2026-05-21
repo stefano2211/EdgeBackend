@@ -1,13 +1,9 @@
-"""Documents router — upload endpoint with MinIO/S3 storage and background processing."""
-
-import os
-import uuid as uuid_mod
+"""Documents router — thin controller that delegates upload orchestration to DocumentService."""
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.schemas.document import DocumentOut, DocumentListResponse
-from src.core.config import settings
 from src.core.deps import get_db, get_current_user, get_storage
 from src.persistencia.models.user import User
 from src.persistencia.storage.storage_port import StoragePort
@@ -27,33 +23,13 @@ async def upload_document(
     storage: StoragePort = Depends(get_storage),
 ):
     """Upload a document into a KnowledgeBase (stored in MinIO/S3, processed asynchronously)."""
-
-    # Validate file size
-    content = await file.read()
-    if len(content) > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Max size: {settings.MAX_UPLOAD_SIZE} bytes",
-        )
-
-    # Build S3 key: kb/{knowledge_base_id}/{uuid}.{ext}
-    ext = os.path.splitext(file.filename or "")[1]
-    file_id = str(uuid_mod.uuid4())
-    s3_key = f"kb/{knowledge_base_id}/{file_id}{ext}"
-
-    # Upload to MinIO/S3
-    content_type = file.content_type or "application/octet-stream"
-    await storage.upload(s3_key, content, content_type=content_type)
-
-    # Create document record with S3 key as file_id
     service = DocumentService(session, storage=storage)
-    doc = await service.create_document(
-        knowledge_base_id,
-        current_user.id,
-        file.filename or "unknown",
-        s3_key=s3_key,
-        content_type=content_type,
-    )
+    try:
+        doc = await service.upload_document(knowledge_base_id, current_user.id, file)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
+        )
 
     # Trigger background processing (parse → chunk → embed → Qdrant)
     background_tasks.add_task(

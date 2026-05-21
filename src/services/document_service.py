@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import os
+import uuid as uuid_mod
+
+from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.core.exceptions import NotFoundError
 from src.core.logging import logging
 from src.persistencia.models.document import Document
@@ -53,6 +58,42 @@ class DocumentService:
         await self.repo.create(doc)
         await commit_and_refresh(self.session, doc)
         return doc
+
+    async def upload_document(
+        self,
+        kb_id: int,
+        user_id: int,
+        file: UploadFile,
+    ) -> Document:
+        """Orchestrate a full upload: validate size, store in MinIO, create DB record.
+
+        Returns the created Document.  The caller (router) is responsible for
+        scheduling the background processing task so that the FastAPI
+        ``BackgroundTasks`` machinery stays in the web layer.
+        """
+        if self._storage is None:
+            raise RuntimeError("DocumentService requires a StoragePort to perform uploads")
+
+        content = await file.read()
+        if len(content) > settings.MAX_UPLOAD_SIZE:
+            raise ValueError(
+                f"File too large. Max size: {settings.MAX_UPLOAD_SIZE} bytes"
+            )
+
+        ext = os.path.splitext(file.filename or "")[1]
+        file_id = str(uuid_mod.uuid4())
+        s3_key = f"kb/{kb_id}/{file_id}{ext}"
+        content_type = file.content_type or "application/octet-stream"
+
+        await self._storage.upload(s3_key, content, content_type=content_type)
+
+        return await self.create_document(
+            kb_id,
+            user_id,
+            file.filename or "unknown",
+            s3_key=s3_key,
+            content_type=content_type,
+        )
 
     async def list_documents(
         self, knowledge_base_id: int | None = None

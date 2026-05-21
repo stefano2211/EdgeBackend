@@ -38,6 +38,7 @@ class EventJobTracker:
         self._internal_queue: asyncio.Queue[_JobSpec] = asyncio.Queue()
         self._drain_task: asyncio.Task | None = None
         self._shutdown = False
+        self._recovery_factories: dict[str, Callable[[int], Coroutine[Any, Any, None]]] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -82,6 +83,19 @@ class EventJobTracker:
                 return True
             return False
 
+    def register_recovery_factory(
+        self,
+        job_type: str,
+        factory: Callable[[int], Coroutine[Any, Any, None]],
+    ) -> None:
+        """Register a factory that can rebuild a coroutine from an event_id.
+
+        Used during ``recover_on_startup`` to re-queue durable jobs after a
+        process restart.
+        """
+        self._recovery_factories[job_type] = factory
+        logger.info("Registered recovery factory for job_type='%s'", job_type)
+
     async def recover_on_startup(self) -> None:
         """Re-queue orphaned jobs that were running/queued before a restart."""
         async with AsyncSessionLocal() as session:
@@ -99,17 +113,32 @@ class EventJobTracker:
             return
 
         logger.info("Recovering %d orphaned job(s)", len(orphans))
+        recovered = 0
+        failed = 0
         for job in orphans:
             await self._reset_job(job.id)
-            # We cannot recover coro_factory because it is a runtime callable.
-            # The caller (EventService) must supply a recovery mechanism or
-            # the job will stay queued until the event is manually retried.
-            # For now, we mark them failed so they don't hang forever.
-            await self._mark_failed(
-                job.id, "Orphaned after restart — manual retry required"
-            )
+            factory = self._recovery_factories.get(job.job_type)
+            if factory:
+                try:
+                    await self.enqueue(job.event_id, job.job_type, lambda: factory(job.event_id))
+                    recovered += 1
+                except Exception:
+                    logger.exception(
+                        "Failed to recover job %s for event %s", job.job_type, job.event_id
+                    )
+                    await self._mark_failed(
+                        job.id, "Recovery failed — exception during re-enqueue"
+                    )
+                    failed += 1
+            else:
+                await self._mark_failed(
+                    job.id, "Orphaned after restart — no recovery factory registered"
+                )
+                failed += 1
 
-        logger.info("Recovery complete: %d jobs marked failed", len(orphans))
+        logger.info(
+            "Recovery complete: %d re-queued, %d marked failed", recovered, failed
+        )
 
     async def start(self) -> None:
         """Start the background queue drain worker."""

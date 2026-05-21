@@ -154,9 +154,17 @@ class WebhookMappingEngine:
         # ── JSONPath (default) ──
         value = self._jsonpath(payload, rule.get("path"))
 
-        # Fallback path
-        if value is None and "fallback" in rule:
-            value = self._jsonpath(payload, rule["fallback"])
+        # Fallback chain: supports legacy "fallback" / "fallback2" keys
+        # as well as a modern "fallbacks" list.
+        if value is None:
+            for fb in rule.get("fallbacks", []):
+                value = self._jsonpath(payload, fb)
+                if value is not None:
+                    break
+            if value is None and "fallback" in rule:
+                value = self._jsonpath(payload, rule["fallback"])
+            if value is None and "fallback2" in rule:
+                value = self._jsonpath(payload, rule["fallback2"])
 
         # Default value
         if value is None and "default" in rule:

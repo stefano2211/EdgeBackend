@@ -14,9 +14,17 @@ class WebhookSourceRepository(BaseRepository[WebhookSource]):
         super().__init__(session, WebhookSource)
 
     async def get_by_slug(self, slug: str) -> WebhookSource | None:
+        """Look up a webhook by slug globally (public endpoint).
+
+        Uses ``.first()`` rather than ``scalar_one_or_none()`` because the
+        DB constraint is composite (slug, user_id). In a multi-tenant setup
+        two users *could* theoretically share a slug; ``first()`` avoids a
+        ``MultipleResultsFound`` crash. The service layer enforces global slug
+        uniqueness at creation time.
+        """
         stmt = select(WebhookSource).where(WebhookSource.slug == slug)
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def get_by_slug_for_user(
         self, slug: str, user_id: int

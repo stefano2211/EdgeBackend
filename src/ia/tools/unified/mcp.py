@@ -37,6 +37,18 @@ class _LRUCache:
         self._data[key] = value
         self._order.append(key)
 
+    def invalidate(self, prefix: str | None = None) -> None:
+        """Remove entries matching an optional key prefix."""
+        if prefix is None:
+            self._data.clear()
+            self._order.clear()
+            return
+        keys_to_remove = [k for k in list(self._order) if k.startswith(prefix)]
+        for k in keys_to_remove:
+            self._data.pop(k, None)
+            if k in self._order:
+                self._order.remove(k)
+
 
 _CONFIG = {
     "chat": {
@@ -141,9 +153,16 @@ async def _mcp_execute_impl(
 
         if execution_url and "://" in execution_url:
             scheme, rest = execution_url.split("://", 1)
-            while "//" in rest:
-                rest = rest.replace("//", "/")
-            execution_url = f"{scheme}://{rest}"
+            # Separate path and query to avoid corrupting query params
+            if "?" in rest:
+                path_part, query_part = rest.split("?", 1)
+                while "//" in path_part:
+                    path_part = path_part.replace("//", "/")
+                execution_url = f"{scheme}://{path_part}?{query_part}"
+            else:
+                while "//" in rest:
+                    rest = rest.replace("//", "/")
+                execution_url = f"{scheme}://{rest}"
 
         # Heuristic REST detection
         if transport_type == "mcp" and execution_url and "://" in execution_url:
@@ -258,3 +277,20 @@ def create_mcp_tool(source: Literal["chat", "reactive"] = "chat") -> StructuredT
             "For send_email: parameters={\"to\": \"<recipient>\", \"subject\": \"<subject>\", \"body\": \"<body>\"} is MANDATORY."
         ),
     )
+
+
+def invalidate_mcp_cache(context: Literal["chat", "reactive"], source_id: int | None = None) -> None:
+    """Invalidate the MCP URL cache for a given context.
+
+    Call this after updating or deleting an MCP source so stale resolved
+    URLs are evicted.
+    """
+    cfg = _CONFIG.get(context)
+    if not cfg:
+        return
+    cache = cfg["cache"]
+    if source_id is not None:
+        cache.invalidate(f"{source_id}:")
+    else:
+        cache.invalidate(None)
+    logger.info("[%s MCP] Cache invalidated for source_id=%s", context, source_id)

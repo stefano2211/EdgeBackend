@@ -1,7 +1,4 @@
-"""Domain configuration router.
-
-CRUD for user-defined domains and a test endpoint for detection rules.
-"""
+"""Domain configuration router — thin controller that delegates to DomainConfigService."""
 
 from __future__ import annotations
 
@@ -10,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.core.deps import get_current_user
+from src.core.exceptions import ConflictError, NotFoundError
 from src.persistencia.models.user import User
-from src.persistencia.repositories.domain_config_repository import DomainConfigRepository
+from src.services.domain_config_service import DomainConfigService
 from src.services.domain_detector import DomainDetector
 from src.api.v1.schemas.domain_config import (
     DomainConfigCreate,
@@ -25,25 +23,17 @@ from src.api.v1.schemas.domain_config import (
 router = APIRouter(prefix="/domains", tags=["Domains"])
 
 
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
+async def _get_service(session: AsyncSession = Depends(get_db)) -> DomainConfigService:
+    return DomainConfigService(session)
 
-async def _get_repo(session: AsyncSession = Depends(get_db)) -> DomainConfigRepository:
-    return DomainConfigRepository(session)
-
-
-# ------------------------------------------------------------------
-# CRUD
-# ------------------------------------------------------------------
 
 @router.get("", response_model=DomainConfigListResponse)
 async def list_domains(
     user: User = Depends(get_current_user),
-    repo: DomainConfigRepository = Depends(_get_repo),
+    service: DomainConfigService = Depends(_get_service),
 ) -> DomainConfigListResponse:
     """List all domain configurations for the current user."""
-    items = await repo.list_for_user(user.id)
+    items = await service.list_for_user(user.id)
     return DomainConfigListResponse(items=items)
 
 
@@ -51,27 +41,19 @@ async def list_domains(
 async def create_domain(
     payload: DomainConfigCreate,
     user: User = Depends(get_current_user),
-    repo: DomainConfigRepository = Depends(_get_repo),
+    service: DomainConfigService = Depends(_get_service),
 ) -> DomainConfigOut:
     """Create a new domain configuration."""
-    from src.persistencia.models.domain_config import DomainConfig
-
-    # Ensure uniqueness per user
-    existing = await repo.get_by_name_for_user(user.id, payload.name)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Domain '{payload.name}' already exists",
+    try:
+        domain = await service.create(
+            user_id=user.id,
+            name=payload.name,
+            display_name=payload.display_name,
+            detection_rules=payload.detection_rules.model_dump() if payload.detection_rules else None,
+            is_default=payload.is_default,
         )
-
-    domain = DomainConfig(
-        user_id=user.id,
-        name=payload.name,
-        display_name=payload.display_name,
-        detection_rules=payload.detection_rules.model_dump() if payload.detection_rules else None,
-        is_default=payload.is_default,
-    )
-    await repo.create(domain)
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return DomainConfigOut.model_validate(domain)
 
 
@@ -79,12 +61,13 @@ async def create_domain(
 async def get_domain(
     domain_id: int,
     user: User = Depends(get_current_user),
-    repo: DomainConfigRepository = Depends(_get_repo),
+    service: DomainConfigService = Depends(_get_service),
 ) -> DomainConfigOut:
     """Get a single domain configuration."""
-    domain = await repo.get_by_id(domain_id)
-    if not domain or domain.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found")
+    try:
+        domain = await service.get_for_user(domain_id, user.id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return DomainConfigOut.model_validate(domain)
 
 
@@ -93,23 +76,13 @@ async def update_domain(
     domain_id: int,
     payload: DomainConfigUpdate,
     user: User = Depends(get_current_user),
-    repo: DomainConfigRepository = Depends(_get_repo),
+    service: DomainConfigService = Depends(_get_service),
 ) -> DomainConfigOut:
     """Update a domain configuration."""
-    domain = await repo.get_by_id(domain_id)
-    if not domain or domain.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found")
-
-    if payload.display_name is not None:
-        domain.display_name = payload.display_name
-    if payload.detection_rules is not None:
-        domain.detection_rules = payload.detection_rules.model_dump()
-    if payload.is_default is not None:
-        domain.is_default = payload.is_default
-    if payload.is_enabled is not None:
-        domain.is_enabled = payload.is_enabled
-
-    await repo.update(domain)
+    try:
+        domain = await service.update(domain_id, user.id, payload)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return DomainConfigOut.model_validate(domain)
 
 
@@ -117,13 +90,13 @@ async def update_domain(
 async def delete_domain(
     domain_id: int,
     user: User = Depends(get_current_user),
-    repo: DomainConfigRepository = Depends(_get_repo),
+    service: DomainConfigService = Depends(_get_service),
 ) -> None:
     """Delete a domain configuration."""
-    domain = await repo.get_by_id(domain_id)
-    if not domain or domain.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found")
-    await repo.delete(domain)
+    try:
+        await service.delete(domain_id, user.id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 # ------------------------------------------------------------------
@@ -134,10 +107,10 @@ async def delete_domain(
 async def test_detection(
     payload: DomainDetectTestPayload,
     user: User = Depends(get_current_user),
-    repo: DomainConfigRepository = Depends(_get_repo),
+    service: DomainConfigService = Depends(_get_service),
 ) -> DomainDetectTestResponse:
     """Test domain detection against a sample payload."""
-    detector = DomainDetector(repo)
+    detector = DomainDetector(service.repo)
     result = await detector.detect(
         payload=payload.payload,
         user_id=user.id,

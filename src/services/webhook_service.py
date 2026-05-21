@@ -84,6 +84,14 @@ class WebhookService:
             raise ValueError(f"Webhook '{slug}' not found")
 
         update_dict = data.model_dump(exclude_unset=True)
+
+        # Enforce global slug uniqueness if the user is changing the slug
+        new_slug = update_dict.get("slug")
+        if new_slug and new_slug != slug:
+            existing = await self.repo.get_by_slug(new_slug)
+            if existing and existing.id != source.id:
+                raise ValueError(f"Webhook slug '{new_slug}' already exists")
+
         for field, value in update_dict.items():
             setattr(source, field, value)
 

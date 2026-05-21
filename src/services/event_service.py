@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import AsyncSessionLocal
@@ -189,8 +190,22 @@ class EventService:
 
     async def _persist_and_start(self, event: Event) -> None:
         """Persist event, broadcast creation, and start analysis pipeline."""
-        # Synchronous dedup check before expensive analysis
-        existing = await self.repo.get_recent_by_dedup_key(event.dedup_key, minutes=5)
+        # Synchronous dedup check before expensive analysis.
+        # Use ``with_for_update()`` to narrow the race-condition window
+        # when two identical webhooks arrive concurrently.
+        from datetime import timedelta
+
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)
+        stmt = (
+            select(Event)
+            .where(Event.dedup_key == event.dedup_key)
+            .where(Event.created_at >= cutoff)
+            .where(Event.suppression_reason.is_(None))
+            .with_for_update()
+        )
+        result = await self.session.execute(stmt)
+        existing = result.scalar_one_or_none()
+
         if existing:
             event.status = "suppressed"
             event.suppression_reason = "duplicate"
@@ -270,38 +285,42 @@ class EventService:
     # ------------------------------------------------------------------
 
     def _build_analysis_coro(self, event_id: int):
-        """Return a coroutine factory for the analysis job."""
-        async def _analysis():
-            async with AsyncSessionLocal() as session:
-                orchestrator = ReactiveOrchestrator(get_event_broadcast())
-                event = await EventRepository(session).get_by_id(event_id)
-                if event and event.status not in ("suppressed", "failed"):
-                    await orchestrator.analyze(event, session)
-                else:
-                    logger.warning(
-                        "Analysis skipped for event %s (status=%s)",
-                        event_id,
-                        event.status if event else "deleted",
-                    )
-
-        return _analysis
+        return _build_analysis_coro(event_id)
 
     def _build_execution_coro(self, event_id: int):
-        """Return a coroutine factory for the execution job."""
-        async def _execution():
-            async with AsyncSessionLocal() as session:
-                orchestrator = ReactiveOrchestrator(get_event_broadcast())
-                event = await EventRepository(session).get_by_id(event_id)
-                if event and event.status == "executing":
-                    await orchestrator.execute(event, session)
-                else:
-                    logger.warning(
-                        "Execution skipped for event %s (status=%s)",
-                        event_id,
-                        event.status if event else "deleted",
-                    )
+        return _build_execution_coro(event_id)
 
-        return _execution
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Module-level coroutine factories (usable by EventJobTracker recovery)
+# ═══════════════════════════════════════════════════════════════════════
+
+async def _build_analysis_coro(event_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        orchestrator = ReactiveOrchestrator(get_event_broadcast())
+        event = await EventRepository(session).get_by_id(event_id)
+        if event and event.status not in ("suppressed", "failed"):
+            await orchestrator.analyze(event, session)
+        else:
+            logger.warning(
+                "Analysis skipped for event %s (status=%s)",
+                event_id,
+                event.status if event else "deleted",
+            )
+
+
+async def _build_execution_coro(event_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        orchestrator = ReactiveOrchestrator(get_event_broadcast())
+        event = await EventRepository(session).get_by_id(event_id)
+        if event and event.status == "executing":
+            await orchestrator.execute(event, session)
+        else:
+            logger.warning(
+                "Execution skipped for event %s (status=%s)",
+                event_id,
+                event.status if event else "deleted",
+            )
 
     # ------------------------------------------------------------------
     # SSE helpers

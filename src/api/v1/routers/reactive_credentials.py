@@ -1,38 +1,16 @@
 """Reactive Credentials router — CRUD for encrypted agent secrets."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.v1.schemas.credential import CredentialCreate, CredentialOut
 from src.core.deps import get_db, get_current_user
 from src.persistencia.models.user import User
 from src.services.credential_service import CredentialService
 
 router = APIRouter(prefix="/reactive/credentials", tags=["reactive-credentials"])
 
-
-# ── Schemas ──
-
-class CredentialCreate(BaseModel):
-    name: str = Field(..., max_length=100)
-    key_identifier: str = Field(..., max_length=100)
-    value: str = Field(..., min_length=1)
-    description: str | None = None
-
-
-class CredentialOut(BaseModel):
-    id: int
-    name: str
-    key_identifier: str
-    description: str | None
-    created_at: str
-    updated_at: str
-
-    class Config:
-        from_attributes = True
-
-
-# ── Endpoints ──
 
 @router.get("", response_model=list[CredentialOut])
 async def list_credentials(
@@ -71,13 +49,12 @@ async def create_credential(
             plain_value=data.value,
             description=data.description,
         )
-    except Exception as e:
-        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
-            raise HTTPException(
-                status_code=409,
-                detail=f"A credential with key '{data.key_identifier}' already exists.",
-            )
-        raise
+    except IntegrityError as exc:
+        # PostgreSQL unique-violation (23505) on key_identifier
+        raise HTTPException(
+            status_code=409,
+            detail=f"A credential with key '{data.key_identifier}' already exists.",
+        ) from exc
     return CredentialOut(
         id=cred.id,
         name=cred.name,

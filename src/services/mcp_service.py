@@ -482,11 +482,10 @@ class MCPService:
         """
         method = method.upper()
 
-        if not _MCP_SDK_AVAILABLE:
-            raise RuntimeError("mcp SDK not installed. Cannot discover via stdio/sse.")
-
         try:
             if is_stdio:
+                if not _MCP_SDK_AVAILABLE:
+                    raise RuntimeError("mcp SDK not installed. Cannot discover via stdio.")
                 server_params = StdioServerParameters(
                     command=stdio_command or "python",
                     args=stdio_args or [base_url],
@@ -498,38 +497,50 @@ class MCPService:
                         tools_result = await session.list_tools()
                         return [t.model_dump() for t in tools_result.tools]
             else:
-                last_err = None
-                for attempt, delay in enumerate([2, 4, 8], start=1):
-                    try:
-                        async with sse_client(base_url) as (read, write):
-                            async with ClientSession(read, write) as session:
-                                await session.initialize()
-                                tools_result = await session.list_tools()
-                                return [t.model_dump() for t in tools_result.tools]
-                    except Exception as sse_err:
-                        last_err = sse_err
-                        error_msg = str(sse_err).lower()
-                        if isinstance(sse_err, BaseExceptionGroup):
-                            error_msg = " ".join(str(e).lower() for e in sse_err.exceptions)
-                        if "name resolution" in error_msg or "getaddrinfo" in error_msg or "connection" in error_msg:
-                            if attempt < 3:
-                                logger.warning(
-                                    "[MCP Service] Discovery attempt %s/%s failed for %s: %s. Retrying in %ss...",
-                                    attempt, 3, base_url, error_msg, delay,
+                # SSE discovery requires MCP SDK
+                if _MCP_SDK_AVAILABLE:
+                    last_err = None
+                    for attempt, delay in enumerate([2, 4, 8], start=1):
+                        try:
+                            async with sse_client(base_url) as (read, write):
+                                async with ClientSession(read, write) as session:
+                                    await session.initialize()
+                                    tools_result = await session.list_tools()
+                                    return [t.model_dump() for t in tools_result.tools]
+                        except Exception as sse_err:
+                            last_err = sse_err
+                            error_msg = str(sse_err).lower()
+                            if isinstance(sse_err, BaseExceptionGroup):
+                                error_msg = " ".join(str(e).lower() for e in sse_err.exceptions)
+                            if "name resolution" in error_msg or "getaddrinfo" in error_msg or "connection" in error_msg:
+                                if attempt < 3:
+                                    logger.warning(
+                                        "[MCP Service] Discovery attempt %s/%s failed for %s: %s. Retrying in %ss...",
+                                        attempt, 3, base_url, error_msg, delay,
+                                    )
+                                    await asyncio.sleep(delay)
+                                    continue
+                            if "text/event-stream" in error_msg or "404" in error_msg or "405" in error_msg:
+                                logger.info(
+                                    "[MCP Service] Protocol mismatch on %s, triggering AI Bridge (method=%s)...",
+                                    base_url,
+                                    method,
                                 )
-                                await asyncio.sleep(delay)
-                                continue
-                        if "text/event-stream" in error_msg or "404" in error_msg or "405" in error_msg:
-                            logger.info(
-                                "[MCP Service] Protocol mismatch on %s, triggering AI Bridge (method=%s)...",
-                                base_url,
-                                method,
-                            )
-                            return await self._discover_rest_bridge(
-                                base_url, is_resource=is_resource, method=method
-                            )
-                        raise sse_err
-                raise last_err
+                                return await self._discover_rest_bridge(
+                                    base_url, is_resource=is_resource, method=method
+                                )
+                            raise sse_err
+                    raise last_err
+                else:
+                    # No MCP SDK installed — fall back directly to REST bridge
+                    logger.info(
+                        "[MCP Service] MCP SDK not installed. Falling back to AI Bridge for %s (method=%s)...",
+                        base_url,
+                        method,
+                    )
+                    return await self._discover_rest_bridge(
+                        base_url, is_resource=is_resource, method=method
+                    )
         except RuntimeError:
             raise
         except httpx.HTTPError as e:

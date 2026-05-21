@@ -163,10 +163,20 @@ async def receive_webhook(
     try:
         result = await service.receive(slug, payload, raw_body=raw_body, signature_header=signature_header)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        detail = str(exc)
+        # A disabled webhook is a *state* conflict, not "not found"
+        if "disabled" in detail.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
     except PermissionError as exc:
+        detail = str(exc)
+        # Distinguish between auth/signature failures (401/403) and rate-limiting (429)
+        if "signature" in detail.lower() or "missing webhook" in detail.lower():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=detail
+            )
         raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail
         )
     except Exception as exc:
         logger.exception("Webhook receive failed for '%s': %s", slug, exc)

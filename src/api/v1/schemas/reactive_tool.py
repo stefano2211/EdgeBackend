@@ -8,6 +8,7 @@ class ReactiveMCPSourceCreate(BaseModel):
     description: str | None = None
     url: str
     type: str = "rest"
+    context_mode: str = "reactive"
 
 
 class ReactiveMCPSourceUpdate(BaseModel):
@@ -16,6 +17,7 @@ class ReactiveMCPSourceUpdate(BaseModel):
     url: str | None = None
     type: str | None = None
     is_enabled: bool | None = None
+    context_mode: str | None = None
 
 
 class ReactiveMCPSourceOut(BaseModel):
@@ -26,7 +28,9 @@ class ReactiveMCPSourceOut(BaseModel):
     url: str
     type: str
     is_enabled: bool
+    context_mode: str
     created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
