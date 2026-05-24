@@ -32,7 +32,6 @@ from src.integrations.schemas import (
     SyncResult,
 )
 from src.integrations.stdio_runner import StdioRunner
-from src.services.mcp_service import MCPService
 from src.integrations.credential_audit import log_credential_event, CredentialAction
 
 logger = logging.getLogger(__name__)
@@ -54,7 +53,6 @@ class IntegrationService:
         self._vault = credential_vault or CredentialVault()
         self._stdio = stdio_runner or StdioRunner()
         self._credential_manager = CredentialManager(self._instance_repo, self._vault)
-        self._mcp_service = MCPService()
 
     # ------------------------------------------------------------------
     # Instance CRUD
@@ -107,25 +105,6 @@ class IntegrationService:
             setattr(instance, field, value)
         await self._instance_repo.update(instance)
         logger.info("Updated integration instance id=%s", instance_id)
-
-        # Auto-sync if toggles changed and credentials exist
-        toggles_changed = (
-            old_chat != instance.available_in_chat
-            or old_reactive != instance.available_in_reactive
-        )
-        if toggles_changed and instance.credentials:
-            try:
-                # Reload instance to ensure fresh state (mcp_source_ids) after any previous commits
-                instance = await self.get_instance(instance_id, user_id)
-                await self.sync_tools(instance_id, user_id)
-            except Exception as exc:
-                logger.warning(
-                    "Auto-sync failed after toggle for instance id=%s: %s",
-                    instance_id,
-                    exc,
-                )
-                # Clean up session state so the endpoint can still return the instance
-                await self._session.rollback()
 
         return instance
 
@@ -322,79 +301,6 @@ class IntegrationService:
             pass
 
         return instance
-
-    # ------------------------------------------------------------------
-    # Sync tools (MCP discovery → ToolConfig registration)
-    # ------------------------------------------------------------------
-
-    async def sync_tools(self, instance_id: int, user_id: int) -> SyncResult:
-        instance = await self.get_instance(instance_id, user_id)
-
-        # Ensure process is running
-        if not instance.process_pid or not self._stdio.is_running(instance.process_pid):
-            await self._launch_stdio_process(instance)
-
-        catalog = instance.catalog
-
-        # Discover tools from the running MCP server via stdio
-        try:
-            discovered = await self._mcp_service.discover_tools(
-                base_url=catalog.command or "",  # Not used for stdio
-                is_stdio=True,
-                stdio_command=catalog.command,
-                stdio_args=catalog.args,
-                stdio_env=self._credential_manager.inject_for_stdio(
-                    await self._credential_manager.get_credentials(instance),
-                    catalog.env_prefix,
-                    auth_env_var_mapping=catalog.auth_env_var_mapping,
-                ),
-            )
-        except Exception as exc:
-            logger.exception("Tool discovery failed for instance %s", instance_id)
-            raise RuntimeError(f"Tool discovery failed: {exc}") from exc
-
-        # Cleanup previous sources to avoid duplicates
-        await self._cleanup_previous_sources(instance)
-
-        # Determine context_mode
-        if instance.available_in_chat and instance.available_in_reactive:
-            context_mode = "both"
-        elif instance.available_in_reactive:
-            context_mode = "reactive"
-        else:
-            context_mode = "chat"
-
-        # Register in proactive context
-        mcp_source_id = None
-        if instance.available_in_chat:
-            mcp_source_id = await self._register_in_chat_context(instance, catalog, discovered, context_mode)
-
-        # Register in reactive context
-        reactive_mcp_source_id = None
-        if instance.available_in_reactive:
-            reactive_mcp_source_id = await self._register_in_reactive_context(
-                instance, catalog, discovered
-            )
-
-        # Update instance with source IDs
-        instance.mcp_source_id = mcp_source_id
-        instance.reactive_mcp_source_id = reactive_mcp_source_id
-        await self._instance_repo.update(instance)
-
-        total_tools = len(discovered)
-        logger.info(
-            "Synced instance id=%s: discovered=%s chat_source=%s reactive_source=%s",
-            instance_id,
-            total_tools,
-            mcp_source_id,
-            reactive_mcp_source_id,
-        )
-        return SyncResult(
-            tools_discovered=total_tools,
-            tools_added=total_tools,
-            mcp_source_id=mcp_source_id,
-            reactive_mcp_source_id=reactive_mcp_source_id,
-        )
 
     async def _cleanup_previous_sources(self, instance: IntegrationInstance) -> None:
         """Delete previous MCP sources and their tools to avoid duplicates."""

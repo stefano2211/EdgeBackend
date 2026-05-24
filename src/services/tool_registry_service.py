@@ -41,7 +41,7 @@ class ToolRegistryService:
                     "name": tool.name,
                     "description": tool.description,
                     "source_name": source.name,
-                    "source_type": meta.get("source_type", "rest_bridge"),
+                    "source_type": meta.get("source_type", "stdio"),
                     "context": getattr(source, "context_mode", "chat"),
                     "transport": tool.config.get("transport", source.type)
                     if tool.config
@@ -77,7 +77,7 @@ class ToolRegistryService:
                     "name": tool.name,
                     "description": tool.description,
                     "source_name": source.name,
-                    "source_type": meta.get("source_type", "rest_bridge"),
+                    "source_type": meta.get("source_type", "stdio"),
                     "context": "reactive",
                     "transport": tool.config.get("transport", source.type)
                     if tool.config

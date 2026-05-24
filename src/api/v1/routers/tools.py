@@ -1,4 +1,9 @@
-"""Tools router — functional CRUD for ToolConfig and MCPSource."""
+"""Tools router — functional CRUD for ToolConfig and MCPSource.
+
+⚠️  Route ordering matters: static routes MUST come before dynamic
+`/{param}` segments, otherwise FastAPI matches the parameter route first
+and the static route never gets hit (e.g. /registry → tool_id="registry").
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +34,10 @@ def _raise_not_found(entity: str, entity_id: int) -> None:
     raise HTTPException(status_code=404, detail=f"{entity} {entity_id} not found")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  STATIC ROUTES — must be registered BEFORE any `/{param}` routes
+# ═══════════════════════════════════════════════════════════════════════════
+
 # ── ToolConfig ──
 
 @router.get("", response_model=list[ToolConfigOut])
@@ -39,6 +48,34 @@ async def list_tools(
     service = ToolConfigService(session)
     return await service.list()
 
+
+@router.post("", response_model=ToolConfigOut, status_code=201)
+async def create_tool(
+    data: ToolConfigCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = ToolConfigService(session)
+    return await service.create(data)
+
+
+# ── Registry (static route must be before /{tool_id}) ──
+
+@router.get("/registry", response_model=list[MCPRegistryItem])
+async def list_registry(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Return all active MCP tools across chat and reactive contexts."""
+    from src.services.tool_registry_service import ToolRegistryService
+
+    service = ToolRegistryService(session)
+    return await service.list_registry()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  DYNAMIC ROUTES — `/{tool_id}` and sub-resources
+# ═══════════════════════════════════════════════════════════════════════════
 
 @router.get("/{tool_id}", response_model=ToolConfigOut)
 async def get_tool(
@@ -51,16 +88,6 @@ async def get_tool(
         return await service.get(tool_id)
     except NotFoundError:
         _raise_not_found("ToolConfig", tool_id)
-
-
-@router.post("", response_model=ToolConfigOut, status_code=201)
-async def create_tool(
-    data: ToolConfigCreate,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    service = ToolConfigService(session)
-    return await service.create(data)
 
 
 @router.patch("/{tool_id}", response_model=ToolConfigOut)
@@ -138,104 +165,3 @@ async def delete_source(
     except NotFoundError:
         _raise_not_found("MCPSource", source_id)
     return None
-
-
-# ── Registry (unified view of all MCP tools) ──
-
-@router.get("/registry", response_model=list[MCPRegistryItem])
-async def list_registry(
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    """Return all active MCP tools across chat and reactive contexts."""
-    from src.services.tool_registry_service import ToolRegistryService
-
-    service = ToolRegistryService(session)
-    return await service.list_registry()
-
-
-# ── Discovery (real MCP Service) ──
-
-@router.get("/mcp/discover")
-async def discover_tools(
-    url: str = Query(...),
-    is_stdio: bool = Query(False),
-    is_resource: bool = Query(False),
-    method: str = Query("GET"),
-    current_user: User = Depends(get_current_user),
-):
-    """Dynamically discover tools from an MCP server or REST API endpoint."""
-    from src.services.mcp_service import MCPService
-
-    service = MCPService()
-    try:
-        return await service.discover_tools(
-            url, is_stdio=is_stdio, is_resource=is_resource, method=method
-        )
-    except ValueError as exc:
-        logger.warning("Discovery validation error: %s", exc)
-        raise HTTPException(status_code=400, detail="Invalid discovery parameters.")
-    except RuntimeError as exc:
-        logger.error("Discovery runtime error: %s", exc)
-        raise HTTPException(status_code=502, detail="Discovery failed. Check server logs.")
-    except Exception:
-        logger.exception("Discovery unexpected error for url=%s", url)
-        raise HTTPException(status_code=500, detail="Discovery failed. Check server logs.")
-
-
-@router.get("/sources/{source_id}/discover")
-async def discover_source_tools(
-    source_id: int,
-    method: str = Query("GET"),
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    """Discover tools from a registered MCP source."""
-    from src.services.mcp_service import MCPService
-
-    service = MCPSourceService(session)
-    try:
-        source = await service.get(source_id)
-    except NotFoundError:
-        _raise_not_found("MCPSource", source_id)
-
-    mcp_service = MCPService()
-    try:
-        return await mcp_service.discover_tools(
-            source.url,
-            is_stdio=(source.type == "stdio"),
-            method=method,
-            is_resource=False,
-        )
-    except ValueError as exc:
-        logger.warning("Discovery validation error for source_id=%s: %s", source_id, exc)
-        raise HTTPException(status_code=400, detail="Invalid discovery parameters.")
-    except RuntimeError as exc:
-        logger.error("Discovery runtime error for source_id=%s: %s", source_id, exc)
-        raise HTTPException(status_code=502, detail="Discovery failed. Check server logs.")
-    except Exception:
-        logger.exception("Discovery unexpected error for source_id=%s", source_id)
-        raise HTTPException(status_code=500, detail="Discovery failed. Check server logs.")
-
-
-@router.post("/sources/{source_id}/sync")
-async def sync_source_tools(
-    source_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    """Connect to an MCP source, discover tools, and auto-register them."""
-    service = MCPSourceService(session)
-    try:
-        return await service.sync_source_tools(source_id)
-    except NotFoundError:
-        _raise_not_found("MCPSource", source_id)
-    except ValueError as exc:
-        logger.warning("Sync validation error for source_id=%s: %s", source_id, exc)
-        raise HTTPException(status_code=400, detail="Invalid sync parameters.")
-    except RuntimeError as exc:
-        logger.error("Sync runtime error for source_id=%s: %s", source_id, exc)
-        raise HTTPException(status_code=502, detail="Sync failed. Check server logs.")
-    except Exception:
-        logger.exception("Sync unexpected error for source_id=%s", source_id)
-        raise HTTPException(status_code=500, detail="Sync failed. Check server logs.")

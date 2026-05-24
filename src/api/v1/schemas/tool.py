@@ -73,7 +73,7 @@ class MCPRegistryItem(BaseModel):
     name: str
     description: str | None = None
     source_name: str
-    source_type: str  # "official" | "custom" | "rest_bridge"
+    source_type: str  # "official" | "custom" | "stdio"
     context: str  # "chat" | "reactive" | "both"
     transport: str  # "stdio" | "rest" | "sse"
     is_enabled: bool

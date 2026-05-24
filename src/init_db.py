@@ -11,6 +11,7 @@ from src.integrations.models import (  # noqa: F401  (registers integration mode
     IntegrationInstance,
     IntegrationCredential,
 )
+from src.integrations.credential_audit import CredentialAuditLog  # noqa: F401
 
 
 async def _create_tables() -> None:

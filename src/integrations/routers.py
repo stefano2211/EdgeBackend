@@ -344,26 +344,6 @@ async def oauth_callback(
 
 
 # ---------------------------------------------------------------------------
-# Sync tools
-# ---------------------------------------------------------------------------
-
-@router.post("/instances/{instance_id}/sync", response_model=SyncResult)
-async def sync_instance_tools(
-    instance_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    """Discover tools from the running MCP stdio process and register them in DB."""
-    service = _service(session)
-    try:
-        return await service.sync_tools(instance_id, current_user.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-
-
-# ---------------------------------------------------------------------------
 # Process lifecycle
 # ---------------------------------------------------------------------------
 
