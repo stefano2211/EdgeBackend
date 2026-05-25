@@ -162,7 +162,7 @@ class EventOut(BaseModel):
     status: EventStatus
     suppression_reason: str | None
     agent_analysis: str | None
-    agent_reasoning: str | None
+    agent_diagnosis: str | None
     agent_plan: str | None
     actions_taken: list | None
     created_at: datetime

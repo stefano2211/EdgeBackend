@@ -28,6 +28,7 @@ from src.ia.prompts.reactive import (
     REACTIVE_S2_TRIAGE_PROMPT,
     build_reactive_s2_orchestrator_prompt,
 )
+from src.ia.schemas.reactive import ReactiveAnalysisOutput
 from src.persistencia.models.event import Event
 from src.persistencia.repositories.event_repository import EventRepository
 from src.services.event_broadcast import EventBroadcastManager
@@ -57,7 +58,7 @@ class ReactiveOrchestrator:
         Phase 1 — S2 Triage: fast LLM call producing routing hints (JSON).
             Phase 2 — S2 Autonomous: DeepAgents orchestrator with rag-agent, mcp-agent
                   and historical-agent as direct sub-agents. S2 decides which
-                  to invoke via task() and synthesizes the results.
+                  to invoke via task() and synthesizes the results into structured JSON.
         """
         # Transition to analyzing immediately so correlation engine can filter it
         event.status = "analyzing"
@@ -110,10 +111,10 @@ class ReactiveOrchestrator:
 
             # ── Phase 2: S2 Autonomous Orchestrator ──
             # S2 receives event + triage hints and autonomously decides which
-            # sub-agents (rag-agent, mcp-agent, historical-agent, vl-agent) to
-            # invoke via task(), then synthesizes all results.
+            # sub-agents to invoke via task(), then synthesizes all results
+            # into a structured ReactiveAnalysisOutput JSON object.
             await self._emit_log(event.id, "Phase 2: S2 Autonomous Orchestrator starting", level="info")
-            synthesis = await self._run_s2_autonomous(
+            output = await self._run_s2_autonomous(
                 event=event,
                 event_query=event_query,
                 triage=triage,
@@ -123,23 +124,27 @@ class ReactiveOrchestrator:
                 tool_schemas=tool_schemas,
             )
 
-
-            if not synthesis.strip():
+            if output is None:
                 raise RuntimeError("El orquestador no pudo generar un plan (posible fallo interno del agente o timeout).")
-            analysis_text, plan, execute = self._parse_sections(synthesis)
 
-            if analysis_text:
-                event.agent_reasoning = analysis_text
-                await self._emit("system2_result", event.id, {"result": analysis_text})
-                await self._emit_log(event.id, "Phase 2: S2 reasoning completed", level="info")
+            # Store structured fields separately
+            if output.analysis:
+                event.agent_analysis = output.analysis
+                await self._emit("system2_result", event.id, {"result": output.analysis})
+                await self._emit_log(event.id, "Phase 2: S2 analysis completed", level="info")
 
-            if plan:
-                event.agent_plan = plan
-                await self._emit("planner_result", event.id, {"plan": plan})
+            if output.diagnosis:
+                event.agent_diagnosis = output.diagnosis
+                await self._emit("diagnosis_result", event.id, {"diagnosis": output.diagnosis})
+                await self._emit_log(event.id, "Phase 2: Diagnosis generated", level="info")
+
+            if output.plan:
+                event.agent_plan = output.plan
+                await self._emit("planner_result", event.id, {"plan": output.plan})
                 await self._emit_log(event.id, "Phase 2: Remediation plan generated", level="info")
 
-            if execute:
-                await self._emit("execute_instruction", event.id, {"instruction": execute})
+            if output.execute_instruction:
+                await self._emit("execute_instruction", event.id, {"instruction": output.execute_instruction})
                 await self._emit_log(event.id, "Phase 2: Execution instruction ready", level="info")
 
             # Transition
@@ -168,7 +173,7 @@ class ReactiveOrchestrator:
     async def execute(self, event: Event, session: AsyncSession) -> None:
         """Execute approved plan using the reactive orchestrator."""
         thread_id = f"event-{event.id}"
-        base_instruction = self._extract_execute_instruction(event) or event.agent_plan or "Execute the plan."
+        base_instruction = event.agent_plan or "Execute the plan."
 
         messages = [{"role": "user", "content": base_instruction}]
 
@@ -374,8 +379,12 @@ class ReactiveOrchestrator:
         enabled_kb_names: list[str],
         enabled_tool_names: list[str],
         tool_schemas: list[dict] | None = None,
-    ) -> str:
-        """Phase 2: S2 autonomous orchestrator."""
+    ) -> ReactiveAnalysisOutput | None:
+        """Phase 2: S2 autonomous orchestrator.
+
+        Returns a parsed ReactiveAnalysisOutput with structured analysis,
+        diagnosis, plan and optional execute_instruction.
+        """
         orchestrator = create_reactive_orchestrator(
             knowledge_base_ids=enabled_kb_ids or None,
             enable_knowledge=bool(enabled_kb_ids),
@@ -395,7 +404,8 @@ class ReactiveOrchestrator:
             f"<event>\n{event_query}\n</event>\n\n"
             "Analiza este evento industrial. Usa task() para delegar a los "
             "sub-agentes que necesites (puedes invocar varios en paralelo). "
-            "Luego sintetiza todos los resultados en el formato requerido."
+            "Luego sintetiza todos los resultados en un JSON que cumpla EXACTAMENTE "
+            "el schema proporcionado en tu system prompt. NO agregues texto fuera del JSON."
         )
 
         thread_id = f"event-{event.id}-s2"
@@ -408,7 +418,7 @@ class ReactiveOrchestrator:
                 config=config,
             )
             msgs = result.get("messages", [])
-            
+
             # Emit sub-agent results so the frontend panels are populated
             for i, msg in enumerate(msgs):
                 if getattr(msg, "type", "") == "tool":
@@ -440,12 +450,47 @@ class ReactiveOrchestrator:
                     elif agent_name == "historical-agent":
                         await self._emit("historical_result", event.id, {"result": str(msg.content)})
                         await self._emit_log(event.id, "Historical analysis received", level="info")
-                        event.agent_analysis = str(msg.content)
-            
-            return str(msgs[-1].content).strip() if msgs else ""
+                        # Note: historical-agent result is internal; we no longer overwrite
+                        # the orchestrator's final analysis with it.
+
+            # Parse the final message as structured JSON output
+            if not msgs:
+                logger.warning("S2 autonomous orchestrator returned no messages")
+                return None
+
+            last_content = msgs[-1].content
+            if not last_content:
+                logger.warning("S2 autonomous orchestrator returned empty final message")
+                return None
+
+            # The content may be a string containing JSON, or already parsed (LangChain structured output)
+            raw_text = str(last_content).strip()
+
+            # Remove markdown fences if present
+            if raw_text.startswith("```"):
+                # Strip opening fence line
+                lines = raw_text.splitlines()
+                if lines[0].strip().startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                raw_text = "\n".join(lines).strip()
+
+            try:
+                output = ReactiveAnalysisOutput.model_validate_json(raw_text)
+            except Exception as parse_exc:
+                logger.error(
+                    "Failed to parse S2 structured output: %s. Raw (first 500 chars): %s",
+                    parse_exc,
+                    raw_text[:500],
+                )
+                return None
+
+            return output
+
         except Exception as exc:
             logger.warning("S2 autonomous orchestrator failed: %s", exc)
-            return ""
+            return None
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  PRIVATE HELPERS
@@ -467,49 +512,6 @@ class ReactiveOrchestrator:
             f"Payload:\n{payload_str}\n\n"
             "Analyze this event, identify the root cause, and produce a structured remediation plan."
         )
-
-    def _parse_sections(self, content: str) -> tuple[str, str, str]:
-        """Parse orchestrator response into (analysis, plan, execute_instruction)."""
-        analysis = content.strip()
-        plan = ""
-        execute = ""
-
-        # Buscar el separador de plan con fallback a formatos comunes
-        plan_tokens = ["---PLAN---", "## Plan de Remediación", "## Plan de Ejecución", "Plan de Remediación", "Plan de Ejecución", "## Plan de Remediación / Ejecución"]
-        plan_token_used = None
-        for token in plan_tokens:
-            if token in content:
-                plan_token_used = token
-                break
-
-        if plan_token_used:
-            parts = content.split(plan_token_used, 1)
-            analysis = parts[0].strip()
-            rest = parts[1].strip()
-
-            # Buscar el separador de ejecución autónoma con fallback
-            execute_tokens = ["---EXECUTE---", "## Instrucción de Ejecución Autónoma", "Instrucción de Ejecución Autónoma"]
-            execute_token_used = None
-            for token in execute_tokens:
-                if token in rest:
-                    execute_token_used = token
-                    break
-
-            if execute_token_used:
-                plan_parts = rest.split(execute_token_used, 1)
-                plan = plan_parts[0].strip()
-                execute = plan_parts[1].strip()
-            else:
-                plan = rest
-
-        return analysis, plan, execute
-
-    def _extract_execute_instruction(self, event: Event) -> str | None:
-        """Extract ---EXECUTE--- section from stored plan or reasoning."""
-        text = event.agent_plan or event.agent_reasoning or ""
-        if "---EXECUTE---" in text:
-            return text.split("---EXECUTE---", 1)[1].strip()
-        return None
 
     async def _resolve_tool_schemas(
         self, session: AsyncSession, user_id: int | None

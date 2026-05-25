@@ -4,10 +4,12 @@ Replaces monolithic strings with renderable .md templates.
 All prompts are domain-agnostic — no hardcoded industry references.
 """
 
+import json
 from typing import List
 
 from src.core.config import settings
 from src.ia.prompts.loader import load_prompt
+from src.ia.schemas.reactive import ReactiveAnalysisOutput
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -135,10 +137,17 @@ def build_reactive_s2_orchestrator_prompt(
     subagents_section = "\n".join(subagent_lines)
     data_delegation_rules = "\n".join(delegation_rules)
 
+    schema_json = json.dumps(
+        ReactiveAnalysisOutput.model_json_schema(),
+        ensure_ascii=False,
+        indent=2,
+    )
+
     return load_prompt(
         "reactive_orchestrator",
         subagents_section=subagents_section,
         domain_delegation_rules=data_delegation_rules,
+        schema_json=schema_json,
     )
 
 

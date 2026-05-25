@@ -84,6 +84,7 @@ class Event(Base):
     # ── Agent Outputs ──
     agent_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
     agent_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_diagnosis: Mapped[str | None] = mapped_column(Text, nullable=True)
     agent_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
     actions_taken: Mapped[list | None] = mapped_column(JSON, nullable=True)
 

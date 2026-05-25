@@ -278,7 +278,7 @@ Severity: {event.severity_text}
 Domain: {getattr(event, 'domain', 'generic')}
 
 Analysis Summary:
-{self._truncate(getattr(event, 'agent_reasoning', 'No analysis available.'), 800)}
+{self._truncate(getattr(event, 'agent_analysis', 'No analysis available.'), 800)}
 
 Proposed Plan:
 {self._truncate(getattr(event, 'agent_plan', 'No plan generated.'), 500)}
@@ -301,7 +301,7 @@ Severity: {event.severity_text}
 Domain: {getattr(event, 'domain', 'generic')}
 
 Analysis Summary:
-{self._truncate(getattr(event, 'agent_reasoning', 'No analysis available.'), 800)}
+{self._truncate(getattr(event, 'agent_analysis', 'No analysis available.'), 800)}
 
 Actions Taken:
 {self._truncate(getattr(event, 'agent_plan', 'No plan available.'), 500)}
