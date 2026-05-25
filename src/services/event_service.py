@@ -226,7 +226,7 @@ class EventService:
         # Enqueue durable background job instead of fire-and-forget task
         from src.services.event_job_tracker import get_job_tracker
         await get_job_tracker().enqueue(
-            event.id, "analysis", self._build_analysis_coro(event.id)
+            event.id, "analysis", lambda: self._build_analysis_coro(event.id)
         )
 
     # ------------------------------------------------------------------
@@ -247,7 +247,7 @@ class EventService:
         # Enqueue durable background job for execution
         from src.services.event_job_tracker import get_job_tracker
         await get_job_tracker().enqueue(
-            event_id, "execution", self._build_execution_coro(event_id)
+            event_id, "execution", lambda: self._build_execution_coro(event_id)
         )
         return event
 
@@ -290,6 +290,26 @@ class EventService:
     def _build_execution_coro(self, event_id: int):
         return _build_execution_coro(event_id)
 
+    async def _broadcast_event_update(self, event: Event) -> None:
+        payload = {
+            "type": "event_update",
+            "event": {
+                "id": event.id,
+                "event_id": event.event_id,
+                "status": event.status,
+                "severity_text": event.severity_text,
+                "severity_number": event.severity_number,
+                "title": event.title,
+                "domain": event.domain,
+                "updated_at": event.updated_at.isoformat() if event.updated_at else None,
+            },
+        }
+        await get_event_broadcast().broadcast(payload)
+
+    async def _refresh_and_broadcast(self, event: Event) -> None:
+        await self.session.refresh(event)
+        await self._broadcast_event_update(event)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Module-level coroutine factories (usable by EventJobTracker recovery)
@@ -321,27 +341,3 @@ async def _build_execution_coro(event_id: int) -> None:
                 event_id,
                 event.status if event else "deleted",
             )
-
-    # ------------------------------------------------------------------
-    # SSE helpers
-    # ------------------------------------------------------------------
-
-    async def _broadcast_event_update(self, event: Event) -> None:
-        payload = {
-            "type": "event_update",
-            "event": {
-                "id": event.id,
-                "event_id": event.event_id,
-                "status": event.status,
-                "severity_text": event.severity_text,
-                "severity_number": event.severity_number,
-                "title": event.title,
-                "domain": event.domain,
-                "updated_at": event.updated_at.isoformat() if event.updated_at else None,
-            },
-        }
-        await get_event_broadcast().broadcast(payload)
-
-    async def _refresh_and_broadcast(self, event: Event) -> None:
-        await self.session.refresh(event)
-        await self._broadcast_event_update(event)

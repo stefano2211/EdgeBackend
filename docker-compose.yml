@@ -229,10 +229,13 @@ services:
       OAUTH_REDIRECT_URL: ${OAUTH_REDIRECT_URL:-http://localhost:8000/api/v1/integrations/oauth/callback}
       GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
       GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
+      # Maquinaria API (apiEjemplo container)
+      MAQUINARIA_API_URL: ${MAQUINARIA_API_URL:-http://apiejemplo-api-1:7000}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - edge-network
+      - apiejemplo_default
     deploy:
       resources:
         limits:
@@ -276,3 +279,5 @@ volumes:
 networks:
   edge-network:
     driver: bridge
+  apiejemplo_default:
+    external: true

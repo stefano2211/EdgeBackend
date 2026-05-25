@@ -77,6 +77,16 @@ class ReactiveOrchestrator:
         # Resolve dynamic tool schemas for prompt injection
         tool_schemas = await self._resolve_tool_schemas(session, event.triggered_by_user_id)
 
+        if not tool_schemas and not enabled_tool_ids:
+            await self._emit_log(
+                event.id,
+                "WARNING: 0 reactive tools found for this user. "
+                "Check that the integration has 'available_in_reactive=true' "
+                "AND credentials were submitted while reactive was enabled. "
+                "Use POST /integrations/instances/{id}/sync to force re-registration.",
+                level="warn",
+            )
+
         await self._emit_log(event.id, "Phase 0: Pipeline started", level="info")
         await self._emit_log(
             event.id,

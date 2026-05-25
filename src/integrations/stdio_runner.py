@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -90,6 +91,9 @@ class StdioRunner(IStdioRunner):
                 env=process_env,
                 text=False,
             )
+
+            # Start drain threads to prevent stdout/stderr buffer deadlock
+            self._start_drain_threads(process)
 
             tracked = _TrackedProcess(
                 process=process,
@@ -269,6 +273,35 @@ class StdioRunner(IStdioRunner):
         for pid in pids:
             self.stop(pid)
         logger.info("StdioRunner: cleaned up %d processes", len(pids))
+
+    def _start_drain_threads(self, process: subprocess.Popen) -> None:
+        """Launch daemon threads that continuously read stdout/stderr
+        to prevent the subprocess buffer from filling up and blocking."""
+
+        def _drain(stream, name: str, pid: int):
+            try:
+                while True:
+                    chunk = stream.read(4096)
+                    if not chunk:
+                        break
+            except Exception:
+                pass
+
+        if process.stdout:
+            threading.Thread(
+                target=_drain,
+                args=(process.stdout, "stdout", process.pid),
+                daemon=True,
+                name=f"stdio-drain-stdout-{process.pid}",
+            ).start()
+
+        if process.stderr:
+            threading.Thread(
+                target=_drain,
+                args=(process.stderr, "stderr", process.pid),
+                daemon=True,
+                name=f"stdio-drain-stderr-{process.pid}",
+            ).start()
 
     def _terminate_process(self, process: subprocess.Popen, pid: int) -> None:
         """Gracefully terminate a process with timeout fallback to kill."""

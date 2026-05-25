@@ -91,25 +91,17 @@ def _import_class(dotted_path: str):
 async def _mcp_execute_impl(
     tool_config_name: str,
     parameters: dict | None,
-    key_values: dict | None,
-    key_figures: list | None,
     source: Literal["chat", "reactive"],
 ) -> str:
     """Execute MCP tool from the specified context."""
     cfg = _CONFIG[source]
     if parameters is None:
         parameters = {}
-    if key_values:
-        parameters["key_values"] = key_values
-    if key_figures:
-        parameters["key_figures"] = key_figures
 
     logger.info(
-        "[%s MCP] Calling tool: %s kv=%s kf=%s",
+        "[%s MCP] Calling tool: %s",
         source,
         tool_config_name,
-        bool(key_values),
-        bool(key_figures),
     )
 
     async with AsyncSessionLocal() as session:
@@ -130,6 +122,7 @@ async def _mcp_execute_impl(
         schema_hints = parameter_schema.get("response") or {}
 
         clean_arguments = parameters.copy()
+        # Legacy filter params — kept for REST transport backward compat
         kv_filter = clean_arguments.pop("key_values", None)
         kf_filter = clean_arguments.pop("key_figures", None)
 
@@ -201,11 +194,17 @@ async def _mcp_execute_impl(
                     IntegrationInstanceRepository(session)
                 )
                 credentials = await cred_manager.get_credentials(instance)
-                stdio_env = cred_manager.inject_for_stdio(
+                cred_env = cred_manager.inject_for_stdio(
                     credentials,
                     catalog.env_prefix,
                     auth_env_var_mapping=catalog.auth_env_var_mapping,
                 )
+                # The MCP SDK replaces the entire process environment when
+                # StdioServerParameters.env is set (it only inherits 6 safe
+                # vars by default).  Merge the full parent environment so
+                # child processes keep config vars like MAQUINARIA_API_URL.
+                import os
+                stdio_env = {**os.environ, **(cred_env or {})}
 
         response = await mcp_service.execute_tool(
             base_url=execution_url,
@@ -225,6 +224,14 @@ async def _mcp_execute_impl(
         if response.error:
             return json.dumps({"error": f"Error from {tool_config_name}: {response.error}"})
 
+        # MCP native: return raw JSON directly so the LLM sees structured data
+        if response.raw_response is not None:
+            return json.dumps({
+                "source": response.source,
+                "data": response.raw_response,
+            }, ensure_ascii=False)
+
+        # Legacy fallback for REST sources without raw_response
         result = {
             "source": response.source,
             "key_figures": [
@@ -255,11 +262,9 @@ def create_mcp_tool(source: Literal["chat", "reactive"] = "chat") -> StructuredT
     async def _bound_mcp_execute(
         tool_config_name: str,
         parameters: dict | None = None,
-        key_values: dict | None = None,
-        key_figures: list | None = None,
     ) -> str:
         return await _mcp_execute_impl(
-            tool_config_name, parameters, key_values, key_figures, source=source
+            tool_config_name, parameters, source=source
         )
 
     return StructuredTool.from_function(
@@ -271,8 +276,7 @@ def create_mcp_tool(source: Literal["chat", "reactive"] = "chat") -> StructuredT
             "  - tool_config_name (str): exact name of the registered tool (e.g. 'send_email', 'list_emails', 'get_email').\n"
             "  - parameters (dict): tool-specific input arguments. For email tools: {\"to\": \"addr\", \"subject\": \"...\", \"body\": \"...\"}.\n"
             "    For sensor tools: {\"equipment\": \"...\", \"metric\": \"...\"}. Pass ALL required fields here.\n"
-            "  - key_values (dict | None): optional filter for categorical fields in the response.\n"
-            "  - key_figures (list | None): optional filter for numeric fields in the response.\n"
+            "Returns: JSON object with a 'data' field containing the tool's raw structured response.\n"
             "IMPORTANT: 'parameters' must contain ALL required arguments for the tool being called.\n"
             "For send_email: parameters={\"to\": \"<recipient>\", \"subject\": \"<subject>\", \"body\": \"<body>\"} is MANDATORY."
         ),

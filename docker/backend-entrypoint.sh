@@ -18,4 +18,4 @@ echo "Creating database tables..."
 python -m src.init_db
 
 echo "Starting application..."
-exec uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4 --loop uvloop --http httptools
+exec uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1} --loop uvloop --http httptools

@@ -344,6 +344,30 @@ async def oauth_callback(
 
 
 # ---------------------------------------------------------------------------
+# Sync / Re-discovery
+# ---------------------------------------------------------------------------
+
+@router.post("/instances/{instance_id}/sync", response_model=IntegrationInstanceOut)
+async def sync_instance(
+    instance_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Force re-discovery and re-registration of tools for an instance.
+
+    Call this after toggling 'available_in_chat' or 'available_in_reactive'
+    on an existing instance, or when the MCP server tools have changed.
+    """
+    service = _service(session)
+    try:
+        return await service.sync_instance(instance_id, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
 # Process lifecycle
 # ---------------------------------------------------------------------------
 

@@ -44,9 +44,69 @@ class MCPService:
     Supports stdio, SSE, and REST transports with retry logic.
     """
 
+    # Cache for stdio sessions: key -> {session, client_ctx, session_ctx, last_used}
+    _stdio_cache: dict = {}
+    _stdio_cache_lock = asyncio.Lock()
+    _STDIO_TTL = 300  # 5 minutes
 
     def __init__(self) -> None:
         pass
+
+    @classmethod
+    def _stdio_cache_key(cls, server_params: StdioServerParameters) -> tuple:
+        env_hash = None
+        if server_params.env:
+            env_hash = hash(frozenset(server_params.env.items()))
+        return (server_params.command, tuple(server_params.args or []), env_hash)
+
+    @classmethod
+    async def _get_stdio_session(cls, server_params: StdioServerParameters):
+        """Get or create a cached stdio session."""
+        if not _MCP_SDK_AVAILABLE:
+            raise RuntimeError("mcp SDK not installed")
+
+        cache_key = cls._stdio_cache_key(server_params)
+        async with cls._stdio_cache_lock:
+            now = _time.time()
+
+            # Remove expired entries
+            expired = [
+                k for k, v in list(cls._stdio_cache.items())
+                if now - v["last_used"] > cls._STDIO_TTL
+            ]
+            for k in expired:
+                entry = cls._stdio_cache.pop(k)
+                try:
+                    await entry["session_ctx"].__aexit__(None, None, None)
+                except Exception:
+                    pass
+                try:
+                    await entry["client_ctx"].__aexit__(None, None, None)
+                except Exception:
+                    pass
+                logger.info("[MCP Service] Expired stdio session removed: %s", k)
+
+            if cache_key in cls._stdio_cache:
+                entry = cls._stdio_cache[cache_key]
+                entry["last_used"] = now
+                logger.debug("[MCP Service] Reusing cached stdio session: %s", cache_key)
+                return entry["session"]
+
+            # Create new session
+            client_ctx = stdio_client(server_params)
+            read, write = await client_ctx.__aenter__()
+            session_ctx = ClientSession(read, write)
+            session = await session_ctx.__aenter__()
+            await session.initialize()
+
+            cls._stdio_cache[cache_key] = {
+                "client_ctx": client_ctx,
+                "session_ctx": session_ctx,
+                "session": session,
+                "last_used": now,
+            }
+            logger.info("[MCP Service] New stdio session created and cached: %s", cache_key)
+            return session
 
     # ------------------------------------------------------------------
     # Filter application: pure Python, no LLM, applied before mapping
@@ -351,11 +411,45 @@ class MCPService:
                         args=stdio_args or [base_url],
                         env=stdio_env,
                     )
-                    async with stdio_client(server_params) as (read, write):
-                        async with ClientSession(read, write) as session:
-                            await session.initialize()
-                            result = await session.call_tool(tool_name, arguments)
-                            return await self._auto_map_response(tool_name, result.content)
+                    session = await self._get_stdio_session(server_params)
+                    try:
+                        result = await session.call_tool(tool_name, arguments)
+                    except Exception as call_exc:
+                        # Session may be stale — invalidate and retry once
+                        logger.warning(
+                            "[MCP Service] Cached stdio session failed for '%s': %s. Recreating...",
+                            tool_name, call_exc,
+                        )
+                        cache_key = self._stdio_cache_key(server_params)
+                        async with self._stdio_cache_lock:
+                            if cache_key in self._stdio_cache:
+                                entry = self._stdio_cache.pop(cache_key)
+                                try:
+                                    await entry["session_ctx"].__aexit__(None, None, None)
+                                except Exception:
+                                    pass
+                                try:
+                                    await entry["client_ctx"].__aexit__(None, None, None)
+                                except Exception:
+                                    pass
+                        session = await self._get_stdio_session(server_params)
+                        result = await session.call_tool(tool_name, arguments)
+
+                    content = result.content[0].text if result.content else "{}"
+                    try:
+                        data = json.loads(content)
+                    except Exception:
+                        data = {"text": content}
+                    # MCP native: preserve raw JSON for LLM consumption
+                    response = MCPResponse(
+                        source=tool_name,
+                        raw_response=data if isinstance(data, dict) else {"result": data},
+                    )
+                    # Also populate legacy key_figures/key_values for backward compat
+                    auto_mapped = await self._auto_map_response(tool_name, data)
+                    response.key_figures = auto_mapped.key_figures
+                    response.key_values = auto_mapped.key_values
+                    return response
                 else:
                     async with sse_client(base_url) as (read, write):
                         async with ClientSession(read, write) as session:
@@ -366,7 +460,16 @@ class MCPService:
                                 data = json.loads(content)
                             except Exception:
                                 data = {"text": content}
-                            return await self._auto_map_response(tool_name, data)
+                            # MCP native: preserve raw JSON for LLM consumption
+                            response = MCPResponse(
+                                source=tool_name,
+                                raw_response=data if isinstance(data, dict) else {"result": data},
+                            )
+                            # Also populate legacy key_figures/key_values for backward compat
+                            auto_mapped = await self._auto_map_response(tool_name, data)
+                            response.key_figures = auto_mapped.key_figures
+                            response.key_values = auto_mapped.key_values
+                            return response
 
             except (json.JSONDecodeError, ValueError) as e:
                 # Non-transient: fail immediately
