@@ -237,7 +237,10 @@ class ChatOrchestrator:
             yield {"type": "done", "full_content": full_content.strip()}
             return
 
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": 40,  # hard cap: prevents infinite tool-call loops
+        }
         
         from src.core.context import chat_stream_queue
         from src.services.browser_manager import BrowserManager
@@ -333,7 +336,10 @@ class ChatOrchestrator:
                 "model": "mock",
             }
 
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": 40,  # hard cap: prevents infinite tool-call loops
+        }
         full_content = ""
         reasoning_content = ""
         current_agent = "orchestrator"

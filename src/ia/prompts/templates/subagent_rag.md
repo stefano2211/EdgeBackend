@@ -88,4 +88,5 @@ FIELD RULES:
 - Never respond in a different language than the task was given in.
 - Never output XML tags to simulate tool calls — use ONLY native function calling.
 - Never call mcp_execute or any other tool — you ONLY have rag_retrieve.
+- NEVER call rag_retrieve in a loop or cycle. You have a hard limit of at most 2 calls per request. If no results are found after your attempts, do not keep searching. Accept the empty status, report it in task_status, and terminate.
 </negative_constraints>

@@ -88,6 +88,9 @@ If any answer is YES, downgrade confidence and note the gap explicitly.
 - Never include execute_instruction if confidence is LOW.
 - Never expose internal sub-agent names or raw JSON in the final output.
 - Do not use XML tags to simulate tool calls — use native task() from DeepAgents.
+- NEVER call the same subagent more than once per execution. All delegation must be done in parallel in a single turn if possible.
+- NEVER enter tool call/delegation loops. If a subagent returns an error, empty result, or 'no_data', accept it as the final status, document this limitation in your analysis, and proceed directly to synthesis. Do NOT retry or call other subagents to get the same information.
+- LIMIT total delegation turns (invocations of task()) to a maximum of 2. If you cannot get the required data after 2 turns, finalize your analysis and mark the confidence level as LOW.
 </negative_constraints>
 
 <output_format>

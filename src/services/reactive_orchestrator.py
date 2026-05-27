@@ -143,15 +143,13 @@ class ReactiveOrchestrator:
                 await self._emit("planner_result", event.id, {"plan": output.plan})
                 await self._emit_log(event.id, "Phase 2: Remediation plan generated", level="info")
 
-            if output.execute_instruction:
-                await self._emit("execute_instruction", event.id, {"instruction": output.execute_instruction})
-                await self._emit_log(event.id, "Phase 2: Execution instruction ready", level="info")
 
-            # Transition
-            event.status = "awaiting_approval"
+            # Transition directly to completed (no execution phase)
+            event.status = "completed"
+            event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
             await session.commit()
             await self._refresh_and_broadcast(event, session)
-            await self._emit_log(event.id, "DEV_MODE PAUSED — awaiting approval", level="info")
+            await self._emit_log(event.id, "Analysis complete — event resolved", level="info")
 
             # ── Mandatory notification: analysis complete ──
             from src.services.notification_service import NotificationService
@@ -170,154 +168,6 @@ class ReactiveOrchestrator:
             await session.commit()
             await self._refresh_and_broadcast(event, session)
 
-    async def execute(self, event: Event, session: AsyncSession) -> None:
-        """Execute approved plan using the reactive orchestrator."""
-        thread_id = f"event-{event.id}"
-        base_instruction = event.agent_plan or "Execute the plan."
-
-        messages = [{"role": "user", "content": base_instruction}]
-
-        await self._emit("vlm_prompt", event.id, {"prompt": base_instruction})
-        await self._emit_log(event.id, "Execution pipeline started", level="info")
-
-        # Load user's reactive configuration
-        config_service = ReactiveConfigService(session)
-        config_res = await config_service.get_enabled_resources(event.triggered_by_user_id)
-        enabled_kb_ids = config_res["kb_ids"]
-        enabled_kb_names = config_res["kb_names"]
-        enabled_tool_names = config_res["tool_names"]
-
-        # Resolve dynamic tool schemas for prompt injection
-        tool_schemas = await self._resolve_tool_schemas(session, event.triggered_by_user_id)
-
-        # Create isolated reactive orchestrator
-        orchestrator = create_reactive_orchestrator(
-            knowledge_base_ids=[str(k) for k in enabled_kb_ids] or None,
-            enable_knowledge=bool(enabled_kb_ids),
-            enable_mcp=bool(enabled_tool_names),
-            enabled_tool_names=enabled_tool_names,
-            tool_schemas=tool_schemas,
-            kb_names=enabled_kb_names,
-        )
-
-
-        config = {"configurable": {"thread_id": thread_id}}
-        actions: list[dict] = []
-        full_content = ""
-        current_agent = "orchestrator"
-        agents_used: set[str] = set()
-        # Track which sub-agent is currently being delegated to via task()
-        pending_task_agent: str | None = None
-
-        try:
-            async for chunk in orchestrator.astream(
-                {"messages": messages},
-                config=config,
-                stream_mode="messages",
-                subgraphs=True,
-                version="v2",
-            ):
-                agent_name, text, reasoning, agents_used, events = _extract_chunk_payload(
-                    chunk, current_agent=current_agent, agents_used=agents_used
-                )
-                current_agent = agent_name
-
-                if text:
-                    full_content += text
-
-                for ev in events:
-                    ev_type = ev.get("type")
-                    if ev_type == "tool_call":
-                        tool_name = ev.get("name", "tool")
-                        tool_args = ev.get("args", "")
-                        action = {
-                            "type": tool_name,
-                            "args": tool_args,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        }
-                        actions.append(action)
-                        await self._emit("action_executed", event.id, {"action": action})
-                        await self._emit_log(event.id, f"Action: {tool_name}", level="info")
-
-                        # Detect task() delegation to sub-agents
-                        if tool_name == "task":
-                            # Args may be a dict or a JSON string during streaming
-                            parsed_args = tool_args
-                            if isinstance(tool_args, str):
-                                try:
-                                    parsed_args = json.loads(tool_args)
-                                except (json.JSONDecodeError, TypeError):
-                                    parsed_args = {}
-                            if isinstance(parsed_args, dict):
-                                # DeepAgents uses 'subagent_type' but some versions use 'agent'
-                                pending_task_agent = (
-                                    parsed_args.get("subagent_type")
-                                    or parsed_args.get("agent")
-                                )
-                                if pending_task_agent:
-                                    await self._emit_log(
-                                        event.id,
-                                        f"Delegating to {pending_task_agent}",
-                                        level="info",
-                                    )
-                    elif ev_type == "tool_result":
-                        result = ev.get("content", "")
-                        if actions:
-                            actions[-1]["result"] = result
-                        await self._emit_log(event.id, f"Result: {str(result)[:120]}", level="debug")
-
-                        # Emit sub-agent results to the appropriate frontend panel
-                        if pending_task_agent == "historical-agent":
-                            await self._emit("historical_result", event.id, {"result": str(result)})
-                            await self._emit_log(event.id, "Historical analysis received", level="info")
-                        elif pending_task_agent == "rag-agent":
-                            await self._emit("rag_result", event.id, {"result": str(result)})
-                            await self._emit_log(event.id, "RAG result received", level="info")
-                        elif pending_task_agent == "mcp-agent":
-                            await self._emit("mcp_result", event.id, {"result": str(result)})
-                            await self._emit_log(event.id, "MCP result received", level="info")
-                        pending_task_agent = None
-                    elif ev_type == "subagent":
-                        await self._emit_log(
-                            event.id,
-                            f"Sub-agent {ev.get('name')} {ev.get('status')}",
-                            level="debug",
-                        )
-
-        except Exception as exc:
-            logger.exception("Execution failed for event %s", event.id)
-            await self._emit_log(event.id, f"Execution error: {exc}", level="error")
-            event.status = "failed"
-            event.actions_taken = actions
-            await session.commit()
-            await self._refresh_and_broadcast(event, session)
-
-            # ── Mandatory notification: execution failed ──
-            from src.services.notification_service import NotificationService
-            ns = NotificationService(session)
-            try:
-                await ns.notify_execution_failed(event, exc)
-            except Exception as notify_exc:
-                logger.warning("Failed to send failure notification: %s", notify_exc)
-            return
-
-        # Success
-        event.status = "completed"
-        event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        event.actions_taken = actions
-        await session.commit()
-        await self._refresh_and_broadcast(event, session)
-        await self._emit_log(event.id, "Event completed successfully", level="info")
-
-        # ── Mandatory notification: execution complete ──
-        from src.services.notification_service import NotificationService
-        ns = NotificationService(session)
-        try:
-            await ns.notify_execution_complete(event)
-            await self._emit_log(event.id, "Notification sent: execution complete", level="info")
-        except Exception as notify_exc:
-            logger.warning("Failed to send execution notification: %s", notify_exc)
-            await self._emit_log(event.id, f"Notification failed: {notify_exc}", level="warn")
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  PHASE 1 — S2 TRIAGE
@@ -402,14 +252,19 @@ class ReactiveOrchestrator:
         user_message = (
             f"<triage_hints>\n{triage_str}\n</triage_hints>\n\n"
             f"<event>\n{event_query}\n</event>\n\n"
-            "Analiza este evento industrial. Usa task() para delegar a los "
-            "sub-agentes que necesites (puedes invocar varios en paralelo). "
-            "Luego sintetiza todos los resultados en un JSON que cumpla EXACTAMENTE "
-            "el schema proporcionado en tu system prompt. NO agregues texto fuera del JSON."
+            "Analiza este evento industrial. "
+            "Delega a los sub-agentes necesarios via task() — máximo 2 rondas de delegación en total. "
+            "Cada sub-agente debe hacer UNA sola llamada a su herramienta con los parámetros más amplios posibles "
+            "(no llames la misma herramienta varias veces variando un solo parámetro). "
+            "Cuando hayas recopilado los resultados, sintetiza INMEDIATAMENTE en el JSON requerido. "
+            "NO agregues texto fuera del JSON."
         )
 
         thread_id = f"event-{event.id}-s2"
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": 40,  # hard cap: prevents infinite tool-call loops
+        }
         messages = [{"role": "user", "content": user_message}]
 
         try:
