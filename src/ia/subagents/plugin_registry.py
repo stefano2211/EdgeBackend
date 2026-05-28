@@ -76,8 +76,8 @@ class SubagentRegistry:
                 tools.append(create_mcp_tool(source=mcp_source))
             if plugin.requires_rag and enable_knowledge and kb_ids:
                 from src.ia.tools.unified.rag import create_rag_tool
-                prefix = "reactive_kb_" if context == "reactive" else "kb_"
-                tools.append(create_rag_tool(kb_ids, prefix=prefix))
+                rag_context = "reactive" if context == "reactive" else "chat"
+                tools.append(create_rag_tool(kb_ids, prefix="kb_", context=rag_context))
 
             cfg = plugin.builder(
                 context=context,

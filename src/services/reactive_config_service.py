@@ -1,7 +1,7 @@
 """Business logic for reactive user configuration.
 
-Reads directly from reactive tables (ReactiveKnowledgeBase, ReactiveToolConfig)
-using their native is_enabled fields — no junction tables required.
+Reads directly from unified KnowledgeBase table using is_enabled_reactive field,
+plus ReactiveToolConfig for reactive tools.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.persistencia.repositories.reactive_knowledge_repository import ReactiveKnowledgeRepository
+from src.persistencia.repositories.knowledge_repository import KnowledgeRepository
 from src.persistencia.repositories.reactive_tool_repository import ReactiveToolRepository
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class ReactiveConfigService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._tool_repo = ReactiveToolRepository(session)
-        self._kb_repo = ReactiveKnowledgeRepository(session)
+        self._kb_repo = KnowledgeRepository(session)
 
     async def list_tools(self, user_id: int) -> list[dict]:
         """Return all reactive tools for the user."""
@@ -54,14 +54,14 @@ class ReactiveConfigService:
             )
 
     async def list_knowledge_bases(self, user_id: int) -> list[dict]:
-        """Return all reactive KBs for the user."""
-        kbs = await self._kb_repo.list_by_user(user_id)
+        """Return all reactive-enabled KBs for the user."""
+        kbs = await self._kb_repo.list_enabled_for_reactive(user_id)
         return [
             {
                 "id": kb.id,
                 "name": kb.name,
                 "description": kb.description,
-                "is_enabled": kb.is_enabled,
+                "is_enabled": kb.is_enabled_reactive,
                 "document_count": len(kb.documents),
             }
             for kb in kbs
@@ -71,7 +71,7 @@ class ReactiveConfigService:
         """Enable or disable a reactive knowledge base."""
         kb = await self._kb_repo.get_by_id_for_user(kb_id, user_id)
         if kb:
-            kb.is_enabled = enabled
+            kb.is_enabled_reactive = enabled
             await self._session.commit()
             logger.info(
                 "User %s %s reactive KB %s",
@@ -87,20 +87,19 @@ class ReactiveConfigService:
 
     async def get_enabled_knowledge_bases(self, user_id: int) -> list[int]:
         """Return IDs of reactive KBs enabled for the user."""
-        kbs = await self._kb_repo.list_by_user(user_id)
-        return [kb.id for kb in kbs if kb.is_enabled]
+        kbs = await self._kb_repo.list_enabled_for_reactive(user_id)
+        return [kb.id for kb in kbs]
 
     async def get_enabled_resources(self, user_id: int) -> dict:
         """Return both IDs and names of enabled reactive tools and KBs."""
         tools = await self._tool_repo.list_enabled_by_user(user_id)
-        kbs = await self._kb_repo.list_by_user(user_id)
-        enabled_kbs = [kb for kb in kbs if kb.is_enabled]
+        kbs = await self._kb_repo.list_enabled_for_reactive(user_id)
         
         return {
             "tool_ids": [t.id for t in tools],
             "tool_names": [t.name for t in tools],
-            "kb_ids": [kb.id for kb in enabled_kbs],
-            "kb_names": [kb.name for kb in enabled_kbs],
+            "kb_ids": [kb.id for kb in kbs],
+            "kb_names": [kb.name for kb in kbs],
         }
 
     async def has_any_config(self, user_id: int) -> bool:

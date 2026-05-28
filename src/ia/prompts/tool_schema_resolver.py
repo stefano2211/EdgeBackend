@@ -128,22 +128,22 @@ async def _fetch_kb_configs(
 ) -> list[dict]:
     """Fetch active knowledge base configs from the appropriate table."""
     try:
+        from src.persistencia.repositories.knowledge_repository import (
+            KnowledgeRepository,
+        )
+        repo = KnowledgeRepository(session)
         if context == "reactive":
-            from src.persistencia.repositories.reactive_knowledge_repository import (
-                ReactiveKnowledgeRepository,
-            )
-            repo = ReactiveKnowledgeRepository(session)
             if user_id is not None:
-                kbs = await repo.list_by_user(user_id)
+                kbs = await repo.list_enabled_for_reactive(user_id)
             else:
                 kbs = await repo.list()
-            kbs = [kb for kb in kbs if kb.is_enabled]
+                kbs = [kb for kb in kbs if kb.is_enabled_reactive]
         else:
-            from src.persistencia.repositories.knowledge_repository import (
-                KnowledgeRepository,
-            )
-            repo = KnowledgeRepository(session)
-            kbs = await repo.list()
+            if user_id is not None:
+                kbs = await repo.list_enabled_for_chat(user_id)
+            else:
+                kbs = await repo.list()
+                kbs = [kb for kb in kbs if kb.is_enabled_chat]
 
         return [
             {

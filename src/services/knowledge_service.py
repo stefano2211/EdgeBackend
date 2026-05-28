@@ -89,3 +89,15 @@ class KnowledgeService:
 
     async def get_knowledge_base_with_documents(self, kb_id: int, user_id: int) -> KnowledgeBase:
         return await self.get_knowledge_base(kb_id, user_id)
+
+    async def toggle_chat(self, kb_id: int, user_id: int, enabled: bool) -> KnowledgeBase:
+        kb = await self.get_knowledge_base(kb_id, user_id)
+        kb.is_enabled_chat = enabled
+        await commit_and_refresh(self.session, kb)
+        return kb
+
+    async def toggle_reactive(self, kb_id: int, user_id: int, enabled: bool) -> KnowledgeBase:
+        kb = await self.get_knowledge_base(kb_id, user_id)
+        kb.is_enabled_reactive = enabled
+        await commit_and_refresh(self.session, kb)
+        return kb

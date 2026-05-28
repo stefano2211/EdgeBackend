@@ -73,6 +73,7 @@ class RetrievalPipeline:
         top_k: int | None = None,
         filter_doc_ids: list[int | str] | None = None,
         prefix: str = "kb_",
+        context: str | None = None,
     ) -> RetrievalResult:
         """Execute the full retrieval pipeline.
 
@@ -88,7 +89,8 @@ class RetrievalPipeline:
             query: The user's search query.
             top_k: Final number of chunks to return (default from settings).
             filter_doc_ids: Optional filter to specific documents.
-            prefix: Qdrant collection name prefix (default "kb_", use "reactive_kb_" for reactive).
+            prefix: Qdrant collection name prefix (default "kb_").
+            context: Optional context tag to filter chunks ("chat" or "reactive").
 
         Returns:
             RetrievalResult with chunks, formatted context, and pipeline metrics.
@@ -129,6 +131,7 @@ class RetrievalPipeline:
                     sparse_query=sparse_q,
                     prefetch_limit=settings.RAG_PREFETCH_LIMIT,
                     prefix=prefix,
+                    context=context,
                 )
 
                 # Deduplicate by point ID, keeping highest score

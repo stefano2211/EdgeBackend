@@ -52,6 +52,8 @@ async def get_knowledge_base(
         user_id=kb.user_id,
         name=kb.name,
         description=kb.description,
+        is_enabled_chat=kb.is_enabled_chat,
+        is_enabled_reactive=kb.is_enabled_reactive,
         created_at=kb.created_at,
         updated_at=kb.updated_at,
         documents=[
@@ -88,3 +90,27 @@ async def delete_knowledge_base(
     service = KnowledgeService(session)
     await service.delete_knowledge_base(knowledge_id, current_user.id)
     return None
+
+
+@router.patch("/{knowledge_id}/toggle-chat", response_model=KnowledgeBaseOut)
+async def toggle_chat(
+    knowledge_id: int,
+    enabled: bool,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = KnowledgeService(session)
+    kb = await service.toggle_chat(knowledge_id, current_user.id, enabled)
+    return kb
+
+
+@router.patch("/{knowledge_id}/toggle-reactive", response_model=KnowledgeBaseOut)
+async def toggle_reactive(
+    knowledge_id: int,
+    enabled: bool,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = KnowledgeService(session)
+    kb = await service.toggle_reactive(knowledge_id, current_user.id, enabled)
+    return kb

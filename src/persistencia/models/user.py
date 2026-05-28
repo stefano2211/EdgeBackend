@@ -39,9 +39,6 @@ class User(Base):
     events: Mapped[list["Event"]] = relationship(
         "Event", back_populates="triggered_by", lazy="selectin"
     )
-    reactive_knowledge_bases: Mapped[list["ReactiveKnowledgeBase"]] = relationship(
-        "ReactiveKnowledgeBase", back_populates="user", lazy="selectin"
-    )
     reactive_tool_configs: Mapped[list["ReactiveToolConfig"]] = relationship(
         "ReactiveToolConfig", back_populates="user", lazy="selectin"
     )

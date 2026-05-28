@@ -26,3 +26,21 @@ class KnowledgeRepository(BaseRepository[KnowledgeBase]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_enabled_for_chat(self, user_id: int) -> list[KnowledgeBase]:
+        stmt = (
+            select(KnowledgeBase)
+            .where(KnowledgeBase.user_id == user_id, KnowledgeBase.is_enabled_chat.is_(True))
+            .order_by(KnowledgeBase.updated_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def list_enabled_for_reactive(self, user_id: int) -> list[KnowledgeBase]:
+        stmt = (
+            select(KnowledgeBase)
+            .where(KnowledgeBase.user_id == user_id, KnowledgeBase.is_enabled_reactive.is_(True))
+            .order_by(KnowledgeBase.updated_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()

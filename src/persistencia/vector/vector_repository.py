@@ -52,6 +52,7 @@ class VectorRepository:
         doc_id: int | str,
         sparse_embeddings: list[SparseVector] | None = None,
         prefix: str = "kb_",
+        context: list[str] | None = None,
     ) -> None:
         """Upsert document chunks with dense + sparse vectors into the KB collection.
 
@@ -62,6 +63,7 @@ class VectorRepository:
             doc_id: Source document ID for filtering/deletion.
             sparse_embeddings: Optional sparse BM25 vectors (parallel to chunks).
             prefix: Collection name prefix (default "kb_", use "reactive_kb_" for reactive).
+            context: Optional list of context tags (e.g. ["chat"], ["reactive"], ["chat", "reactive"]).
         """
         await ensure_collection(knowledge_base_id, dimension=len(embeddings[0]), prefix=prefix)
         name = collection_name(knowledge_base_id, prefix=prefix)
@@ -88,6 +90,10 @@ class VectorRepository:
             # Ensure page_number travels if present
             if "page_number" in meta and meta["page_number"] is not None:
                 payload["page_number"] = meta["page_number"]
+
+            # Inject context tags for per-context retrieval
+            if context:
+                payload["context"] = context
 
             # Build named vector dict
             vector: dict[str, Any] = {"dense": dense_vec}
@@ -131,6 +137,7 @@ class VectorRepository:
         sparse_query: SparseVector | None = None,
         prefetch_limit: int = 50,
         prefix: str = "kb_",
+        context: str | None = None,
     ) -> list[dict[str, Any]]:
         """Search for top-k similar chunks using hybrid search (dense + sparse + RRF).
 
@@ -149,6 +156,7 @@ class VectorRepository:
             sparse_query: Optional sparse BM25 query vector.
             prefetch_limit: Number of candidates per prefetch stage.
             prefix: Collection name prefix (default "kb_", use "reactive_kb_" for reactive).
+            context: Optional context tag to filter chunks ("chat" or "reactive").
         """
         name = collection_name(knowledge_base_id, prefix=prefix)
 
@@ -165,6 +173,18 @@ class VectorRepository:
                     )
                 ]
             )
+
+        if context:
+            from qdrant_client.models import Filter, FieldCondition, MatchAny
+
+            context_filter = FieldCondition(
+                key="context",
+                match=MatchAny(any=[context]),
+            )
+            if query_filter is None:
+                query_filter = Filter(must=[context_filter])
+            else:
+                query_filter.must.append(context_filter)
 
         search_params = SearchParams(hnsw_ef=hnsw_ef, exact=False)
 

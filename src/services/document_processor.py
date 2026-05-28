@@ -131,6 +131,7 @@ class DocumentProcessor:
         dense_embeddings: list[list[float]],
         sparse_embeddings: list[SparseVector] | None,
         doc_id: int,
+        context: list[str] | None = None,
     ) -> None:
         """Upsert chunks with dual vectors (dense + sparse) to vector store."""
         chunk_texts = [c.text for c in chunks]
@@ -143,6 +144,7 @@ class DocumentProcessor:
             metadata=meta_list,
             doc_id=doc_id,
             sparse_embeddings=sparse_embeddings,
+            context=context,
         )
 
     async def process_document(
@@ -163,6 +165,16 @@ class DocumentProcessor:
                 # 0. Update status to processing
                 doc.status = "processing"
                 await session.commit()
+
+                # Determine which contexts this KB serves
+                from src.persistencia.repositories.knowledge_repository import KnowledgeRepository
+                kb_repo = KnowledgeRepository(session)
+                kb = await kb_repo.get_by_id(knowledge_base_id)
+                contexts = []
+                if kb and kb.is_enabled_chat:
+                    contexts.append("chat")
+                if kb and kb.is_enabled_reactive:
+                    contexts.append("reactive")
 
                 # 1. Download from MinIO/S3 (file_id is the full S3 key)
                 data = await self._download(doc.file_id)
@@ -193,6 +205,7 @@ class DocumentProcessor:
                 await self._index(
                     knowledge_base_id, chunks, dense_embeddings,
                     sparse_embeddings, doc_id,
+                    context=contexts or None,
                 )
 
                 # 8. Finalize

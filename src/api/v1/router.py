@@ -17,8 +17,6 @@ from src.api.v1.routers import (
     prompts,
     reactive_config,
     reactive_credentials,
-    reactive_documents,
-    reactive_knowledge,
     reactive_tools,
     system,
     tools,
@@ -40,8 +38,6 @@ router.include_router(models.router)
 router.include_router(tools.router)
 router.include_router(prompts.router)
 router.include_router(reactive_config.router)
-router.include_router(reactive_knowledge.router)
-router.include_router(reactive_documents.router)
 router.include_router(reactive_tools.router)
 router.include_router(reactive_credentials.router)
 router.include_router(system.router)
