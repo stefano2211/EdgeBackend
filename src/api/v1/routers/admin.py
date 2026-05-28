@@ -58,13 +58,15 @@ async def delete_user(
     await service.delete_user(user_id_path)
 
 
+@router.get("/stats")
 @router.get("/analytics")
 async def get_analytics(
+    days: int = 7,
     _admin: None = Depends(require_admin),
     session: AsyncSession = Depends(get_db),
 ):
     service = AdminService(session)
-    return await service.get_analytics()
+    return await service.get_analytics(days=days)
 
 
 @router.get("/settings")
