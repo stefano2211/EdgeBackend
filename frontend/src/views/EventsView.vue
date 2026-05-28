@@ -1,0 +1,1111 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import eventService, {
+  type AuraEvent,
+  type EventSeverityText,
+  type EventStatus,
+  type SSEPayload,
+  type LiveScreenshot,
+  type DemoPreset,
+  DEMO_PRESETS,
+} from '@/services/eventService'
+import reactiveConfigService from '@/services/reactiveConfigService'
+import { webhookService, type WebhookSource } from '@/services/webhookService'
+import { useEventStore } from '@/stores/events'
+import DynamicMetricCard from '@/components/events/DynamicMetricCard.vue'
+import ConfidenceBadge from '@/components/events/ConfidenceBadge.vue'
+import SeverityBar from '@/components/events/SeverityBar.vue'
+import AdminModal from '@/components/events/AdminModal.vue'
+
+// ── Store ─────────────────────────────────────────────────────────────────────
+const store = useEventStore()
+const { state, selectedEvent, pendingApprovalCount } = store
+const router = useRouter()
+const route = useRoute()
+
+// ── Local UI state ────────────────────────────────────────────────────────────
+const isLoading = ref(false)
+const sseConnected = ref(false)
+let sseSource: EventSource | null = null
+const showConfigBanner = ref(false)
+
+// Filters
+const filterSeverity = ref<EventSeverityText | ''>('')
+const filterStatus = ref<EventStatus | ''>('')
+const filterSource = ref<string>('')
+
+// Modals
+const showCreateModal = ref(false)
+
+// Create form
+const newEvent = ref({ severity_text: 'warning' as EventSeverityText, title: '', description: '' })
+const isCreating = ref(false)
+
+// Webhook
+const webhooksList = ref<WebhookSource[]>([])
+const selectedWebhookSlug = ref<string | null>(null)
+const webhookSentId = ref<string | null>(null)
+const isLoadingWebhooks = ref(false)
+
+// Custom event extra JSON data
+const customDataJson = ref('')
+
+// Demo presets
+const triggeringPresetId = ref<string | null>(null)
+const presets = DEMO_PRESETS
+
+// Tabs
+const activeTab = ref<'overview' | 'evidence' | 'pipeline' | 'actions'>('overview')
+
+// Feedback
+const feedbackSubmitted = ref(false)
+const feedbackSubmitting = ref(false)
+
+// ── Computed ──────────────────────────────────────────────────────────────────
+const filteredEvents = computed(() => {
+  return state.events.filter(e => {
+    if (filterSeverity.value && e.severity_text !== filterSeverity.value) return false
+    if (filterStatus.value && e.status !== filterStatus.value) return false
+    if (filterSource.value && e.source !== filterSource.value) return false
+    return true
+  })
+})
+
+const eventLogs = computed(() => {
+  if (!selectedEvent.value) return []
+  return store.getEventLogs(selectedEvent.value.id)
+})
+
+const vlmAnalysisText = computed(() => {
+  if (!selectedEvent.value) return null
+  return store.getVlmAnalysis(selectedEvent.value.id)
+})
+
+const liveScreenshot = computed(() => {
+  if (!selectedEvent.value) return null
+  return store.getLiveScreenshot(selectedEvent.value.id)
+})
+
+const triageResult = computed(() => {
+  if (!selectedEvent.value) return null
+  return store.getTriageResult(selectedEvent.value.id)
+})
+
+const historicalAnalysis = computed(() => {
+  if (!selectedEvent.value) return null
+  return store.getHistoricalAnalysis(selectedEvent.value.id)
+})
+
+
+
+// ── S1 Visual Verification panel state ──
+const vlPanelExpanded = ref(false)
+const vlPanelMinimized = ref(false)
+
+const hasVlActivity = computed(() => {
+  if (!selectedEvent.value) return false
+  const id = selectedEvent.value.id
+  return store.getVlScreenshots(id).length > 0 || store.getVlThoughts(id).length > 0
+})
+
+const vlScreenshots = computed(() => {
+  if (!selectedEvent.value) return []
+  return store.getVlScreenshots(selectedEvent.value.id)
+})
+
+const vlThoughts = computed(() => {
+  if (!selectedEvent.value) return []
+  return store.getVlThoughts(selectedEvent.value.id)
+})
+
+const vlActions = computed(() => {
+  if (!selectedEvent.value) return []
+  return store.getVlActions(selectedEvent.value.id)
+})
+
+const vlProgress = computed(() => {
+  if (!selectedEvent.value) return null
+  return store.getVlProgress(selectedEvent.value.id)
+})
+
+const latestVlScreenshot = computed(() => {
+  const ss = vlScreenshots.value
+  return ss.length > 0 ? ss[ss.length - 1] : null
+})
+
+
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+async function loadEvents() {
+  isLoading.value = true
+  try {
+    const res = await eventService.listEvents({ limit: 100 })
+    store.setEvents(res.items)
+  } catch (err) {
+    console.error('Failed to load events', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function refreshSelected() {
+  if (!selectedEvent.value) return
+  try {
+    const ev = await eventService.getEvent(selectedEvent.value.id)
+    store.updateEvent(ev)
+  } catch {}
+}
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (sseSource) sseSource.close()
+  sseSource = eventService.openSSEStream(
+    (payload: SSEPayload) => {
+      handleSSE(payload)
+    },
+    () => {
+      sseConnected.value = false
+      setTimeout(connectSSE, 5000)
+    }
+  )
+  if (sseSource) {
+    sseSource.onopen = () => { sseConnected.value = true }
+  }
+}
+
+function handleSSE(payload: SSEPayload) {
+  const eventType = payload.type
+  const data = payload.data || {}
+  const eventId = Number(data.id)
+
+  if (!eventId || isNaN(eventId)) return
+
+  // Ensure ephemeral state exists
+  store.ensureEphemeral(eventId)
+
+  switch (eventType) {
+    case 'connected':
+      sseConnected.value = true
+      return
+
+    case 'new_event':
+      state.unreadCount++
+      loadEvents()
+      return
+
+    case 'triage_result':
+      store.setTriageResult(eventId, data.triage)
+      break
+
+    case 'historical_result':
+      store.setHistoricalAnalysis(eventId, data.result)
+      break
+
+
+
+    case 'system2_result':
+      store.updateEvent({
+        id: eventId,
+        agent_analysis: data.result,
+      })
+      break
+
+    case 'diagnosis_result':
+      store.updateEvent({
+        id: eventId,
+        agent_diagnosis: data.diagnosis,
+      })
+      break
+
+    case 'planner_result':
+      store.updateEvent({
+        id: eventId,
+        agent_plan: data.plan,
+      })
+      break
+
+    case 'vl_screenshot': {
+      const ss: LiveScreenshot = {
+        b64: data.b64,
+        step: data.step,
+        action: data.action,
+        click: data.click,
+      }
+      store.appendVlScreenshot(eventId, ss)
+      // Auto-expand panel on first screenshot
+      if (!vlPanelMinimized.value && !vlPanelExpanded.value) {
+        vlPanelExpanded.value = true
+      }
+      break
+    }
+
+    case 'vl_thought':
+      store.appendVlThought(eventId, data.thought)
+      break
+
+    case 'vl_result':
+      store.appendVlThought(eventId, `Resultado Final: ${data.result}`)
+      break
+
+    case 'vl_action_executed':
+      store.appendVlAction(eventId, data.action)
+      break
+
+    case 'vl_progress':
+      store.setVlProgress(eventId, {
+        current_step: data.current_step,
+        max_steps: data.max_steps,
+      })
+      break
+
+    case 'action_executed': {
+      const ev = state.events.find(e => e.id === eventId)
+      if (ev) {
+        const actions = ev.actions_taken || []
+        actions.push(data.action)
+        store.updateEvent({ id: eventId, actions_taken: actions })
+      }
+      break
+    }
+
+    case 'log_line':
+      store.appendLog(eventId, {
+        timestamp: data.timestamp,
+        level: data.level,
+        message: data.message,
+      })
+      break
+
+    case 'status_update':
+    case 'event_update':
+      store.updateEvent({
+        id: eventId,
+        status: data.status,
+        severity_text: data.severity_text,
+        severity_number: data.severity_number,
+        title: data.title,
+        updated_at: data.updated_at,
+      })
+      if (selectedEvent.value?.id === eventId) {
+        refreshSelected()
+      }
+      loadEvents()
+      break
+  }
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+async function createWebhookEvent() {
+  if (!newEvent.value.title.trim()) return
+  if (!selectedWebhookSlug.value) {
+    alert('Selecciona un webhook')
+    return
+  }
+  isCreating.value = true
+  try {
+    // Build payload from form + custom JSON data
+    let extraData: Record<string, any> = {}
+    try {
+      if (customDataJson.value.trim()) {
+        extraData = JSON.parse(customDataJson.value)
+      }
+    } catch {
+      alert('Invalid JSON in custom data field')
+      return
+    }
+    await sendToWebhook({
+      title: newEvent.value.title,
+      description: newEvent.value.description,
+      severity: newEvent.value.severity_text,
+      ...extraData
+    })
+    showCreateModal.value = false
+    newEvent.value = { severity_text: 'warning', title: '', description: '' }
+    customDataJson.value = ''
+    await loadEvents()
+  } catch (err) {
+    console.error('Failed to create event', err)
+  } finally {
+    isCreating.value = false
+  }
+}
+
+async function triggerPresetWebhook(preset: DemoPreset) {
+  if (!selectedWebhookSlug.value) return
+  triggeringPresetId.value = preset.id
+  try {
+    await sendToWebhook({
+      title: preset.title,
+      description: preset.description,
+      severity: preset.severity_text,
+      ...preset.data,
+      _demo: true,
+      _preset_id: preset.id,
+      timestamp: new Date().toISOString(),
+    }, preset.id)
+    showCreateModal.value = false
+    await loadEvents()
+  } catch (err) {
+    console.error('Failed to trigger preset', err)
+  } finally {
+    triggeringPresetId.value = null
+  }
+}
+
+async function loadWebhooksForModal() {
+  if (webhooksList.value.length > 0) return
+  isLoadingWebhooks.value = true
+  try {
+    webhooksList.value = await webhookService.list()
+    if (webhooksList.value.length > 0 && !selectedWebhookSlug.value) {
+      selectedWebhookSlug.value = webhooksList.value[0].slug
+    }
+  } catch {}
+  isLoadingWebhooks.value = false
+}
+
+async function sendToWebhook(payload: any, presetId?: string) {
+  if (!selectedWebhookSlug.value) return
+  const baseUrl = import.meta.env.PROD
+    ? (import.meta.env.VITE_API_URL || window.location.origin)
+    : window.location.origin
+  const url = `${baseUrl}/webhooks/${selectedWebhookSlug.value}/receive`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`HTTP ${res.status}: ${text}`)
+  }
+  if (presetId) {
+    webhookSentId.value = presetId
+    setTimeout(() => webhookSentId.value = null, 2000)
+  }
+}
+
+
+
+async function submitFeedback(feedbackType: 'false_positive' | 'wrong_severity' | 'other') {
+  if (!selectedEvent.value) return
+  feedbackSubmitting.value = true
+  try {
+    await eventService.submitFeedback(selectedEvent.value.id, {
+      feedback_type: feedbackType,
+      comment: undefined,
+    })
+    feedbackSubmitted.value = true
+  } catch (err) {
+    console.error('Failed to submit feedback', err)
+  } finally {
+    feedbackSubmitting.value = false
+  }
+}
+
+function selectEvent(event: AuraEvent) {
+  const prevId = selectedEvent.value?.id
+  store.selectEvent(event.id)
+  // Reset UI state for new event
+  if (prevId && prevId !== event.id) {
+    feedbackSubmitted.value = false
+    feedbackSubmitting.value = false
+    activeTab.value = 'overview'
+  }
+  // Reset VL panel state for new event
+  vlPanelExpanded.value = false
+  vlPanelMinimized.value = false
+}
+
+async function checkReactiveConfig() {
+  try {
+    const [tools, kbs] = await Promise.all([
+      reactiveConfigService.listTools(),
+      reactiveConfigService.listKnowledgeBases(),
+    ])
+    const hasAnyEnabled = tools.some(t => t.is_enabled) || kbs.some(k => k.is_enabled_reactive)
+    showConfigBanner.value = !hasAnyEnabled
+  } catch (e) {
+    showConfigBanner.value = false
+  }
+}
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
+onMounted(() => {
+  loadEvents()
+  connectSSE()
+  checkReactiveConfig()
+})
+
+watch(showCreateModal, (val) => {
+  if (val) {
+    loadWebhooksForModal()
+  }
+})
+
+onUnmounted(() => {
+  sseSource?.close()
+})
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function severityColor(s: EventSeverityText) {
+  switch (s) {
+    case 'critical': return 'bg-red-500/15 text-red-400 border-red-500/30'
+    case 'error': return 'bg-orange-500/15 text-orange-400 border-orange-500/30'
+    case 'warning': return 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30'
+    case 'info': return 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+    case 'debug': return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+    default: return 'bg-white/5 text-[#a0a0a0] border-white/10'
+  }
+}
+
+function severityDot(s: EventSeverityText) {
+  switch (s) {
+    case 'critical': return 'bg-red-500'
+    case 'error': return 'bg-orange-500'
+    case 'warning': return 'bg-yellow-500'
+    case 'info': return 'bg-blue-500'
+    case 'debug': return 'bg-emerald-500'
+    default: return 'bg-[#555]'
+  }
+}
+
+
+function statusColor(s: EventStatus) {
+  return {
+    pending: 'text-gray-400',
+    analyzing: 'text-blue-400',
+    awaiting_approval: 'text-amber-400',
+    executing: 'text-purple-400',
+    completed: 'text-emerald-400',
+    failed: 'text-red-400',
+  }[s] ?? 'text-gray-400'
+}
+
+function statusLabel(s: EventStatus) {
+  return {
+    pending: 'Pendiente',
+    analyzing: 'Analizando…',
+    awaiting_approval: 'Esperando aprobación',
+    executing: 'Ejecutando…',
+    completed: 'Completado',
+    failed: 'Fallido',
+  }[s] ?? s
+}
+
+function logColor(level: string) {
+  return {
+    info: 'text-blue-300',
+    debug: 'text-gray-400',
+    warn: 'text-amber-300',
+    error: 'text-red-300',
+  }[level] ?? 'text-gray-300'
+}
+
+function formatDate(d: string) {
+  return new Date(d).toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatTime(d: string) {
+  return new Date(d).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+</script>
+
+<template>
+  <div class="flex h-full bg-[#0f0f0f] text-white overflow-hidden">
+
+    <!-- ── LEFT: Event list ─────────────────────────────────────────────── -->
+    <div class="w-[340px] shrink-0 flex flex-col border-r border-white/[0.06] h-full bg-[#0d0d0d]">
+
+      <!-- Header -->
+      <div class="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-[15px] text-white tracking-tight">Operations Center</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5" :title="sseConnected ? 'Live' : 'Reconnecting…'">
+            <div class="w-1.5 h-1.5 rounded-full" :class="sseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'"></div>
+            <span class="text-[10px] text-[#666] uppercase tracking-wider">{{ sseConnected ? 'LIVE' : 'OFFLINE' }}</span>
+          </div>
+          <button @click="showCreateModal = true" class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Nuevo evento manual">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          </button>
+          <button @click="router.push('/events?admin=users')" class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Panel de Administración">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </button>
+          <button @click="loadEvents" class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Refrescar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="isLoading && 'animate-spin'"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="px-3 py-2 border-b border-white/[0.06] flex gap-2 flex-wrap">
+        <select v-model="filterSeverity" class="text-[12px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[#ececec] focus:outline-none focus:border-white/20">
+          <option value="">Severidad</option>
+          <option value="low">Baja</option>
+          <option value="medium">Media</option>
+          <option value="high">Alta</option>
+          <option value="critical">Crítica</option>
+        </select>
+        <select v-model="filterStatus" class="text-[12px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[#ececec] focus:outline-none focus:border-white/20">
+          <option value="">Estado</option>
+          <option value="pending">Pendiente</option>
+          <option value="analyzing">Analizando</option>
+          <option value="completed">Completado</option>
+          <option value="failed">Fallido</option>
+        </select>
+        <select v-model="filterSource" class="text-[12px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[#ececec] focus:outline-none focus:border-white/20">
+          <option value="">Fuente</option>
+          <option value="sensor">Sensor</option>
+          <option value="db_collector">DB Collector</option>
+          <option value="manual">Manual</option>
+          <option value="webhook">Webhook</option>
+        </select>
+      </div>
+
+      <!-- List -->
+      <div class="flex-1 overflow-y-auto">
+        <div v-if="isLoading && filteredEvents.length === 0" class="flex items-center justify-center h-24 text-[#7a7a7a] text-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin mr-2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          Cargando…
+        </div>
+        <div v-else-if="filteredEvents.length === 0" class="flex flex-col items-center justify-center h-32 text-[#7a7a7a] text-sm gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Sin eventos
+        </div>
+        <div
+          v-for="event in filteredEvents"
+          :key="event.id"
+          @click="selectEvent(event)"
+          class="px-3 py-3 border-b border-white/[0.04] cursor-pointer transition-colors group"
+          :class="selectedEvent?.id === event.id ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'"
+        >
+          <div class="flex items-start gap-2.5">
+            <div class="mt-1.5 w-2 h-2 rounded-full shrink-0" :class="severityDot(event.severity_text)"></div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="text-[13px] font-medium text-[#ececec] truncate flex-1">{{ event.title }}</span>
+                <span class="text-[11px] shrink-0" :class="statusColor(event.status)">
+                  <span v-if="event.status === 'analyzing'" class="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse mr-1"></span>
+                  <span v-if="event.status === 'executing'" class="inline-block w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse mr-1"></span>
+                  {{ statusLabel(event.status) }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
+                <span :class="['px-1.5 py-0.5 rounded text-[10px] font-semibold border', severityColor(event.severity_text)]">{{ event.severity_text.toUpperCase() }}</span>
+                <span class="truncate">{{ event.source }}</span>
+                <span class="ml-auto shrink-0 text-[11px]">{{ formatDate(event.created_at) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RIGHT: Event detail (Gradio-style) ─────────────────────────────── -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden">
+
+      <!-- Config banner -->
+      <div v-if="showConfigBanner" class="px-4 py-3 bg-purple-500/10 border-b border-purple-500/20 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+          <span class="text-[12px] text-purple-300">No tienes herramientas ni bases de conocimiento activadas para eventos reactivos.</span>
+        </div>
+        <button
+          @click="router.push('/reactive/tools')"
+          class="shrink-0 px-3 py-1 rounded-lg text-[11px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition-colors"
+        >
+          Configurar ahora
+        </button>
+      </div>
+
+      <!-- Empty state -->
+      <div v-if="!selectedEvent" class="flex-1 flex flex-col items-center justify-center text-[#7a7a7a] gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <p class="text-sm">Selecciona un evento para ver el detalle</p>
+      </div>
+
+      <template v-else>
+        <!-- Detail header -->
+        <div class="px-6 py-4 border-b border-white/[0.06] flex items-start justify-between gap-4">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              <span :class="['px-2 py-0.5 rounded text-[11px] font-bold border', severityColor(selectedEvent.severity_text)]">
+                {{ selectedEvent.severity_text.toUpperCase() }}
+              </span>
+              <span class="text-[12px] text-[#7a7a7a]">{{ selectedEvent.source }}</span>
+            </div>
+            <h2 class="text-[16px] font-semibold text-white leading-snug">{{ selectedEvent.title }}</h2>
+            <p class="text-[13px] text-[#b4b4b4] mt-1">{{ selectedEvent.description }}</p>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <button @click="refreshSelected" class="p-2 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Refrescar">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Detail body with tabs -->
+        <div class="flex-1 flex flex-col overflow-hidden bg-[#0a0a0a]">
+
+          <!-- Enhanced header meta -->
+          <div class="px-6 py-3 border-b border-white/[0.06] flex items-center gap-4 flex-wrap">
+            <SeverityBar v-if="selectedEvent.severity_number" :number="selectedEvent.severity_number" class="w-[200px]" />
+            <div class="flex items-center gap-2 text-[11px] text-[#7a7a7a]">
+              <span class="px-1.5 py-0.5 rounded bg-white/5 text-[#a0a0a0]">{{ selectedEvent.event_type }}</span>
+              <span v-if="selectedEvent.domain" class="px-1.5 py-0.5 rounded bg-white/5 text-[#a0a0a0]">{{ selectedEvent.domain }}</span>
+              <span v-if="selectedEvent.correlation_group_id" class="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Group #{{ selectedEvent.correlation_group_id }}</span>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="px-6 pt-4 flex gap-1 border-b border-white/[0.06]">
+            <button
+              v-for="tab in [
+                { key: 'overview', label: 'Overview', icon: 'M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5' },
+                { key: 'evidence', label: 'Evidence', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8' },
+                { key: 'pipeline', label: 'Pipeline Log', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
+                { key: 'actions', label: 'Actions', icon: 'M13 2 3 14h9l-1 8 10-12h-9l1-8z' },
+              ]"
+              :key="tab.key"
+              @click="activeTab = tab.key as any"
+              class="px-4 py-2 text-[12px] font-medium rounded-t-lg transition-colors flex items-center gap-1.5 border-b-2"
+              :class="activeTab === tab.key ? 'text-white border-white/30 bg-white/5' : 'text-[#7a7a7a] border-transparent hover:text-[#b4b4b4]'"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path :d="tab.icon"/></svg>
+              {{ tab.label }}
+            </button>
+          </div>
+
+          <!-- Tab content -->
+          <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+
+            <!-- ── TAB: Overview ── -->
+            <template v-if="activeTab === 'overview'">
+
+              <!-- Triage Summary -->
+              <div v-if="triageResult" class="bg-[#111] rounded-xl border border-blue-500/20 overflow-hidden">
+                <div class="px-4 py-2.5 bg-gradient-to-r from-blue-500/10 to-transparent border-b border-blue-500/15 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-blue-400"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/></svg>
+                  <span class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">Triage Decision</span>
+                  <span class="ml-auto px-2 py-0.5 rounded text-[10px] font-bold uppercase" :class="{'bg-red-500/10 text-red-400 border border-red-500/20': triageResult.urgency === 'critical', 'bg-orange-500/10 text-orange-400 border border-orange-500/20': triageResult.urgency === 'high', 'bg-amber-500/10 text-amber-400 border border-amber-500/20': triageResult.urgency === 'medium', 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20': triageResult.urgency === 'low'}">{{ triageResult.urgency }}</span>
+                </div>
+                <div class="px-4 py-3 flex flex-wrap gap-2">
+                  <span class="px-2 py-1 rounded text-[10px] border flex items-center gap-1" :class="triageResult.needs_historical ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-[#555] border-white/10'">
+                    <svg v-if="triageResult.needs_historical" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+                    Historical
+                  </span>
+                  <span class="px-2 py-1 rounded text-[10px] border flex items-center gap-1" :class="triageResult.needs_realtime_data ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-[#555] border-white/10'">
+                    <svg v-if="triageResult.needs_realtime_data" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+                    Realtime Data
+                  </span>
+                  <span class="px-2 py-1 rounded text-[10px] border flex items-center gap-1" :class="triageResult.needs_visual_verification ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-[#555] border-white/10'">
+                    <svg v-if="triageResult.needs_visual_verification" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+                    Visual Verify
+                  </span>
+                  <span v-if="triageResult.justification" class="text-[11px] text-[#7a7a7a] ml-2">{{ triageResult.justification }}</span>
+                </div>
+              </div>
+
+              <!-- Analysis -->
+              <div v-if="selectedEvent?.agent_analysis" class="bg-[#111] rounded-xl border border-blue-500/20 overflow-hidden">
+                <div class="px-4 py-2.5 bg-gradient-to-r from-blue-500/10 to-transparent border-b border-blue-500/15 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-blue-400"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <span class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">Analysis</span>
+                  <ConfidenceBadge :text="selectedEvent?.agent_analysis" class="ml-auto" />
+                </div>
+                <div class="px-5 py-4 text-[13px] text-[#d8d8d8] leading-relaxed whitespace-pre-wrap">{{ selectedEvent?.agent_analysis }}</div>
+              </div>
+
+              <!-- Diagnosis -->
+              <div v-if="selectedEvent?.agent_diagnosis" class="bg-[#111] rounded-xl border border-purple-500/20 overflow-hidden">
+                <div class="px-4 py-2.5 bg-gradient-to-r from-purple-500/10 to-transparent border-b border-purple-500/15 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-400"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/></svg>
+                  <span class="text-[11px] font-bold text-purple-400 uppercase tracking-wider">Diagnosis</span>
+                </div>
+                <div class="px-5 py-4 text-[13px] text-[#d8d8d8] leading-relaxed whitespace-pre-wrap">{{ selectedEvent?.agent_diagnosis }}</div>
+              </div>
+
+              <!-- Remediation Plan -->
+              <div v-if="selectedEvent?.agent_plan" class="bg-[#111] rounded-xl border border-emerald-500/20 overflow-hidden">
+                <div class="px-4 py-2.5 bg-gradient-to-r from-emerald-500/10 to-transparent border-b border-emerald-500/15 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-400"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                  <span class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Remediation Plan</span>
+                </div>
+                <div class="px-5 py-4 text-[13px] text-[#d8d8d8] leading-relaxed whitespace-pre-wrap">{{ selectedEvent?.agent_plan }}</div>
+              </div>
+
+              <!-- Meta -->
+              <div class="flex items-center gap-4 flex-wrap px-4 py-2.5 bg-[#111] border border-white/[0.06] rounded-xl text-[11px] text-[#7a7a7a]">
+                <div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-white/20"></span>Created: <span class="text-[#ececec]">{{ formatDate(selectedEvent.created_at) }}</span></div>
+                <div v-if="selectedEvent.resolved_at" class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></span>Resolved: <span class="text-[#ececec]">{{ formatDate(selectedEvent.resolved_at) }}</span></div>
+              </div>
+            </template>
+
+            <!-- ── TAB: Evidence ── -->
+            <template v-if="activeTab === 'evidence'">
+
+              <!-- Dynamic Metric Cards -->
+              <div v-if="selectedEvent.body && Object.keys(selectedEvent.body).length > 0">
+                <div class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider mb-2">Payload Metrics</div>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                  <DynamicMetricCard
+                    v-for="(value, key) in selectedEvent.body"
+                    :key="key"
+                    :label="String(key)"
+                    :value="value"
+                  />
+                </div>
+              </div>
+
+              <!-- Metadata Table -->
+              <div class="bg-[#111] rounded-xl border border-white/[0.08] overflow-hidden">
+                <div class="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.06]">
+                  <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Event Metadata</span>
+                </div>
+                <div class="divide-y divide-white/[0.04]">
+                  <div class="px-4 py-2 flex justify-between text-[12px]">
+                    <span class="text-[#7a7a7a]">Event ID</span>
+                    <span class="text-[#ececec] font-mono">{{ selectedEvent.event_id }}</span>
+                  </div>
+                  <div class="px-4 py-2 flex justify-between text-[12px]">
+                    <span class="text-[#7a7a7a]">Source</span>
+                    <span class="text-[#ececec]">{{ selectedEvent.source }}</span>
+                  </div>
+                  <div class="px-4 py-2 flex justify-between text-[12px]">
+                    <span class="text-[#7a7a7a]">Type</span>
+                    <span class="text-[#ececec]">{{ selectedEvent.event_type }}</span>
+                  </div>
+                  <div class="px-4 py-2 flex justify-between text-[12px]">
+                    <span class="text-[#7a7a7a]">Timestamp</span>
+                    <span class="text-[#ececec]">{{ formatDate(selectedEvent.timestamp) }}</span>
+                  </div>
+                  <div class="px-4 py-2 flex justify-between text-[12px]">
+                    <span class="text-[#7a7a7a]">Dedup Key</span>
+                    <span class="text-[#a0a0a0] font-mono text-[10px]">{{ selectedEvent.dedup_key || '—' }}</span>
+                  </div>
+                  <div v-if="selectedEvent.correlation_group_id" class="px-4 py-2 flex justify-between text-[12px]">
+                    <span class="text-[#7a7a7a]">Correlation Group</span>
+                    <span class="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] border border-blue-500/20">#{{ selectedEvent.correlation_group_id }}</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- ── TAB: Pipeline Log ── -->
+            <template v-if="activeTab === 'pipeline'">
+
+              <!-- Log Timeline -->
+              <div v-if="eventLogs.length > 0" class="bg-[#0c0c0c] rounded-xl border border-white/[0.08] overflow-hidden">
+                <div class="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.06]">
+                  <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Pipeline Logs</span>
+                </div>
+                <div class="px-4 py-3 space-y-1 max-h-[400px] overflow-y-auto font-mono text-[11px] leading-relaxed">
+                  <div v-for="(log, idx) in eventLogs" :key="idx" class="flex gap-2">
+                    <span class="text-[#555] shrink-0">{{ formatTime(log.timestamp) }}</span>
+                    <span :class="logColor(log.level)">{{ log.message }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Raw Triage (debug) -->
+              <div v-if="triageResult" class="bg-[#111] rounded-xl border border-white/[0.06] overflow-hidden">
+                <div class="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.06] flex items-center justify-between">
+                  <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Triage Raw</span>
+                  <span class="text-[10px] text-[#555]">Debug</span>
+                </div>
+                <pre class="px-4 py-3 text-[11px] text-[#888] font-mono overflow-x-auto">{{ JSON.stringify(triageResult, null, 2) }}</pre>
+              </div>
+            </template>
+
+            <!-- ── TAB: Actions ── -->
+            <template v-if="activeTab === 'actions'">
+
+              <!-- Actions Taken -->
+              <div v-if="selectedEvent.actions_taken?.length" class="space-y-3">
+                <div class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Executed Actions</div>
+                <div v-for="(action, idx) in selectedEvent.actions_taken" :key="idx" class="bg-[#111] rounded-xl border border-white/[0.08] p-4">
+                  <div class="flex items-center gap-2 mb-1.5">
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border" :class="{'bg-purple-500/10 text-purple-400 border-purple-500/20': action.type === 'mcp_call', 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20': action.type === 'vl_navigate', 'bg-blue-500/10 text-blue-400 border-blue-500/20': action.type === 'notification', 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20': action.type === 'webhook', 'bg-white/5 text-[#a0a0a0] border-white/10': true}">{{ action.type || 'action' }}</span>
+                    <span v-if="action.timestamp" class="text-[#555] text-[10px]">{{ formatDate(action.timestamp) }}</span>
+                  </div>
+                  <p v-if="action.args" class="text-[12px] text-[#c0c0c0] leading-relaxed">{{ action.args }}</p>
+                  <p v-else-if="action.result" class="text-[12px] text-[#c0c0c0] leading-relaxed">{{ action.result }}</p>
+                </div>
+              </div>
+
+              <!-- VL Gallery -->
+              <div v-if="hasVlActivity" class="space-y-3">
+                <div class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Visual Verification</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div v-for="(ss, idx) in vlScreenshots" :key="idx" class="bg-[#111] rounded-xl border border-white/[0.08] overflow-hidden">
+                    <img :src="`data:image/png;base64,${ss.b64}`" class="w-full h-32 object-contain bg-[#050505]" />
+                    <div class="px-3 py-2 text-[10px] text-[#7a7a7a]">Step {{ ss.step }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="!selectedEvent.actions_taken?.length && !hasVlActivity" class="text-center py-8 text-[#555]">
+                <p class="text-[13px]">No actions recorded yet</p>
+              </div>
+            </template>
+
+          </div>
+
+
+
+          <!-- Feedback -->
+          <div v-if="selectedEvent.status === 'completed' || selectedEvent.status === 'failed'" class="shrink-0 px-6 py-4 border-t border-white/[0.06]">
+            <div v-if="!feedbackSubmitted" class="flex items-center gap-3">
+              <span class="text-[12px] text-[#7a7a7a]">Was this analysis correct?</span>
+              <button
+                @click="submitFeedback('false_positive')"
+                :disabled="feedbackSubmitting"
+                class="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+              >
+                False Positive
+              </button>
+              <button
+                @click="submitFeedback('wrong_severity')"
+                :disabled="feedbackSubmitting"
+                class="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-amber-500/20 text-amber-400 hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+              >
+                Wrong Severity
+              </button>
+              <button
+                @click="submitFeedback('other')"
+                :disabled="feedbackSubmitting"
+                class="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/10 text-[#a0a0a0] hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Other Issue
+              </button>
+            </div>
+            <div v-else class="text-[12px] text-emerald-400 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+              Feedback recorded. Thank you!
+            </div>
+          </div>
+
+        </div>
+      </template>
+    </div>
+
+    <!-- ── Create event modal (Webhook only) ──────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" @click.self="showCreateModal = false">
+        <div class="bg-[#141414] border border-white/[0.08] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+          <!-- Header -->
+          <div class="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between shrink-0">
+            <h3 class="text-[14px] font-semibold text-white">Nuevo Evento</h3>
+            <div class="flex items-center gap-2">
+              <template v-if="webhooksList.length > 0">
+                <select
+                  v-model="selectedWebhookSlug"
+                  class="bg-white/[0.04] border border-white/[0.08] rounded-md px-2.5 py-1 text-[11px] text-[#ececec] focus:outline-none"
+                >
+                  <option v-for="wh in webhooksList" :key="wh.slug" :value="wh.slug">
+                    {{ wh.name }}
+                  </option>
+                </select>
+              </template>
+              <template v-else>
+                <button @click="router.push('/settings/webhooks'); showCreateModal = false" class="text-[11px] text-violet-400 hover:text-violet-300 underline">
+                  Configurar Webhook primero
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Body -->
+          <div class="px-5 py-4 overflow-y-auto">
+            <div class="space-y-3">
+              <div>
+                <label class="text-[10px] text-[#555] mb-1 block uppercase tracking-wider">Severidad</label>
+                <select v-model="newEvent.severity_text" class="w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[12px] text-[#ececec] focus:outline-none focus:border-white/20">
+                  <option value="critical">Crítica</option>
+                  <option value="error">Error</option>
+                  <option value="warning">Advertencia</option>
+                  <option value="info">Info</option>
+                  <option value="debug">Debug</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#555] mb-1 block uppercase tracking-wider">Título</label>
+                <input v-model="newEvent.title" type="text" placeholder="Ej: Presión de caldera excede límite" class="w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[12px] text-[#ececec] placeholder-[#444] focus:outline-none focus:border-white/20" />
+              </div>
+              <div>
+                <label class="text-[10px] text-[#555] mb-1 block uppercase tracking-wider">Descripción</label>
+                <textarea v-model="newEvent.description" rows="2" placeholder="Contexto del evento…" class="w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[12px] text-[#ececec] placeholder-[#444] focus:outline-none focus:border-white/20 resize-none"></textarea>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#555] mb-1 block uppercase tracking-wider">Payload JSON (opcional)</label>
+                <textarea
+                  v-model="customDataJson"
+                  rows="2"
+                  placeholder='{"sensor_id": "PT-999", "value": 327.4}'
+                  class="w-full bg-[#0c0c0c] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[10px] text-[#888] font-mono placeholder-[#333] focus:outline-none focus:border-violet-500/40 resize-none"
+                />
+              </div>
+            </div>
+
+            <!-- Demo Presets -->
+            <div class="mt-4 pt-3 border-t border-white/[0.06]">
+              <div class="text-[10px] text-[#555] uppercase tracking-wider mb-2">Escenarios Demo</div>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="p in presets"
+                  :key="p.id"
+                  @click="triggerPresetWebhook(p)"
+                  :disabled="triggeringPresetId !== null || !selectedWebhookSlug"
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] hover:border-white/[0.12] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  :title="p.description"
+                >
+                  <span class="text-[11px]">{{ p.icon }}</span>
+                  <span class="text-[10px] text-[#c0c0c0]">{{ p.label }}</span>
+                  <span class="text-[8px] font-bold uppercase px-1 py-[1px] rounded" :class="severityColor(p.severity_text)">{{ p.severity_text[0] }}</span>
+                  <svg v-if="triggeringPresetId === p.id" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin text-violet-400"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                  <svg v-else-if="webhookSentId === p.id" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-400"><path d="M20 6 9 17l-5-5"/></svg>
+                </button>
+              </div>
+              <p class="text-[9px] text-[#444] mt-2">
+                Datos de prueba enviados al webhook seleccionado.
+              </p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="px-5 py-3 border-t border-white/[0.06] flex items-center justify-between shrink-0">
+            <span class="text-[10px] text-[#444] font-mono">POST /webhooks/{slug}/receive</span>
+            <div class="flex gap-2">
+              <button @click="showCreateModal = false" class="px-3 py-1 text-[11px] text-[#888] hover:text-white transition-colors rounded-md hover:bg-white/5">Cancelar</button>
+              <button @click="createWebhookEvent" :disabled="isCreating || !newEvent.title.trim() || !selectedWebhookSlug" class="px-3 py-1 rounded-md text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-violet-600 hover:bg-violet-500 text-white">
+                <svg v-if="isCreating" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin inline mr-1"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+
+
+    <!-- ── S1 Visual Verification Mini Panel (floating) ─────────────────── -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-all duration-300 ease-out"
+        enter-from-class="opacity-0 scale-90 translate-y-4"
+        enter-to-class="opacity-100 scale-100 translate-y-0"
+        leave-active-class="transition-all duration-200 ease-in"
+        leave-from-class="opacity-100 scale-100 translate-y-0"
+        leave-to-class="opacity-0 scale-90 translate-y-4"
+      >
+        <div
+          v-if="hasVlActivity && !vlPanelMinimized"
+          class="fixed bottom-6 right-6 z-50"
+        >
+          <!-- Expanded panel -->
+          <div
+            v-if="vlPanelExpanded"
+            class="w-[380px] bg-[#111]/90 backdrop-blur-xl border border-purple-500/25 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden ring-1 ring-purple-500/10"
+          >
+            <!-- Header -->
+            <div class="px-4 py-3 bg-gradient-to-r from-purple-500/10 to-transparent border-b border-purple-500/15 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="relative flex h-2.5 w-2.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,1)]"></span>
+                </span>
+                <span class="text-[12px] font-bold text-purple-300 uppercase tracking-widest">Aura Visión</span>
+                <span v-if="vlProgress" class="text-[10px] text-purple-400/60 font-mono">
+                  {{ vlProgress.current_step }}/{{ vlProgress.max_steps }}
+                </span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button @click="vlPanelExpanded = false" class="p-1 hover:bg-white/8 rounded-md transition-colors text-[#888] hover:text-white" title="Minimizar">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+                </button>
+                <button @click="vlPanelMinimized = true" class="p-1 hover:bg-white/8 rounded-md transition-colors text-[#888] hover:text-white" title="Cerrar">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Screenshot -->
+            <div v-if="latestVlScreenshot" class="relative bg-[#050505] overflow-hidden">
+              <img
+                :src="`data:image/png;base64,${latestVlScreenshot.b64}`"
+                class="w-full h-auto max-h-[200px] object-cover"
+                alt="S1 Visual"
+              />
+              <div class="absolute top-2 right-2">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-200 border border-purple-500/30 font-mono">
+                  STEP {{ latestVlScreenshot.step }}
+                </span>
+              </div>
+            </div>
+            <div v-else class="h-[100px] flex items-center justify-center bg-[#0a0a0a]">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin text-purple-400"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+            </div>
+
+            <!-- Thoughts -->
+            <div v-if="vlThoughts.length > 0" class="px-4 py-2.5 border-t border-purple-500/10 max-h-[100px] overflow-y-auto space-y-1.5">
+              <div v-for="(thought, idx) in vlThoughts.slice(-3)" :key="idx" class="flex gap-2 text-[11px]">
+                <span class="text-purple-400/50 shrink-0">💭</span>
+                <span class="text-[#b4b4b4] leading-relaxed">{{ thought }}</span>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div v-if="vlActions.length > 0" class="px-4 py-2 border-t border-purple-500/10">
+              <div class="text-[10px] text-purple-400/40 uppercase tracking-wider mb-1.5">Acciones</div>
+              <div class="space-y-1">
+                <div v-for="(action, idx) in vlActions.slice(-3)" :key="idx" class="flex items-center gap-2 text-[11px] font-mono">
+                  <span class="text-purple-400/40">❯</span>
+                  <span class="text-[#888]">{{ action.type }}</span>
+                  <span v-if="action.args" class="text-[#555] truncate">{{ action.args }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div v-if="vlProgress" class="px-4 py-2.5 border-t border-purple-500/10">
+              <div class="h-1 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  class="h-full bg-purple-500 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]"
+                  :style="`width: ${(vlProgress.current_step / vlProgress.max_steps) * 100}%`"
+                ></div>
+              </div>
+              <div class="flex justify-between mt-1">
+                <span class="text-[10px] text-purple-400/50">Paso {{ vlProgress.current_step }} de {{ vlProgress.max_steps }}</span>
+                <span class="text-[10px] text-purple-400/50">{{ Math.round((vlProgress.current_step / vlProgress.max_steps) * 100) }}%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Collapsed chip (when not expanded) -->
+          <button
+            v-else
+            @click="vlPanelExpanded = true"
+            class="flex items-center gap-2.5 bg-[#111]/90 backdrop-blur-xl border border-purple-500/30 rounded-full px-4 py-2.5 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:border-purple-500/50 transition-all duration-200 hover:scale-105 group"
+          >
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,1)]"></span>
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-300"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span class="text-[12px] font-medium text-purple-200">Aura Verificando</span>
+            <span v-if="vlProgress" class="text-[10px] text-purple-400/60 font-mono">
+              {{ vlProgress.current_step }}/{{ vlProgress.max_steps }}
+            </span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Admin Modal -->
+    <AdminModal v-if="route.query.admin" />
+  </div>
+</template>

@@ -1,0 +1,51 @@
+"""Prompts router — functional CRUD."""
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.api.v1.schemas.prompt import PromptCreate, PromptUpdate, PromptOut
+from backend.core.deps import get_db, get_current_user
+from backend.persistencia.models.user import User
+from backend.core.exceptions import NotFoundError
+from backend.services.prompt_service import PromptService
+
+router = APIRouter(prefix="/prompts", tags=["prompts"])
+
+
+@router.get("", response_model=list[PromptOut])
+async def list_prompts(
+    session: AsyncSession = Depends(get_db),
+):
+    service = PromptService(session)
+    return await service.list()
+
+
+@router.post("", response_model=PromptOut, status_code=201)
+async def create_prompt(
+    data: PromptCreate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = PromptService(session)
+    return await service.create(data)
+
+
+@router.patch("/{prompt_id}", response_model=PromptOut)
+async def update_prompt(
+    prompt_id: int,
+    data: PromptUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = PromptService(session)
+    return await service.update(prompt_id, data)
+
+
+@router.delete("/{prompt_id}", status_code=204)
+async def delete_prompt(
+    prompt_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    service = PromptService(session)
+    await service.delete(prompt_id)

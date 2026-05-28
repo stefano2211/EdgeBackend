@@ -54,7 +54,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["backend"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

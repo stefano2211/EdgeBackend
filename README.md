@@ -1,64 +1,93 @@
-# EdgeBackend
+# AuraAI
 
-Edge AI Monolith Backend — FastAPI + vLLM (Qwen3.5) + PostgreSQL + Qdrant.
+Event-Driven AIOps Platform — Unified Backend + Frontend in a single Docker Compose.
 
 ## Architecture
 
-Modular monolith (modulith) with clear separation of business layers:
-- **Auth** — JWT authentication
-- **Chat/Proactive** — AI chat with RAG, MCP, and System 1/2 agents
-- **Events/Reactive** — Event ingestion, analysis, and agentic orchestration
-- **Knowledge** — Document collections and vector search
-- **Models** — LLM configuration and discovery
-- **Tools** — MCP sources and tool management
-- **Admin** — User management, analytics, settings
+Monorepo with clear separation:
+- **Frontend** — Vue 3 + Vite + Tailwind CSS (served as static files by FastAPI)
+- **Backend** — FastAPI + SQLAlchemy + LangGraph + DeepAgents
+- **Infra** — PostgreSQL, Qdrant (vectors), Redis (Pub/Sub), MinIO (objects)
+- **LLM** — vLLM or Ollama (mutually exclusive GPU profiles)
+
+## Quick Start
+
+```bash
+# 1. Clone
+git clone <repo-url>
+cd auraai
+
+# 2. Configure
+cp .env.example .env
+# Edit .env with your secrets (at minimum SECRET_KEY)
+
+# 3. Start everything
+docker compose up -d
+
+# 4. Open http://localhost:8000
+```
+
+That's it. The frontend SPA and backend API run from the same container on port `8000`.
+
+## Development
+
+### Frontend hot-reload (separate terminal)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite proxy forwards `/api/v1` and `/webhooks` to `http://localhost:8000`.
+
+### Backend only (API at :8000)
+
+```bash
+# Infrastructure
+docker compose up -d postgres qdrant redis minio
+
+# Local backend
+uv sync
+uvicorn backend.main:app --reload
+```
 
 ## LLM Backends
-
-The backend supports **two mutually-exclusive LLM inference engines**. The backend auto-detects which one is running — no `.env` edits needed.
 
 | Provider | Docker Profile | Default Model | When to use |
 |----------|---------------|---------------|-------------|
 | **vLLM** | `--profile vllm` | `Qwen/Qwen3.5-9B-Instruct` | Production: LoRA, tool calling, high throughput |
 | **Ollama** | `--profile ollama` | `qwen3.5:9b` | Quick testing, fast model swaps |
 
-> ⚠️ **Only one can run at a time** — they share the same GPU. Use the appropriate Docker profile.
-
-### Quick Start — vLLM (recommended for production)
+> ⚠️ **Only one can run at a time** — they share the same GPU.
 
 ```bash
-cp .env.example .env
+# With vLLM
+docker compose --profile vllm up -d
 
-# Start infrastructure + vLLM
-docker compose up -d postgres qdrant redis
-docker compose --profile vllm up -d vllm
-
-# Backend auto-detects vLLM at http://vllm:8000/v1
+# With Ollama
+docker compose --profile ollama up -d
 ```
 
-### Quick Start — Ollama
+## Optional: Nginx Reverse Proxy
+
+For production with gzip and caching:
 
 ```bash
-cp .env.example .env
-
-# Stop vLLM if running
-docker compose --profile vllm down vllm
-
-# Start Ollama
-docker compose up -d postgres qdrant redis
-docker compose --profile ollama up -d ollama
-
-# Backend auto-detects Ollama at http://ollama:11434/v1
+docker compose --profile proxy up -d
 ```
 
-### Local development (no GPU)
+Access at `http://localhost` (port 80).
 
-```bash
-uv sync
+## Environment Variables
 
-# Infrastructure only
-docker compose up -d postgres qdrant redis
+See `.env.example` for all available options.
 
-# Backend starts and warns that no LLM is available
-uvicorn src.main:app --reload
-```
+## Tech Stack
+
+- **Frontend:** Vue 3, Vite, Tailwind CSS, Axios, markdown-it
+- **Backend:** Python 3.13, FastAPI, SQLAlchemy 2.0 (async), LangChain, DeepAgents
+- **Vector DB:** Qdrant
+- **Object Storage:** MinIO (S3-compatible)
+- **Cache/Queue:** Redis
+- **Browser Automation:** Playwright (Chromium)

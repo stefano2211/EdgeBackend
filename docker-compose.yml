@@ -177,13 +177,13 @@ services:
     networks:
       - edge-network
 
-  # ── Backend FastAPI ────────────────────────────────────────────
-  backend:
+  # ── AuraAI Unified App ─────────────────────────────────────────
+  app:
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-    container_name: edge-backend
+    container_name: aura-app
     restart: unless-stopped
     user: root
     depends_on:
@@ -244,17 +244,16 @@ services:
   # ── Nginx Reverse Proxy (opcional) ─────────────────────────────
   nginx:
     image: nginx:alpine
-    container_name: edge-nginx
+    container_name: aura-nginx
     restart: unless-stopped
     profiles:
-      - nginx
+      - proxy
     depends_on:
-      - backend
+      - app
     ports:
       - "80:80"
-      - "443:443"
     volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - edge-network
 
