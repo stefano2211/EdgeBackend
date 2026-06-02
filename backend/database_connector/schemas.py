@@ -68,6 +68,8 @@ class SchemaColumn(BaseModel):
     is_pk: bool = False
     fk_ref: str | None = None
     description: str | None = None
+    cardinality: str = "unknown"  # "high" | "medium" | "low" | "unknown"
+    sample_values: list[str] = Field(default_factory=list)
 
 
 class SchemaTable(BaseModel):

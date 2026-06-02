@@ -94,8 +94,8 @@ export const databaseService = {
         return api.get('/api/v1/database/supported-types').then(r => r.data)
     },
 
-    listConnections(): Promise<DatabaseConnection[]> {
-        return api.get('/api/v1/database/connections').then(r => r.data)
+    listConnections(context?: string): Promise<DatabaseConnection[]> {
+        return api.get('/api/v1/database/connections', { params: context ? { context } : undefined }).then(r => r.data)
     },
 
     createConnection(data: CreateConnectionRequest): Promise<DatabaseConnection> {

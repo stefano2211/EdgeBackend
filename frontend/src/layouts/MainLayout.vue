@@ -11,6 +11,7 @@ import api from '@/services/api'
 import { authService } from '@/services/authService'
 import { systemService } from '@/services/systemService'
 import eventService from '@/services/eventService'
+import { databaseService, type DatabaseConnection } from '@/services/databaseService'
 
 const router = useRouter()
 const isSidebarOpen = ref(true)
@@ -60,6 +61,10 @@ const showKbDropdown = ref(false)
 // MCP Sources
 const mcpSources = ref<MCPSource[]>([])
 const activeMcpSourceId = ref<string | null>(null)
+
+// Database Connections
+const databaseConnections = ref<DatabaseConnection[]>([])
+const activeDbConnectionIds = ref<string[]>([])
 
 function toggleSidebar() {
   isSidebarOpen.value = !isSidebarOpen.value
@@ -192,6 +197,37 @@ function selectMcpSource(id: string | null) {
   activeMcpSourceId.value = id
 }
 
+async function loadDatabaseConnections() {
+  try {
+    databaseConnections.value = await databaseService.listConnections('chat')
+    // Filter out any active IDs that no longer exist or are no longer available
+    activeDbConnectionIds.value = activeDbConnectionIds.value.filter(
+      id => databaseConnections.value.find(c => c.id === id && c.available_in_chat)
+    )
+  } catch (error) {
+    console.error('Failed to load database connections', error)
+  }
+}
+
+function selectDbConnection(id: string) {
+  const idx = activeDbConnectionIds.value.indexOf(id)
+  if (idx >= 0) {
+    activeDbConnectionIds.value.splice(idx, 1)
+  } else {
+    activeDbConnectionIds.value.push(id)
+  }
+}
+
+function setAllDbConnections(enabled: boolean) {
+  if (enabled) {
+    activeDbConnectionIds.value = databaseConnections.value
+      .filter(c => c.available_in_chat)
+      .map(c => c.id)
+  } else {
+    activeDbConnectionIds.value = []
+  }
+}
+
 function selectKb(id: string | null) {
   activeKnowledgeBaseId.value = id
   showKbDropdown.value = false
@@ -273,11 +309,18 @@ provide('refreshMcpSources', loadMcpSources)
 provide('userName', userName)
 provide('chatParams', chatParams)
 
+provide('databaseConnections', databaseConnections)
+provide('activeDbConnectionIds', activeDbConnectionIds)
+provide('selectDbConnection', selectDbConnection)
+provide('setAllDbConnections', setAllDbConnections)
+provide('refreshDatabaseConnections', loadDatabaseConnections)
+
 onMounted(() => {
   loadUserInfo()
   loadConversations()
   loadKnowledgeBases()
   loadMcpSources()
+  loadDatabaseConnections()
   loadModelInfo()
   loadStats()
   pollPendingEvents()

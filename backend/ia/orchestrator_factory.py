@@ -62,6 +62,7 @@ def create_orchestrator(
     domain: str = "generic",
     tool_schemas: list[dict] | None = None,
     kb_names: list[str] | None = None,
+    db_connection_ids: list[str] | None = None,
 ):
     """Create a DeepAgents orchestrator with registered sub-agents.
 
@@ -88,14 +89,14 @@ def create_orchestrator(
     # Resolve KB IDs uniformly
     if context == "reactive":
         kb_ids = knowledge_base_ids if enable_knowledge else None
-        default_names = ["historical", "db"]
+        default_names = ["historical", "db", "data_analyst"]
         if has_rag:
             default_names.insert(0, "rag")
         if has_mcp:
             default_names.append("mcp")
     else:
         kb_ids = [knowledge_base_id] if (knowledge_base_id and enable_knowledge) else None
-        default_names = ["rag", "mcp", "historical", "db"]
+        default_names = ["rag", "mcp", "historical", "db", "data_analyst"]
         if not has_rag and "rag" in default_names:
             default_names.remove("rag")
         if not has_mcp and "mcp" in default_names:
@@ -111,6 +112,7 @@ def create_orchestrator(
         tool_schemas=tool_schemas,
         enable_mcp=enable_mcp,
         enable_knowledge=enable_knowledge,
+        db_connection_ids=db_connection_ids,
     )
     # Filter to requested names
     subagents = [s for s in subagents if s.get("name", "").replace("-agent", "") in actual_names]

@@ -5,6 +5,7 @@ import toolService, { type ToolConfig, type MCPSource } from '@/services/toolSer
 import VariableAutocomplete from '@/components/common/VariableAutocomplete.vue'
 import RichVariablesInput from '@/components/common/RichVariablesInput.vue'
 import type { KnowledgeBase } from '@/services/knowledgeService'
+import type { DatabaseConnection } from '@/services/databaseService'
 
 const knowledgeBases = inject<Ref<KnowledgeBase[]>>('knowledgeBases', ref([]))
 const activeKnowledgeBaseId = inject<Ref<string | null>>('activeKnowledgeBaseId', ref(null))
@@ -14,8 +15,13 @@ const mcpSources = inject<Ref<any[]>>('mcpSources', ref([]))
 const activeMcpSourceId = inject<Ref<string | null>>('activeMcpSourceId', ref(null))
 const selectMcpSource = inject<(id: string | null) => void>('selectMcpSource', () => {})
 
+const databaseConnections = inject<Ref<DatabaseConnection[]>>('databaseConnections', ref([]))
+const activeDbConnectionIds = inject<Ref<string[]>>('activeDbConnectionIds', ref([]))
+const selectDbConnection = inject<(id: string) => void>('selectDbConnection', () => {})
+const setAllDbConnections = inject<(enabled: boolean) => void>('setAllDbConnections', () => {})
+
 const showUnifiedDropdown = ref(false)
-const activeSubmenu = ref<'knowledge' | 'mcp' | null>(null)
+const activeSubmenu = ref<'knowledge' | 'mcp' | 'database' | null>(null)
 
 const props = defineProps<{
   disabled?: boolean
@@ -233,7 +239,7 @@ function removeSelectedFile() {
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                 <!-- Indicator dot if context active -->
-                <div v-if="activeKnowledgeBaseId || activeMcpSourceId" class="absolute top-1 right-1 w-2 h-2 bg-indigo-500 rounded-full border border-[#2f2f2f]"></div>
+                <div v-if="activeKnowledgeBaseId || activeMcpSourceId || activeDbConnectionIds.length > 0" class="absolute top-1 right-1 w-2 h-2 bg-indigo-500 rounded-full border border-[#2f2f2f]"></div>
               </button>
 
               <!-- Unified Nested Dropdown -->
@@ -374,6 +380,71 @@ function removeSelectedFile() {
                       </div>
                     </div>
                   </div>
+
+                  <!-- Database Submenu Trigger -->
+                  <div class="relative">
+                    <button 
+                      @mouseenter="activeSubmenu = 'database'"
+                      class="w-full text-left px-3 py-2.5 text-[14px] text-[#ececec] hover:bg-white/[0.04] rounded-xl transition-colors flex items-center justify-between group/item"
+                      :class="{ 'bg-white/[0.04]': activeSubmenu === 'database' }"
+                    >
+                      <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-400 group-hover/item:bg-cyan-500/20 transition-colors">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+                        </div>
+                        <div class="flex flex-col">
+                          <span class="font-medium">Bases de Datos</span>
+                          <span class="text-[10px] text-[#7a7a7a]">
+                            {{ activeDbConnectionIds.length === 0 ? 'Sin Base de Datos' : (activeDbConnectionIds.length === databaseConnections.length ? 'Todas las Conexiones' : `${activeDbConnectionIds.length} seleccionada(s)`) }}
+                          </span>
+                        </div>
+                      </div>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-[#7a7a7a]"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+
+                    <!-- Database Submenu -->
+                    <div v-if="activeSubmenu === 'database'"
+                      class="absolute left-[calc(100%+8px)] bottom-0 w-64 bg-[#1c1c1c] border border-white/[0.06] rounded-2xl shadow-2xl py-2 z-50 animate-in"
+                    >
+                      <div class="px-3 py-1.5 text-[10px] font-bold text-[#7a7a7a] uppercase tracking-widest mb-1">Conexiones</div>
+                      <div class="max-h-[240px] overflow-y-auto px-1">
+                        <button 
+                          @click="activeDbConnectionIds = []; showUnifiedDropdown = false"
+                          class="w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors flex items-center justify-between mb-0.5"
+                          :class="activeDbConnectionIds.length === 0 ? 'bg-white/10 text-white' : 'text-[#b4b4b4] hover:bg-white/5'"
+                        >
+                          <span class="flex items-center gap-2">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" x2="19.07" y1="4.93" y2="19.07"/></svg>
+                             Sin Base de Datos
+                          </span>
+                          <svg v-if="activeDbConnectionIds.length === 0" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-indigo-400"><path d="M20 6 9 17l-5-5"/></svg>
+                        </button>
+                        <button 
+                          @click="setAllDbConnections(true); showUnifiedDropdown = false"
+                          class="w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors flex items-center justify-between mb-0.5"
+                          :class="activeDbConnectionIds.length > 0 && activeDbConnectionIds.length === databaseConnections.length ? 'bg-white/10 text-white' : 'text-[#b4b4b4] hover:bg-white/5'"
+                        >
+                          <span class="flex items-center gap-2">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/></svg>
+                             Todas las Conexiones
+                          </span>
+                          <svg v-if="activeDbConnectionIds.length > 0 && activeDbConnectionIds.length === databaseConnections.length" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-indigo-400"><path d="M20 6 9 17l-5-5"/></svg>
+                        </button>
+                        <button 
+                          v-for="conn in databaseConnections.filter(c => c.available_in_chat)" :key="conn.id"
+                          @click="selectDbConnection(conn.id); showUnifiedDropdown = false"
+                          class="w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors flex items-center justify-between mb-0.5"
+                          :class="activeDbConnectionIds.includes(conn.id) ? 'bg-white/10 text-white' : 'text-[#b4b4b4] hover:bg-white/5'"
+                        >
+                          <span class="flex items-center gap-2 truncate pr-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+                            <span class="truncate">{{ conn.name }}</span>
+                          </span>
+                          <svg v-if="activeDbConnectionIds.includes(conn.id)" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-indigo-400"><path d="M20 6 9 17l-5-5"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -394,6 +465,9 @@ function removeSelectedFile() {
                 </span>
                 <span v-if="activeMcpSourceId === 'none'" class="px-2 py-0.5 bg-red-500/10 text-red-400 text-[11px] font-medium rounded-md border border-red-500/20">
                     Sin Herramientas
+                </span>
+                <span v-if="activeDbConnectionIds.length > 0" class="px-2 py-0.5 bg-cyan-500/10 text-cyan-400 text-[11px] font-medium rounded-md border border-cyan-500/20 truncate max-w-[100px]">
+                    {{ activeDbConnectionIds.length === databaseConnections.length ? 'Todas las BDs' : databaseConnections.find(c => c.id === activeDbConnectionIds[0])?.name + (activeDbConnectionIds.length > 1 ? ` +${activeDbConnectionIds.length - 1}` : '') }}
                 </span>
             </div>
           </div>

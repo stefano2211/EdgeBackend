@@ -14,6 +14,7 @@ const activeModelId = inject<Ref<string | undefined>>('activeModelId', ref(undef
 const activeMessages = inject<Ref<MessageItem[]>>('activeMessages', ref([]))
 const isLoadingMessages = inject<Ref<boolean>>('isLoadingMessages', ref(false))
 const activeMcpSourceId = inject<Ref<string | null>>('activeMcpSourceId', ref(null))
+const activeDbConnectionIds = inject<Ref<string[]>>('activeDbConnectionIds', ref([]))
 const onMessageSent = inject<(threadId: string, userMsg: MessageItem, assistantMsg: MessageItem) => void>('onMessageSent', () => {})
 const chatParams = inject<any>('chatParams', {})
 
@@ -75,6 +76,7 @@ async function handleSendMessage(content: string) {
       activeThreadId.value || undefined,
       activeKnowledgeBaseId.value || undefined,
       activeMcpSourceId.value || undefined,
+      activeDbConnectionIds.value.length > 0 ? activeDbConnectionIds.value : undefined,
       activeModelId.value,
       Object.keys(params).length > 0 ? params : undefined,
       // onToken

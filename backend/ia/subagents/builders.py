@@ -17,6 +17,8 @@ from backend.ia.prompts.subagents import (
     HISTORICAL_AGENT_SYSTEM_PROMPT,
     DB_AGENT_DESCRIPTION,
     build_db_system_prompt,
+    DATA_ANALYST_AGENT_DESCRIPTION,
+    build_data_analyst_system_prompt,
 )
 
 from backend.ia.subagents.plugin_registry import SubagentPlugin, SubagentRegistry
@@ -170,6 +172,30 @@ def _build_db_subagent(
     }
 
 
+def _build_data_analyst_subagent(
+    context: str,
+    tools: list,
+    db_connection_ids: list[str] | None = None,
+    **_,
+) -> dict:
+    from backend.ia.tools.unified.data_analyst import create_data_analyst_tools
+
+    # user_id will be resolved at runtime via the orchestrator/config
+    # For now we use 1 as placeholder (the tool factory accepts user_id)
+    user_id = 1
+    data_analyst_tools = create_data_analyst_tools(
+        user_id=user_id, context=context, db_connection_ids=db_connection_ids
+    )
+
+    return {
+        "name": "data-analyst-agent",
+        "description": DATA_ANALYST_AGENT_DESCRIPTION,
+        "system_prompt": build_data_analyst_system_prompt(),
+        "tools": data_analyst_tools + tools,
+        "model": get_chat_model(),
+    }
+
+
 # ── Auto-register on import ──
 SubagentRegistry.register(SubagentPlugin(
     name="rag",
@@ -202,6 +228,15 @@ SubagentRegistry.register(SubagentPlugin(
     name="db",
     description=DB_AGENT_DESCRIPTION,
     builder=_build_db_subagent,
+    applies_to={"proactive", "reactive"},
+    requires_rag=False,
+    requires_mcp=False,
+))
+
+SubagentRegistry.register(SubagentPlugin(
+    name="data_analyst",
+    description=DATA_ANALYST_AGENT_DESCRIPTION,
+    builder=_build_data_analyst_subagent,
     applies_to={"proactive", "reactive"},
     requires_rag=False,
     requires_mcp=False,

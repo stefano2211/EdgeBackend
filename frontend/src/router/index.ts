@@ -89,6 +89,12 @@ const router = createRouter({
             meta: { layout: 'dashboard', requiresAuth: true }
         },
         {
+            path: '/reactive/database',
+            name: 'reactive-database',
+            component: () => import('@/views/reactive/ReactiveDatabaseView.vue'),
+            meta: { layout: 'dashboard', requiresAuth: true }
+        },
+        {
             path: '/register',
             name: 'register',
             component: RegisterView,

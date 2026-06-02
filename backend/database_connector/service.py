@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from datetime import datetime
 
@@ -19,7 +20,9 @@ from backend.database_connector.schemas import (
     QueryResult,
 )
 from backend.database_connector.engine_factory import EngineFactory
+from backend.database_connector.schema_intelligence import SchemaIntelligence
 from backend.integrations.credential_vault import CredentialVault
+from backend.services.schema_embedding_service import SchemaEmbeddingService
 from backend.core.exceptions import NotFoundError, SecurityError
 
 _vault = CredentialVault()
@@ -233,23 +236,76 @@ class DatabaseConnectionService:
                         )
                     )
 
-        # Merge with existing descriptions
+        # Enrich with intelligence: FKs, samples, cardinality, auto-descriptions
+        intelligence = SchemaIntelligence()
+        try:
+            enriched_tables = await intelligence.enrich(
+                connection=conn,
+                engine=engine,
+                tables=tables,
+                auto_describe=True,
+            )
+            tables = [SchemaIntelligence.to_schema_table(et) for et in enriched_tables]
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.warning("Schema enrichment failed, using basic schema: %s", exc)
+
+        # Merge with existing descriptions (user overrides auto-generated)
         existing = conn.discovered_schema or {}
         existing_tables = {t["name"]: t for t in existing.get("tables", [])}
         for table in tables:
             if table.name in existing_tables:
                 old = existing_tables[table.name]
-                table.description = old.get("description")
+                # User-provided descriptions take precedence over auto-generated
+                if old.get("description"):
+                    table.description = old.get("description")
                 old_cols = {c["name"]: c for c in old.get("columns", [])}
                 for col in table.columns:
-                    if col.name in old_cols:
+                    if col.name in old_cols and old_cols[col.name].get("description"):
                         col.description = old_cols[col.name].get("description")
 
         schema_result = SchemaDiscoveryResult(tables=tables)
         conn.discovered_schema = schema_result.model_dump()
+        # Store enriched metadata separately for the data-analyst-agent
+        conn.schema_metadata = {
+            "fk_graph": self._build_fk_graph(tables),
+            "table_stats": {
+                t.name: {"row_count": t.row_count, "columns": len(t.columns)}
+                for t in tables
+            },
+            "enriched_at": datetime.utcnow().isoformat(),
+        }
         conn.last_schema_sync = datetime.utcnow()
         await self._session.commit()
+
+        # Index schema for semantic RAG (non-blocking, best-effort)
+        try:
+            embedding_svc = SchemaEmbeddingService()
+            await embedding_svc.index_schema(
+                connection_id=conn.id,
+                connection_name=conn.name,
+                user_id=conn.user_id,
+                schema=schema_result,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Schema indexing failed for connection=%s: %s", conn.id, exc
+            )
+
         return schema_result
+
+    @staticmethod
+    def _build_fk_graph(tables: list[SchemaTable]) -> dict[str, list[str]]:
+        """Build a simple FK relationship graph for agent context."""
+        graph: dict[str, list[str]] = {}
+        for table in tables:
+            refs = []
+            for col in table.columns:
+                if col.fk_ref:
+                    refs.append(col.fk_ref)
+            if refs:
+                graph[table.name] = refs
+        return graph
 
     async def enrich_schema(
         self,
@@ -277,6 +333,23 @@ class DatabaseConnectionService:
 
         conn.discovered_schema = current
         await self._session.commit()
+
+        # Re-index schema so semantic search uses updated descriptions
+        try:
+            embedding_svc = SchemaEmbeddingService()
+            await embedding_svc.index_schema(
+                connection_id=conn.id,
+                connection_name=conn.name,
+                user_id=conn.user_id,
+                schema=SchemaDiscoveryResult(**current),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Schema re-indexing failed after enrichment for connection=%s: %s",
+                conn.id,
+                exc,
+            )
+
         return SchemaDiscoveryResult(**current)
 
     async def execute_query(

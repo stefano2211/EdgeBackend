@@ -91,6 +91,11 @@ def build_orchestrator_prompt(
         "     → [DELEGATE] to db-agent via task()\n"
         "     → The db-agent will inspect the schema and generate read-only SQL.\n\n"
 
+        "[IF] The user asks a business question in natural language that requires database analysis\n"
+        "     (e.g., 'how many', 'top 5', 'average', 'compare', 'trends', 'list customers who...')\n"
+        "     → [DELEGATE] to data-analyst-agent via task()\n"
+        "     → The data-analyst-agent converts NL to SQL, auto-corrects errors, and returns insights.\n\n"
+
         "[IF] Query is about historical trends, past performance, time-series, comparisons\n"
         "     → [DELEGATE] to historical-agent via task()\n"
         "     → historical-agent reasons from fine-tuned weights, no tools needed\n\n"
@@ -107,6 +112,12 @@ def build_orchestrator_prompt(
         '<user_query>Cuales son los 5 productos mas vendidos?</user_query>\n'
         '<reasoning>Requires querying the database for sales data → delegate to db-agent.</reasoning>\n'
         '<correct_action>task() → db-agent</correct_action>\n'
+        '</example>\n\n'
+
+        '<example>\n'
+        '<user_query>How many users registered yesterday and what is the trend?</user_query>\n'
+        '<reasoning>Natural-language business question about database contents → delegate to data-analyst-agent.</reasoning>\n'
+        '<correct_action>task() → data-analyst-agent</correct_action>\n'
         '</example>\n\n'
 
         '<example>\n'

@@ -11,6 +11,12 @@ const navItems = [
     icon: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20',
     color: 'emerald'
   },
+  {
+    label: 'Bases de Datos',
+    path: '/reactive/database',
+    icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+    color: 'cyan'
+  },
 ]
 
 function isActive(path: string): boolean {
@@ -26,6 +32,9 @@ function getNavItemClasses(item: any) {
   }
   if (item.color === 'amber') {
     return 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+  }
+  if (item.color === 'cyan') {
+    return 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
   }
   return 'bg-violet-500/10 text-violet-300 border border-violet-500/20'
 }
@@ -52,7 +61,7 @@ function getNavItemClasses(item: any) {
           :class="getNavItemClasses(item)"
         >
           <div class="w-8 h-8 rounded-lg flex items-center justify-center transition-all" 
-            :class="isActive(item.path) ? (item.color === 'emerald' ? 'bg-emerald-500/20' : item.color === 'amber' ? 'bg-amber-500/20' : 'bg-violet-500/20') : 'bg-white/[0.03] group-hover:bg-white/[0.08]'">
+            :class="isActive(item.path) ? (item.color === 'emerald' ? 'bg-emerald-500/20' : item.color === 'amber' ? 'bg-amber-500/20' : item.color === 'cyan' ? 'bg-cyan-500/20' : 'bg-violet-500/20') : 'bg-white/[0.03] group-hover:bg-white/[0.08]'">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path :d="item.icon"/>
             </svg>

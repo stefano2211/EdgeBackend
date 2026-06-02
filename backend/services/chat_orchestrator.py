@@ -212,6 +212,7 @@ class ChatOrchestrator:
                 enable_mcp=enable_mcp,
                 tool_schemas=tool_schemas,
                 kb_names=kb_names,
+                db_connection_ids=request.db_connection_ids,
             )
         except Exception as e:
             logger.exception("Failed to create orchestrator: %s", e)

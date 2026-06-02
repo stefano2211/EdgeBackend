@@ -42,6 +42,9 @@ class DatabaseConnection(Base):
     available_in_chat: Mapped[bool] = mapped_column(Boolean, default=True)
     available_in_reactive: Mapped[bool] = mapped_column(Boolean, default=False)
     discovered_schema: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    schema_metadata: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )  # enriched metadata: fk_graph, stats, descriptions
     last_schema_sync: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default=ConnectionStatus.DISCONNECTED

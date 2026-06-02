@@ -7,6 +7,7 @@ from backend.api.v1.routers import (
     auth,
     chat,
     conversations,
+    data_analyst,
     db_collector,
     documents,
     domain_config,
@@ -32,6 +33,7 @@ router.include_router(auth.router)
 router.include_router(users.router)
 router.include_router(conversations.router)
 router.include_router(chat.router)
+router.include_router(data_analyst.router)
 router.include_router(events.router)
 router.include_router(knowledge.router)
 router.include_router(documents.router)

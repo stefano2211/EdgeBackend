@@ -79,4 +79,24 @@ def build_db_system_prompt(db_catalog: str = "") -> str:
 DB_AGENT_SYSTEM_PROMPT = build_db_system_prompt()
 
 
+# ── Data Analyst Agent ──
+DATA_ANALYST_AGENT_DESCRIPTION = (
+    "Natural-language data analyst specialist. "
+    "Use when the user asks questions about their connected databases in plain language. "
+    "Converts natural-language questions into SQL, executes them with auto-correction, "
+    "and returns interpreted insights in Spanish. "
+    "Has access to: list_db_connections, retrieve_relevant_schema, execute_data_query, explain_sql_query. "
+    "ALWAYS delegate here for: data exploration, business questions about DB contents, "
+    "metrics, reporting, aggregations, filtering, or any question that starts with 'how many', 'top', 'average', 'list', etc. "
+    "Do NOT use for: document search (rag-agent), live API calls (mcp-agent), historical reasoning without DB (historical-agent)."
+)
+
+
+def build_data_analyst_system_prompt() -> str:
+    return load_prompt("subagent_data_analyst")
+
+
+DATA_ANALYST_AGENT_SYSTEM_PROMPT = build_data_analyst_system_prompt()
+
+
 

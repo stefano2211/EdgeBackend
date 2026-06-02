@@ -8,6 +8,7 @@ class ChatRequest(BaseModel):
     thread_id: str | None = None
     knowledge_base_id: str | None = None
     mcp_source_id: str | None = None
+    db_connection_ids: list[str] | None = None
     model_id: str | None = None
     params: dict | None = None
     use_generalist: bool = False

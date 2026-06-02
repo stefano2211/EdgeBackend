@@ -26,3 +26,8 @@ class ConflictError(HTTPException):
 class ValidationError(HTTPException):
     def __init__(self, detail: str = "Validation error"):
         super().__init__(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail)
+
+
+class SecurityError(HTTPException):
+    def __init__(self, detail: str = "Security violation"):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
