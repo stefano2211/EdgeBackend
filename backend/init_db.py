@@ -12,6 +12,8 @@ from backend.integrations.models import (  # noqa: F401  (registers integration 
     IntegrationCredential,
 )
 from backend.integrations.credential_audit import CredentialAuditLog  # noqa: F401
+from backend.database_connector.models import DatabaseConnection  # noqa: F401
+from backend.database_connector.credential_model import DbConnectionCredential  # noqa: F401
 
 
 async def _create_tables() -> None:

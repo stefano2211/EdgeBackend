@@ -21,8 +21,6 @@ from backend.persistencia.models.event_metric import EventMetric
 from backend.persistencia.models.event_job import EventJob
 from backend.persistencia.models.webhook_source import WebhookSource
 from backend.persistencia.models.user_feedback import UserFeedback
-from backend.database_connector.models import DatabaseConnection
-from backend.database_connector.credential_model import DbConnectionCredential
 
 __all__ = [
     "Base",
@@ -49,6 +47,4 @@ __all__ = [
     "EventJob",
     "WebhookSource",
     "UserFeedback",
-    "DatabaseConnection",
-    "DbConnectionCredential",
 ]
