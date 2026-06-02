@@ -23,6 +23,7 @@ from backend.api.v1.routers import (
     users,
     webhooks,
 )
+from backend.database_connector.routers import router as database_router
 from backend.integrations import routers as integrations
 
 router = APIRouter(prefix="/api/v1")
@@ -46,4 +47,5 @@ router.include_router(db_collector.router)
 router.include_router(domain_config.router)
 router.include_router(metrics.router)
 router.include_router(webhooks.router)
+router.include_router(database_router)
 router.include_router(integrations.router)
