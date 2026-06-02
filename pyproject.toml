@@ -50,6 +50,9 @@ dependencies = [
     "google-auth>=2.36.0",
     "google-auth-oauthlib>=1.2.0",
     "google-api-python-client>=2.196.0",
+
+    "aiomysql>=0.2.0",
+    "sqlfluff>=3.0.0",
 ]
 
 [tool.setuptools.packages.find]
