@@ -46,10 +46,15 @@ class CredentialManager:
         client_id = None
         client_secret = None
         access_token_cred: IntegrationCredential | None = None
+        needs_migration = False
 
         for cred in instance.credentials:
             plain = self._vault.decrypt(cred.encrypted_value)
             creds[cred.credential_key] = plain
+
+            # If any credential was encrypted with a legacy format (v1/v2), flag it for migration
+            if self._vault.needs_reencryption(cred.encrypted_value):
+                needs_migration = True
 
             # Track OAuth2 pieces for potential refresh
             key_lower = cred.credential_key.lower()
@@ -70,6 +75,20 @@ class CredentialManager:
                     instance, refresh_token, client_id, client_secret, access_token_cred
                 )
                 creds[access_token_cred.credential_key] = new_access
+                # Refresh already updates the DB with new encrypt version, but let's make sure
+                needs_migration = False
+
+        # If any credentials need migration to version 3 (HKDF), re-encrypt and update DB
+        if needs_migration:
+            try:
+                for cred in instance.credentials:
+                    plain = creds[cred.credential_key]
+                    if self._vault.needs_reencryption(cred.encrypted_value):
+                        cred.encrypted_value = self._vault.encrypt(plain)
+                await self._repo.update(instance)
+                logger.info("Auto-migrated credentials for instance %s to version 3 (HKDF)", instance.id)
+            except Exception as e:
+                logger.warning("Failed to auto-migrate credentials for instance %s: %s", instance.id, e)
 
         # Audit: log credential access (fire-and-forget, values never logged)
         try:

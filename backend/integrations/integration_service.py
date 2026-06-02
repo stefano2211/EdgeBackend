@@ -3,9 +3,9 @@
 Responsibilities:
   1. Create / update / delete IntegrationInstance records
   2. Encrypt and store credentials
-  3. Launch stdio MCP processes (replaces Docker containers)
-  4. Discover and register MCP tools into the existing ToolConfig system
-  5. Handle both proactive (chat) and reactive contexts
+  3. Discover and register MCP tools into the existing ToolConfig system
+  4. Handle both proactive (chat) and reactive contexts
+  5. Dynamically query process statuses from the MCP session cache
 
 Design: depends on abstractions (interfaces) so every collaborator can be
 mocked in tests.
@@ -31,27 +31,24 @@ from backend.integrations.schemas import (
     IntegrationInstanceUpdate,
     SyncResult,
 )
-from backend.integrations.stdio_runner import StdioRunner
 from backend.integrations.credential_audit import log_credential_event, CredentialAction
 
 logger = logging.getLogger(__name__)
 
 
 class IntegrationService:
-    """High-level orchestrator.  Stateless aside from injected collaborators."""
+    """High-level orchestrator. Stateless aside from injected collaborators."""
 
     def __init__(
         self,
         session: AsyncSession,
         *,
         credential_vault: ICredentialVault | None = None,
-        stdio_runner: StdioRunner | None = None,
     ) -> None:
         self._session = session
         self._catalog_repo = IntegrationCatalogRepository(session)
         self._instance_repo = IntegrationInstanceRepository(session)
         self._vault = credential_vault or CredentialVault()
-        self._stdio = stdio_runner or StdioRunner()
         self._credential_manager = CredentialManager(self._instance_repo, self._vault)
 
     # ------------------------------------------------------------------
@@ -151,14 +148,7 @@ class IntegrationService:
     async def delete_instance(self, instance_id: int, user_id: int) -> None:
         instance = await self.get_instance(instance_id, user_id)
 
-        # 1. Stop stdio process if running
-        if instance.process_pid:
-            try:
-                self._stdio.stop(instance.process_pid)
-            except Exception:
-                logger.warning("Process cleanup failed for pid=%s", instance.process_pid)
-
-        # 2. Delete associated MCP sources
+        # 1. Delete associated MCP sources
         await self._cleanup_previous_sources(instance)
 
         # Audit: credential deletion
@@ -175,7 +165,7 @@ class IntegrationService:
         except Exception:
             pass
 
-        # 3. Delete DB record (cascades to credentials)
+        # 2. Delete DB record (cascades to credentials)
         await self._instance_repo.delete(instance)
         logger.info("Deleted integration instance id=%s", instance_id)
 
@@ -195,7 +185,7 @@ class IntegrationService:
         }
 
     # ------------------------------------------------------------------
-    # Credentials submission + process launch
+    # Credentials submission
     # ------------------------------------------------------------------
 
     async def submit_credentials(
@@ -229,11 +219,13 @@ class IntegrationService:
         # 3. Refresh instance to pick up new credentials
         instance = await self.get_instance(instance_id, user_id)
 
-        # 4. Launch stdio process with credentials
-        await self._launch_stdio_process(instance)
+        # 4. Set status to running
+        instance.process_status = "running"
+        instance.process_pid = None
+        await self._instance_repo.update(instance)
 
         logger.info(
-            "Credentials submitted and stdio process running for instance id=%s",
+            "Credentials submitted and instance set to running for instance id=%s",
             instance_id,
         )
 
@@ -283,7 +275,7 @@ class IntegrationService:
         code: str,
         state: str,
     ) -> IntegrationInstance:
-        """Finish an OAuth2 flow: exchange code, store tokens, launch process."""
+        """Finish an OAuth2 flow: exchange code, store tokens, set status."""
         from backend.integrations.oauth.gmail_flow import exchange_code
         from backend.integrations.oauth.state_manager import get_state_manager
         from backend.core.config import settings
@@ -341,11 +333,13 @@ class IntegrationService:
         # Refresh instance
         instance = await self.get_instance(instance_id, user_id)
 
-        # Launch stdio process
-        await self._launch_stdio_process(instance)
+        # Set status to running
+        instance.process_status = "running"
+        instance.process_pid = None
+        await self._instance_repo.update(instance)
 
         logger.info(
-            "OAuth completed for instance id=%s",
+            "OAuth completed and instance set to running for instance id=%s",
             instance_id,
         )
 
@@ -462,10 +456,14 @@ class IntegrationService:
                 auth_env_var_mapping=catalog.auth_env_var_mapping,
             )
 
+            # Ensure child process keeps necessary variables (such as MAQUINARIA_API_URL)
+            import os
+            stdio_env = {**os.environ, **(env or {})}
+
             server_params = StdioServerParameters(
                 command=catalog.command or "python",
                 args=catalog.args or [],
-                env=env,
+                env=stdio_env,
             )
 
             discovered: list[dict] = []
@@ -586,74 +584,47 @@ class IntegrationService:
         await self._session.commit()
         return source.id
 
-    # ------------------------------------------------------------------
-    # Stdio process helpers
-    # ------------------------------------------------------------------
-
-    async def _launch_stdio_process(self, instance: IntegrationInstance) -> None:
-        """Launch or restart the stdio process for an instance."""
-        catalog = instance.catalog
-
-        # Stop previous process if any
-        if instance.process_pid and self._stdio.is_running(instance.process_pid):
-            self._stdio.stop(instance.process_pid)
-
-        # Get fresh credentials (with auto-refresh)
-        credentials = await self._credential_manager.get_credentials(instance)
-        env = self._credential_manager.inject_for_stdio(
-            credentials,
-            catalog.env_prefix,
-            auth_env_var_mapping=catalog.auth_env_var_mapping,
-        )
-
-        # Launch new process (with one retry on failure)
-        process_info = self._stdio.start(
-            command=catalog.command or "",
-            args=catalog.args,
-            env=env,
-        )
-
-        if process_info.status == "error":
-            # Retry once after a short delay
-            import asyncio
-            logger.warning(
-                "Stdio process failed to start for instance=%s, retrying in 1s...",
-                instance.id,
-            )
-            await asyncio.sleep(1)
-            process_info = self._stdio.start(
-                command=catalog.command or "",
-                args=catalog.args,
-                env=env,
-            )
-            if process_info.status == "error":
-                instance.process_status = "error"
-                await self._instance_repo.update(instance)
-                raise RuntimeError(f"Stdio process failed to start: {process_info.error}")
-
-        instance.process_pid = process_info.pid
-        instance.process_status = process_info.status
-        instance.last_used_at = datetime.now()
-        await self._instance_repo.update(instance)
-
-    # ------------------------------------------------------------------
-    # Process lifecycle helpers (simplified)
-    # ------------------------------------------------------------------
-
     async def get_status(self, instance_id: int, user_id: int) -> dict[str, Any]:
+        """Query process status. Checks if the instance is active in the MCPService session cache."""
         instance = await self.get_instance(instance_id, user_id)
-        process = None
-        if instance.process_pid:
-            info = self._stdio.get_info(instance.process_pid)
-            if info:
-                process = {
-                    "pid": info.pid,
-                    "status": info.status,
-                    "command": info.command,
-                }
+        
+        status = "stopped"
+        if instance.credentials and instance.process_status != "stopped":
+            status = "ready"
+            
+        from backend.services.mcp_service import MCPService
+        from mcp import StdioServerParameters
+        import os
+        
+        is_active = False
+        try:
+            catalog = instance.catalog
+            credentials = await self._credential_manager.get_credentials(instance)
+            env = self._credential_manager.inject_for_stdio(
+                credentials,
+                catalog.env_prefix,
+                auth_env_var_mapping=catalog.auth_env_var_mapping,
+            )
+            stdio_env = {**os.environ, **(env or {})}
+            server_params = StdioServerParameters(
+                command=catalog.command or "",
+                args=catalog.args or [],
+                env=stdio_env,
+            )
+            cache_key = MCPService._stdio_cache_key(server_params)
+            if cache_key in MCPService._stdio_cache:
+                is_active = True
+                status = "running"
+        except Exception:
+            pass
+
         return {
             "instance": instance,
-            "process": process,
+            "process": {
+                "pid": 0 if is_active else None,
+                "status": status,
+                "command": [instance.catalog.command] + (instance.catalog.args or []),
+            },
         }
 
     async def sync_instance(self, instance_id: int, user_id: int) -> IntegrationInstance:
@@ -668,19 +639,9 @@ class IntegrationService:
         # Clean up previous tool registrations to avoid duplicates
         await self._cleanup_previous_sources(instance)
 
-        # Ensure the stdio process is running (re-launch if dead)
-        if instance.process_pid and not self._stdio.is_running(instance.process_pid):
-            instance.process_pid = None
-            instance.process_status = None
-
-        if not instance.process_pid:
-            try:
-                await self._launch_stdio_process(instance)
-            except Exception:
-                logger.warning(
-                    "Stdio process launch failed during sync for instance id=%s",
-                    instance_id,
-                )
+        instance.process_pid = None
+        instance.process_status = "running"
+        await self._instance_repo.update(instance)
 
         # Discover current tools from the MCP server
         discovered = await self._discover_tools(instance)
@@ -712,10 +673,12 @@ class IntegrationService:
         return instance
 
     async def stop_process(self, instance_id: int, user_id: int) -> IntegrationInstance:
+        """Stop the integration process. Clears process_status to 'stopped'."""
         instance = await self.get_instance(instance_id, user_id)
-        if instance.process_pid:
-            self._stdio.stop(instance.process_pid)
         instance.process_status = "stopped"
         instance.process_pid = None
         await self._instance_repo.update(instance)
+        
+        # Note: Any cached dynamic session in MCPService._stdio_cache will expire automatically
+        # after 5 minutes of inactivity.
         return instance

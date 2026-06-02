@@ -85,45 +85,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Correlation worker not started: %s", exc)
 
-    # Cleanup any orphaned stdio processes on shutdown
-    try:
-        from backend.integrations.stdio_runner import StdioRunner
-        app.state.stdio_runner = StdioRunner()
-    except Exception as exc:
-        logger.warning("Stdio runner init skipped: %s", exc)
 
-    # Periodic stdio health-check / auto-restart
-    async def _stdio_health_loop():
-        while True:
-            await asyncio.sleep(60)
-            try:
-                runner = getattr(app.state, "stdio_runner", None)
-                if not runner:
-                    continue
-                from backend.core.database import AsyncSessionLocal
-                from backend.integrations.repositories.integration_repository import IntegrationInstanceRepository
-                async with AsyncSessionLocal() as session:
-                    repo = IntegrationInstanceRepository(session)
-                    instances = await repo.list_all()  # type: ignore[attr-defined]
-                    for inst in instances:
-                        if inst.process_pid and inst.process_status == "running":
-                            if not runner.health_check(inst.process_pid):
-                                logger.warning(
-                                    "Stdio process for instance %s (pid=%s) unhealthy — restarting",
-                                    inst.id,
-                                    inst.process_pid,
-                                )
-                                result = runner.restart(inst.process_pid)
-                                if result.status == "running":
-                                    inst.process_pid = result.pid
-                                    inst.process_status = "running"
-                                else:
-                                    inst.process_status = "error"
-                                await session.commit()
-            except Exception:
-                logger.exception("Stdio health loop error")
-
-    _spawn_bg(_stdio_health_loop(), "stdio_health_loop")
 
     yield
     try:

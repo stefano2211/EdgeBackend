@@ -119,7 +119,7 @@ class DatabaseConnectionService:
         return conn
 
     async def discover_schema(
-        self, connection_id: str, user_id: int
+        self, connection_id: str, user_id: int, auto_describe: bool = False
     ) -> SchemaDiscoveryResult:
         conn = await self._repo.get_by_id_for_user(connection_id, user_id)
         if not conn:
@@ -243,7 +243,7 @@ class DatabaseConnectionService:
                 connection=conn,
                 engine=engine,
                 tables=tables,
-                auto_describe=True,
+                auto_describe=auto_describe,
             )
             tables = [SchemaIntelligence.to_schema_table(et) for et in enriched_tables]
         except Exception as exc:

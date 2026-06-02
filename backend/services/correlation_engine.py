@@ -13,7 +13,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.persistencia.models.event import Event
@@ -62,31 +62,26 @@ class CorrelationEngine:
         """Suppress duplicate events with the same dedup_key within the window."""
         window = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=_DEDUP_WINDOW_MINUTES)
 
-        stmt = (
-            select(Event.dedup_key, func.min(Event.id))
+        # Subquery to select the first/minimum event ID for each duplicate key
+        subq = (
+            select(func.min(Event.id))
             .where(Event.status.in_(["pending", "analyzing"]))
             .where(Event.dedup_key.isnot(None))
             .where(Event.created_at >= window)
             .group_by(Event.dedup_key)
-            .having(func.count(Event.id) > 1)
+        )
+
+        # Bulk update all other duplicate events to suppressed
+        stmt = (
+            update(Event)
+            .where(Event.status.in_(["pending", "analyzing"]))
+            .where(Event.dedup_key.isnot(None))
+            .where(Event.created_at >= window)
+            .where(Event.id.not_in(subq))
+            .values(status="suppressed", suppression_reason="duplicate")
         )
         result = await self.session.execute(stmt)
-        duplicates = result.all()
-
-        count = 0
-        for dedup_key, first_id in duplicates:
-            # Mark all but the first as suppressed
-            suppress_stmt = (
-                select(Event)
-                .where(Event.dedup_key == dedup_key)
-                .where(Event.id != first_id)
-                .where(Event.status.in_(["pending", "analyzing"]))
-            )
-            to_suppress = await self.session.execute(suppress_stmt)
-            for event in to_suppress.scalars().all():
-                event.status = "suppressed"
-                event.suppression_reason = "duplicate"
-                count += 1
+        count = result.rowcount or 0
 
         if count:
             logger.info("Correlation: deduplicated %s events", count)
@@ -102,7 +97,7 @@ class CorrelationEngine:
 
         # Find sources with >3 events in the window (excluding already suppressed)
         stmt = (
-            select(Event.source, func.count(Event.id))
+            select(Event.source)
             .where(Event.status.in_(["pending", "analyzing"]))
             .where(Event.created_at >= window)
             .where(Event.suppression_reason.is_(None))
@@ -110,27 +105,33 @@ class CorrelationEngine:
             .having(func.count(Event.id) > _FLAP_THRESHOLD)
         )
         result = await self.session.execute(stmt)
-        flapping_sources = result.all()
+        flapping_sources = [r[0] for r in result.all()]
 
-        count = 0
-        for source, _ in flapping_sources:
-            # Mark all but the earliest event from this source as flapping
-            events_stmt = (
-                select(Event)
-                .where(Event.source == source)
-                .where(Event.status.in_(["pending", "analyzing"]))
-                .where(Event.created_at >= window)
-                .where(Event.suppression_reason.is_(None))
-                .order_by(Event.created_at.asc())
-            )
-            events_result = await self.session.execute(events_stmt)
-            events = events_result.scalars().all()
+        if not flapping_sources:
+            return 0
 
-            # Keep the first (earliest), suppress the rest
-            for event in events[1:]:
-                event.status = "suppressed"
-                event.suppression_reason = "flapping"
-                count += 1
+        # Subquery to find the earliest event ID for each flapping source
+        subq = (
+            select(func.min(Event.id))
+            .where(Event.status.in_(["pending", "analyzing"]))
+            .where(Event.created_at >= window)
+            .where(Event.suppression_reason.is_(None))
+            .where(Event.source.in_(flapping_sources))
+            .group_by(Event.source)
+        )
+
+        # Bulk update to suppress subsequent flapping events
+        suppress_stmt = (
+            update(Event)
+            .where(Event.status.in_(["pending", "analyzing"]))
+            .where(Event.created_at >= window)
+            .where(Event.suppression_reason.is_(None))
+            .where(Event.source.in_(flapping_sources))
+            .where(Event.id.not_in(subq))
+            .values(status="suppressed", suppression_reason="flapping")
+        )
+        suppress_result = await self.session.execute(suppress_stmt)
+        count = suppress_result.rowcount or 0
 
         if count:
             logger.info("Correlation: detected %s flapping events", count)
@@ -155,10 +156,28 @@ class CorrelationEngine:
         result = await self.session.execute(stmt)
         events = result.scalars().all()
 
+        if not events:
+            return 0
+
+        # Preload active correlation groups to avoid N+1 queries in the loop
+        active_groups_stmt = (
+            select(EventCorrelationGroup)
+            .where(EventCorrelationGroup.status == "active")
+            .where(EventCorrelationGroup.last_event_at >= window)
+            .order_by(EventCorrelationGroup.last_event_at.desc())
+        )
+        groups_result = await self.session.execute(active_groups_stmt)
+        active_groups = list(groups_result.scalars().all())
+
         groups_created = 0
         for event in events:
-            # Look for existing active group with same domain and similar source
-            group = await self._find_matching_group(event)
+            # Find matching group in preloaded memory list
+            group = None
+            for g in active_groups:
+                if g.domain == event.domain:
+                    group = g
+                    break
+
             if group:
                 event.correlation_group_id = group.id
                 group.event_count += 1
@@ -179,26 +198,12 @@ class CorrelationEngine:
                 self.session.add(new_group)
                 await self.session.flush()
                 event.correlation_group_id = new_group.id
+                active_groups.insert(0, new_group)  # Pre-fill for subsequent matches in the loop
                 groups_created += 1
 
         if groups_created:
             logger.info("Correlation: created %s new groups", groups_created)
         return groups_created
-
-    async def _find_matching_group(self, event: Event) -> EventCorrelationGroup | None:
-        """Find an active correlation group that matches this event."""
-        window = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=_GROUP_WINDOW_MINUTES)
-
-        stmt = (
-            select(EventCorrelationGroup)
-            .where(EventCorrelationGroup.status == "active")
-            .where(EventCorrelationGroup.domain == event.domain)
-            .where(EventCorrelationGroup.last_event_at >= window)
-            .order_by(EventCorrelationGroup.last_event_at.desc())
-            .limit(1)
-        )
-        result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
 
     # ------------------------------------------------------------------
     # Suppression rules
@@ -206,32 +211,39 @@ class CorrelationEngine:
 
     async def _apply_suppression_rules(self) -> int:
         """Suppress lower-severity events when a critical is active on the same source."""
-        # Find active critical events (severity >= 17 ERROR)
+        # Find sources of active critical events (severity >= 17 ERROR)
         critical_stmt = (
-            select(Event)
+            select(Event.source)
             .where(Event.status.in_(["pending", "analyzing", "awaiting_approval"]))
             .where(Event.severity_number >= 17)
             .where(Event.suppression_reason.is_(None))
         )
         result = await self.session.execute(critical_stmt)
-        critical_events = result.scalars().all()
+        critical_sources = [r[0] for r in result.all()]
 
-        count = 0
-        for critical in critical_events:
-            # Suppress warnings on same source
-            suppress_stmt = (
-                select(Event)
-                .where(Event.source == critical.source)
-                .where(Event.status.in_(["pending", "analyzing"]))
-                .where(Event.severity_number < 17)
-                .where(Event.id != critical.id)
-                .where(Event.suppression_reason.is_(None))
-            )
-            to_suppress = await self.session.execute(suppress_stmt)
-            for event in to_suppress.scalars().all():
-                event.status = "suppressed"
-                event.suppression_reason = "critical_active"
-                count += 1
+        if not critical_sources:
+            return 0
+
+        # Subquery to ensure we do not suppress critical events themselves
+        critical_ids_stmt = (
+            select(Event.id)
+            .where(Event.status.in_(["pending", "analyzing", "awaiting_approval"]))
+            .where(Event.severity_number >= 17)
+            .where(Event.suppression_reason.is_(None))
+        )
+
+        # Bulk update to suppress warnings on those critical sources
+        suppress_stmt = (
+            update(Event)
+            .where(Event.source.in_(critical_sources))
+            .where(Event.status.in_(["pending", "analyzing"]))
+            .where(Event.severity_number < 17)
+            .where(Event.id.not_in(critical_ids_stmt))
+            .where(Event.suppression_reason.is_(None))
+            .values(status="suppressed", suppression_reason="critical_active")
+        )
+        suppress_result = await self.session.execute(suppress_stmt)
+        count = suppress_result.rowcount or 0
 
         if count:
             logger.info("Correlation: suppressed %s events due to active critical", count)

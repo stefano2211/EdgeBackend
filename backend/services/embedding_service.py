@@ -27,6 +27,9 @@ _MAX_BATCH_SIZE = 64
 def _load_model() -> SentenceTransformer:
     global _model
     if _model is None:
+        import torch
+        # Avoid PyTorch CPU thread contention on low-powered edge devices
+        torch.set_num_threads(1)
         logger.info("Loading embedding model: %s", settings.EMBEDDINGS_MODEL)
         _model = SentenceTransformer(settings.EMBEDDINGS_MODEL)
     return _model

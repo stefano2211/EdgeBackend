@@ -13,6 +13,7 @@ Architecture:
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -46,21 +47,21 @@ class RetrievalPipeline:
     def __init__(self) -> None:
         # Lazy imports to avoid circular dependencies and allow toggling
         from backend.persistencia.vector import VectorRepository
-        from backend.services.embedding_service import embed_query
+        from backend.services.embedding_service import embed_texts
         from backend.services.reranking_service import get_reranker
         from backend.services.query_enhancer import get_query_enhancer
 
         self._vector_repo = VectorRepository()
-        self._embed_query = embed_query
+        self._embed_texts = embed_texts
         self._reranker = get_reranker()
         self._query_enhancer = get_query_enhancer()
 
         # Sparse embedder (conditional import)
-        self._sparse_embed_query = None
+        self._sparse_embed_texts = None
         if settings.HYBRID_SEARCH_ENABLED:
             try:
-                from backend.services.sparse_embedding_service import embed_sparse_query
-                self._sparse_embed_query = embed_sparse_query
+                from backend.services.sparse_embedding_service import embed_sparse_texts
+                self._sparse_embed_texts = embed_sparse_texts
             except ImportError:
                 logger.warning(
                     "fastembed not available; falling back to dense-only search"
@@ -113,28 +114,36 @@ class RetrievalPipeline:
         with StageTimer("retrieve", metrics) as stage:
             stage.input_count = len(enhanced_queries)
 
-            for eq in enhanced_queries:
-                # Dense embedding
-                dense_emb = await self._embed_query(eq)
+            # 1. Batch generate dense embeddings (vectorized model inference)
+            dense_embs = await self._embed_texts(enhanced_queries)
 
-                # Sparse embedding (if hybrid enabled)
-                sparse_q = None
-                if self._sparse_embed_query is not None:
-                    sparse_q = await self._sparse_embed_query(eq)
+            # 2. Batch generate sparse embeddings (if hybrid enabled)
+            sparse_embs = []
+            if self._sparse_embed_texts is not None:
+                sparse_embs = await self._sparse_embed_texts(enhanced_queries)
 
-                # Search with hybrid RRF
-                results = await self._vector_repo.search_chunks(
-                    knowledge_base_id=knowledge_base_id,
-                    query_embedding=dense_emb,
-                    top_k=settings.RAG_PREFETCH_LIMIT,
-                    filter_doc_ids=filter_doc_ids,
-                    sparse_query=sparse_q,
-                    prefetch_limit=settings.RAG_PREFETCH_LIMIT,
-                    prefix=prefix,
-                    context=context,
+            # 3. Perform Qdrant hybrid searches concurrently via asyncio.gather
+            search_tasks = []
+            for i, eq in enumerate(enhanced_queries):
+                dense_emb = dense_embs[i]
+                sparse_q = sparse_embs[i] if sparse_embs else None
+                search_tasks.append(
+                    self._vector_repo.search_chunks(
+                        knowledge_base_id=knowledge_base_id,
+                        query_embedding=dense_emb,
+                        top_k=settings.RAG_PREFETCH_LIMIT,
+                        filter_doc_ids=filter_doc_ids,
+                        sparse_query=sparse_q,
+                        prefetch_limit=settings.RAG_PREFETCH_LIMIT,
+                        prefix=prefix,
+                        context=context,
+                    )
                 )
 
-                # Deduplicate by point ID, keeping highest score
+            results_list = await asyncio.gather(*search_tasks)
+
+            # 4. Deduplicate across all query variations by point ID, keeping highest score
+            for results in results_list:
                 for chunk in results:
                     cid = chunk["id"]
                     if cid not in all_chunks or chunk.get("score", 0) > all_chunks[cid].get("score", 0):

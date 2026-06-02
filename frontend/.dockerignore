@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.production
+build_output*.txt
+app.tar
+.git
+.gitignore
+README.md

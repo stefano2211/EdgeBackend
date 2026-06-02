@@ -48,3 +48,11 @@ Thumbs.db
 
 # Models / large files (these are mounted as volumes, not copied)
 models/
+
+# Node artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build_output*.txt
+frontend/app.tar
+

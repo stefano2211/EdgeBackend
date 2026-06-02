@@ -7,8 +7,9 @@ WORKDIR /app
 # Copiar package.json y package-lock.json
 COPY package*.json ./
 
-# Instalar todas las dependencias
-RUN npm ci
+# Usar caché de BuildKit para descargas rápidas en cambios de dependencias
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # Copiar el resto del código fuente
 COPY . .

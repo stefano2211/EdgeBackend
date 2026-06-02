@@ -112,12 +112,13 @@ async def test_connection(
 )
 async def discover_schema(
     connection_id: str,
+    auto_describe: bool = False,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     service = DatabaseConnectionService(session)
     try:
-        return await service.discover_schema(connection_id, current_user.id)
+        return await service.discover_schema(connection_id, current_user.id, auto_describe=auto_describe)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Connection not found")
 

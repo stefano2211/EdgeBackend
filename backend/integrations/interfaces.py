@@ -28,32 +28,7 @@ class ICredentialVault(ABC):
         ...
 
 
-# ---------------------------------------------------------------------------
-# Stdio runner (replaces IDockerRunner)
-# ---------------------------------------------------------------------------
 
-class IStdioRunner(ABC):
-    """Lifecycle management for MCP server stdio processes."""
-
-    @abstractmethod
-    def start(
-        self,
-        command: str,
-        args: list[str] | None,
-        env: dict[str, str] | None,
-    ) -> Any:
-        """Launch a stdio process and return a handle (e.g. ProcessInfo)."""
-        ...
-
-    @abstractmethod
-    def stop(self, pid: int) -> None:
-        """Gracefully stop a running process."""
-        ...
-
-    @abstractmethod
-    def is_running(self, pid: int) -> bool:
-        """Return True if the process is still alive."""
-        ...
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,9 @@ FROM node:20-alpine AS frontend-build
 
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci --prefer-offline --no-audit
+# Usar caché de BuildKit para descargas de dependencias de NPM
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --no-audit
 COPY frontend/ ./
 RUN npm run build-only
 
@@ -21,9 +23,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-COPY pyproject.toml ./
-RUN mkdir -p backend/edgebackend && touch backend/edgebackend/__init__.py
-RUN uv pip install --system .
+
+# Configurar variables de entorno optimizadas de uv
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+
+# Copiar configuración de dependencias de python
+COPY pyproject.toml uv.lock ./
+
+# Instalar dependencias utilizando la caché de BuildKit y uv sync
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
 # ═══════════════════════════════════════════════════════════════════
 # Stage 3: Production Runtime
@@ -33,13 +43,22 @@ FROM python:3.13-slim AS production
 WORKDIR /app
 RUN groupadd -r edge && useradd -m -r -g edge edge
 
+# Instalar dependencias necesarias limpiando cachés en la misma capa
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 curl \
-    && rm -rf /var/lib/apt/lists/*
+    libpq5 curl nodejs npm \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-COPY --from=backend-build /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
-COPY --from=backend-build /usr/local/bin /usr/local/bin
+# Copiar ejecutables globales de uv/uvx requeridos para MCP
+COPY --from=backend-build /bin/uv /bin/uvx /bin/
+
+# Copiar el entorno virtual asilado de Python
+COPY --from=backend-build /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copiar la aplicación frontend compilada de forma estática
 COPY --from=frontend-build /app/frontend/dist /app/backend/static
+
+# Copiar código fuente y entrypoint
 COPY --chown=edge:edge backend/ ./backend/
 COPY --chown=edge:edge docker/entrypoint.sh /app/docker/entrypoint.sh
 RUN chmod +x /app/docker/entrypoint.sh

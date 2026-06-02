@@ -164,6 +164,12 @@ class EventJobTracker:
         async with self._semaphore:
             await self._run_job(spec)
 
+    async def _run_job_and_release(self, spec: _JobSpec) -> None:
+        try:
+            await self._run_job(spec)
+        finally:
+            self._semaphore.release()
+
     async def _run_job(self, spec: _JobSpec) -> None:
         await self._mark_running(spec.job_id)
         logger.info(
@@ -223,7 +229,7 @@ class EventJobTracker:
             # Block until a semaphore slot is available
             await self._semaphore.acquire()
             try:
-                asyncio.create_task(self._run_with_acquisition(spec))
+                asyncio.create_task(self._run_job_and_release(spec))
             except Exception:
                 self._semaphore.release()
                 raise
