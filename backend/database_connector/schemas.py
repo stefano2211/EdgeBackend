@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class SupportedDbType(BaseModel):
     slug: str
@@ -8,96 +8,90 @@ class SupportedDbType(BaseModel):
     default_port: int
     icon_hint: str
 
+
 class DatabaseConnectionCreate(BaseModel):
-    name: str
-    db_type: str
-    host: Optional[str] = None
-    port: Optional[int] = None
-    database_name: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
-    schema_name: Optional[str] = "public"
-    is_readonly: Optional[bool] = True
-    max_rows: Optional[int] = 1000
-    query_timeout: Optional[int] = 30
-    available_in_chat: Optional[bool] = True
-    available_in_reactive: Optional[bool] = False
+    name: str = Field(..., min_length=1, max_length=255)
+    db_type: str = Field(..., pattern="^(postgresql|mysql)$")
+    host: str = Field(..., min_length=1, max_length=255)
+    port: int = Field(..., gt=0, le=65535)
+    database_name: str = Field(..., min_length=1, max_length=255)
+    username: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=1)
+    schema_name: str | None = Field(default=None, max_length=255)
+    is_readonly: bool = True
+    max_rows: int = Field(default=1000, ge=1, le=10000)
+    query_timeout: int = Field(default=30, ge=1, le=300)
+    available_in_chat: bool = True
+    available_in_reactive: bool = False
+
 
 class DatabaseConnectionUpdate(BaseModel):
-    name: Optional[str] = None
-    host: Optional[str] = None
-    port: Optional[int] = None
-    database_name: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
-    schema_name: Optional[str] = None
-    is_readonly: Optional[bool] = None
-    max_rows: Optional[int] = None
-    query_timeout: Optional[int] = None
-    available_in_chat: Optional[bool] = None
-    available_in_reactive: Optional[bool] = None
+    name: str | None = Field(default=None, max_length=255)
+    host: str | None = Field(default=None, max_length=255)
+    port: int | None = Field(default=None, gt=0, le=65535)
+    database_name: str | None = Field(default=None, max_length=255)
+    schema_name: str | None = Field(default=None, max_length=255)
+    is_readonly: bool | None = None
+    max_rows: int | None = Field(default=None, ge=1, le=10000)
+    query_timeout: int | None = Field(default=None, ge=1, le=300)
+    available_in_chat: bool | None = None
+    available_in_reactive: bool | None = None
+
 
 class DatabaseConnectionOut(BaseModel):
-    id: int
-    user_id: int
+    id: str
     name: str
     db_type: str
-    host: Optional[str] = None
-    port: Optional[int] = None
-    database_name: Optional[str] = None
-    username: Optional[str] = None
-    schema_name: Optional[str] = None
+    host: str
+    port: int
+    database_name: str
+    schema_name: str | None
     is_readonly: bool
     max_rows: int
     query_timeout: int
     available_in_chat: bool
     available_in_reactive: bool
-    discovered_schema: Optional[dict] = None
-    last_schema_sync: Optional[datetime] = None
+    discovered_schema: dict | None
+    last_schema_sync: datetime | None
     status: str
-    status_message: Optional[str] = None
+    status_message: str | None
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
-class ColumnDiscovery(BaseModel):
+
+class SchemaColumn(BaseModel):
     name: str
     type: str
     nullable: bool
-    is_pk: bool
-    fk_ref: Optional[str] = None
-    description: Optional[str] = None
+    is_pk: bool = False
+    fk_ref: str | None = None
+    description: str | None = None
 
-class TableDiscovery(BaseModel):
+
+class SchemaTable(BaseModel):
     name: str
-    description: Optional[str] = None
-    row_count: Optional[int] = None
-    columns: List[ColumnDiscovery]
+    description: str | None = None
+    row_count: int | None = None
+    columns: list[SchemaColumn]
+
 
 class SchemaDiscoveryResult(BaseModel):
-    tables: List[TableDiscovery]
+    tables: list[SchemaTable]
 
-class ColumnEnrichment(BaseModel):
-    name: str
-    description: str
-
-class TableEnrichment(BaseModel):
-    name: str
-    description: Optional[str] = None
-    columns: List[ColumnEnrichment] = []
 
 class SchemaEnrichment(BaseModel):
-    tables: List[TableEnrichment]
+    tables: list[SchemaTable]
+
 
 class QueryRequest(BaseModel):
-    sql: str
-    params: Optional[Dict[str, Any]] = None
+    sql: str = Field(..., min_length=1)
+
 
 class QueryResult(BaseModel):
-    columns: List[str]
-    rows: List[Any]
+    columns: list[str]
+    rows: list[list]
     row_count: int
     truncated: bool
     execution_time_ms: int
