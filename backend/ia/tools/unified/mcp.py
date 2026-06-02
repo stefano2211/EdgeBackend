@@ -52,14 +52,14 @@ class _LRUCache:
 
 _CONFIG = {
     "chat": {
-        "repo_cls": "src.persistencia.repositories.tool_repository.ToolRepository",
-        "source_cls": "src.persistencia.models.tool_config.MCPSource",
+        "repo_cls": "backend.persistencia.repositories.tool_repository.ToolRepository",
+        "source_cls": "backend.persistencia.models.tool_config.MCPSource",
         "cache": _LRUCache(maxsize=256),
         "lock": asyncio.Lock(),
     },
     "reactive": {
-        "repo_cls": "src.persistencia.repositories.reactive_tool_repository.ReactiveToolRepository",
-        "source_cls": "src.persistencia.models.reactive_mcp_source.ReactiveMCPSource",
+        "repo_cls": "backend.persistencia.repositories.reactive_tool_repository.ReactiveToolRepository",
+        "source_cls": "backend.persistencia.models.reactive_mcp_source.ReactiveMCPSource",
         "cache": _LRUCache(maxsize=256),
         "lock": asyncio.Lock(),
     },

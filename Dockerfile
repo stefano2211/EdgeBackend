@@ -31,13 +31,10 @@ RUN uv pip install --system .
 FROM python:3.13-slim AS production
 
 WORKDIR /app
-RUN groupadd -r edge && useradd -r -g edge edge
+RUN groupadd -r edge && useradd -m -r -g edge edge
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 curl libglib2.0-0 libnss3 libnspr4 libatk1.0-0 \
-    libatk-bridge2.0-0 libcups2 libdrm2 libdbus-1-3 libxcb1 \
-    libxkbcommon0 libx11-6 libxcomposite1 libxdamage1 libxext6 \
-    libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
+    libpq5 curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=backend-build /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
@@ -47,14 +44,12 @@ COPY --chown=edge:edge backend/ ./backend/
 COPY --chown=edge:edge docker/entrypoint.sh /app/docker/entrypoint.sh
 RUN chmod +x /app/docker/entrypoint.sh
 
-RUN mkdir -p /app/uploads /app/.cache/huggingface /home/edge/.cache/ms-playwright \
+RUN mkdir -p /app/uploads /app/.cache/huggingface \
     && chown -R edge:edge /app /home/edge
 
 ENV HF_HOME=/app/.cache/huggingface
-ENV PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright
 
 USER edge
-RUN playwright install chromium
 
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \

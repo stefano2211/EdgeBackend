@@ -55,7 +55,7 @@ def build_orchestrator_prompt(
             "     → [DELEGATE] to mcp-agent via task()\n"
             "     → The mcp-agent executes live API calls and integration actions.\n"
             f"{mcp_capability_hint}"
-            "     → ALWAYS prefer mcp-agent over vl-agent when an integration is registered for the task.\n\n"
+
         )
         routing_examples += (
             '<example>\n'
@@ -90,9 +90,7 @@ def build_orchestrator_prompt(
         "[IF] Query is about historical trends, past performance, time-series, comparisons\n"
         "     → [DELEGATE] to historical-agent via task()\n"
         "     → historical-agent reasons from fine-tuned weights, no tools needed\n\n"
-        "[IF] Query requires web navigation, screenshots, UI interaction, form filling\n"
-        "     → [DELEGATE] to vl-agent via task()\n"
-        "     → vl-agent has browser tools\n\n"
+
         "[IF] Query is pure reasoning (math, unit conversions, general explanations)\n"
         "     → [ANSWER] directly without any tools or delegation\n\n"
         "[IF] Query spans multiple domains (historical + live + documents)\n"
@@ -105,11 +103,7 @@ def build_orchestrator_prompt(
         '<reasoning>Historical time-series comparison → delegate to historical-agent.</reasoning>\n'
         '<correct_action>task() → historical-agent</correct_action>\n'
         '</example>\n\n'
-        '<example>\n'
-        '<user_query>Navigate to the dashboard and take a screenshot</user_query>\n'
-        '<reasoning>Requires browser navigation and screenshots → delegate to vl-agent.</reasoning>\n'
-        '<correct_action>task() → vl-agent</correct_action>\n'
-        '</example>\n\n'
+
         '<example>\n'
         '<user_query>Convert 100 km/h to mph</user_query>\n'
         '<reasoning>Simple math, no external data → answer directly.</reasoning>\n'

@@ -228,13 +228,6 @@ export interface SSEPayload {
   event?: string
 }
 
-export interface LiveScreenshot {
-  b64: string
-  step: number
-  action?: string
-  click?: { x: number; y: number; type: string }
-}
-
 export type SSEHandler = (payload: SSEPayload) => void
 export type SSEErrorHandler = (err: Event) => void
 

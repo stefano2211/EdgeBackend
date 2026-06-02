@@ -3,7 +3,7 @@
 Uses the application SECRET_KEY (padded/hashed to 32 bytes) as the
 symmetric encryption key.  Credentials are stored as Fernet ciphertext
 in the database and only decrypted at the moment a sub-agent requests
-them via the `get_secret_credential` tool.
+sub-agent automation tools.
 """
 
 from __future__ import annotations

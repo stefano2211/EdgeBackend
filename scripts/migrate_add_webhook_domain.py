@@ -17,8 +17,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
-from src.core.config import settings
-from src.core.database import engine
+from backend.core.config import settings
+from backend.core.database import engine
 
 
 MIGRATION_SQL = """

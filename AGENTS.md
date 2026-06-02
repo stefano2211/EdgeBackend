@@ -6,7 +6,7 @@
 cp .env.example .env   # if .env missing
 uv sync
 docker compose up -d postgres qdrant redis minio
-uvicorn src.main:app --reload
+uvicorn backend.main:app --reload
 ```
 
 - Requires **Python 3.13** (see `.python-version`). Use `uv` for all package operations.
@@ -14,9 +14,9 @@ uvicorn src.main:app --reload
 
 ## Architecture
 
-- **Entrypoint**: `src/main.py` → `uvicorn src.main:app`.
-- **DB init**: `python -m src.init_db` creates SQLAlchemy tables. The Docker entrypoint runs this before starting uvicorn; for local dev run it manually once before the app.
-- **Config**: `src/core/config.py` uses Pydantic Settings, reads `.env`, `extra="ignore"`.
+- **Entrypoint**: `backend/main.py` → `uvicorn backend.main:app`.
+- **DB init**: `python -m backend.init_db` creates SQLAlchemy tables. The Docker entrypoint runs this before starting uvicorn; for local dev run it manually once before the app.
+- **Config**: `backend/core/config.py` uses Pydantic Settings, reads `.env`, `extra="ignore"`.
 
 ## LLM Providers (mutually exclusive)
 
@@ -46,7 +46,7 @@ docker compose --profile ollama up -d ollama
 ## Testing
 
 - `pytest` and `pytest-asyncio` are configured in `pyproject.toml` (`asyncio_mode = auto`, `testpaths = ["tests"]`).
-- **No `tests/` directory exists yet.**
+- Smoke tests and regression test files are located under the `tests/` directory.
 
 ## Code Style & Tooling
 
@@ -55,8 +55,8 @@ docker compose --profile ollama up -d ollama
 ## Important Conventions
 
 - **CORS**: `allow_origins=["*"]` with `allow_credentials=False` (wildcard + credentials is a browser violation).
-- **Playwright**: Browsers are installed inside the Docker image (`playwright install chromium`). Local Playwright usage may require `playwright install` if running outside Docker.
-- **Package boundaries**: `src/api/` (routes/schemas), `src/core/` (config, DB, security), `src/ia/` (LLM clients, prompts, tools, browser automation), `src/persistencia/` (SQLAlchemy models, vector store), `src/services/` (business logic), `src/workers/` (background jobs).
+- **Automation**: External system actions are handled via MCP integrations (REST, stdio, SSE). No browser automation is used.
+- **Package boundaries**: `backend/api/` (routes/schemas), `backend/core/` (config, DB, security), `backend/ia/` (LLM clients, prompts, tools, browser automation), `backend/persistencia/` (SQLAlchemy models, vector store), `backend/services/` (business logic), `backend/workers/` (background jobs).
 
 ## OAuth Integrations
 

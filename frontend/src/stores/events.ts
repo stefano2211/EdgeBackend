@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue'
-import type { AuraEvent, LogLine, LiveScreenshot } from '@/services/eventService'
+import type { AuraEvent, LogLine } from '@/services/eventService'
 
 /**
  * Global reactive store for the reactive event pipeline.
@@ -33,12 +33,6 @@ const ephemeralState = reactive<Record<number, {
   triageResult: Record<string, any> | null
   historicalAnalysis: string | null
   analysisResult: string | null
-  vlmAnalysis: string | null
-  liveScreenshot: LiveScreenshot | null
-  vlScreenshots: LiveScreenshot[]
-  vlThoughts: string[]
-  vlActions: any[]
-  vlProgress: { current_step: number; max_steps: number } | null
 }>>({})
 
 export const useEventStore = () => {
@@ -54,16 +48,6 @@ export const useEventStore = () => {
   function getEventLogs(eventId: number): LogLine[] {
     const es = ephemeralState[eventId]
     return es ? es.logs : []
-  }
-
-  function getVlmAnalysis(eventId: number): string | null {
-    const es = ephemeralState[eventId]
-    return es ? es.vlmAnalysis : null
-  }
-
-  function getLiveScreenshot(eventId: number): LiveScreenshot | null {
-    const es = ephemeralState[eventId]
-    return es ? es.liveScreenshot : null
   }
 
   function getTriageResult(eventId: number): Record<string, any> | null {
@@ -88,12 +72,7 @@ export const useEventStore = () => {
         triageResult: null,
         historicalAnalysis: null,
         analysisResult: null,
-        vlmAnalysis: null,
-        liveScreenshot: null,
-        vlScreenshots: [],
-        vlThoughts: [],
-        vlActions: [],
-        vlProgress: null,
+
       }
     }
   }
@@ -118,32 +97,6 @@ export const useEventStore = () => {
     ephemeralState[eventId].analysisResult = text
   }
 
-  function setVlmAnalysis(eventId: number, text: string) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].vlmAnalysis = text
-  }
-
-  function setLiveScreenshot(eventId: number, screenshot: LiveScreenshot) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].liveScreenshot = screenshot
-    ephemeralState[eventId].vlScreenshots.push(screenshot)
-  }
-
-  function addVlThought(eventId: number, thought: string) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].vlThoughts.push(thought)
-  }
-
-  function addVlAction(eventId: number, action: any) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].vlActions.push(action)
-  }
-
-  function setVlProgress(eventId: number, progress: { current_step: number; max_steps: number }) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].vlProgress = progress
-  }
-
   // ── Store methods used by EventsView.vue ──
 
   function setEvents(events: AuraEvent[]) {
@@ -161,48 +114,11 @@ export const useEventStore = () => {
     }
   }
 
-  function getVlScreenshots(eventId: number): LiveScreenshot[] {
-    const es = ephemeralState[eventId]
-    return es ? es.vlScreenshots : []
-  }
-
-  function getVlThoughts(eventId: number): string[] {
-    const es = ephemeralState[eventId]
-    return es ? es.vlThoughts : []
-  }
-
-  function getVlActions(eventId: number): any[] {
-    const es = ephemeralState[eventId]
-    return es ? es.vlActions : []
-  }
-
-  function getVlProgress(eventId: number): { current_step: number; max_steps: number } | null {
-    const es = ephemeralState[eventId]
-    return es ? es.vlProgress : null
-  }
-
-  function appendVlScreenshot(eventId: number, screenshot: LiveScreenshot) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].vlScreenshots.push(screenshot)
-  }
-
-  function appendVlThought(eventId: number, thought: string) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].vlThoughts.push(thought)
-  }
-
-  function appendVlAction(eventId: number, action: any) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].vlActions.push(action)
-  }
-
   return {
     state,
     selectedEvent,
     pendingApprovalCount,
     getEventLogs,
-    getVlmAnalysis,
-    getLiveScreenshot,
     getTriageResult,
     getHistoricalAnalysis,
     getAnalysisResult,
@@ -211,20 +127,10 @@ export const useEventStore = () => {
     setTriageResult,
     setHistoricalAnalysis,
     setAnalysisResult,
-    setVlmAnalysis,
-    setLiveScreenshot,
-    addVlThought,
-    addVlAction,
-    setVlProgress,
+
     setEvents,
     selectEvent,
     updateEvent,
-    getVlScreenshots,
-    getVlThoughts,
-    getVlActions,
-    getVlProgress,
-    appendVlScreenshot,
-    appendVlThought,
-    appendVlAction,
+
   }
 }

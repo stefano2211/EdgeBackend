@@ -12,7 +12,7 @@ import asyncio
 import os
 import sys
 
-# Ensure project root is on path for src.* imports
+# Ensure project root is on path for backend.* imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Override DB to use 127.0.0.1 for local testing
@@ -20,14 +20,14 @@ os.environ["DATABASE_URL"] = "postgresql+asyncpg://edge:edge@127.0.0.1:5432/edge
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.database import AsyncSessionLocal
-from src.persistencia.models import Event, DomainConfig, EventCorrelationGroup, EventMetric, UserFeedback
-from src.persistencia.repositories.event_repository import EventRepository
-from src.persistencia.repositories.domain_config_repository import DomainConfigRepository
-from src.services.domain_detector import DomainDetector
-from src.services.correlation_engine import CorrelationEngine
-from src.services.event_metric_service import EventMetricService
-from src.api.v1.schemas.event import EventIngestPayload, severity_text_to_number
+from backend.core.database import AsyncSessionLocal
+from backend.persistencia.models import Event, DomainConfig, EventCorrelationGroup, EventMetric, UserFeedback
+from backend.persistencia.repositories.event_repository import EventRepository
+from backend.persistencia.repositories.domain_config_repository import DomainConfigRepository
+from backend.services.domain_detector import DomainDetector
+from backend.services.correlation_engine import CorrelationEngine
+from backend.services.event_metric_service import EventMetricService
+from backend.api.v1.schemas.event import EventIngestPayload, severity_text_to_number
 
 
 async def _ensure_test_user(session: AsyncSession) -> int:

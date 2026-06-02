@@ -11,7 +11,7 @@ from backend.persistencia.models.base import Base
 
 
 class ReactiveCredential(Base):
-    """Encrypted credential for reactive sub-agents (VL browser, MCP, etc.)."""
+    """Encrypted credential for reactive sub-agents and MCP integrations."""
 
     __tablename__ = "reactive_credentials"
 

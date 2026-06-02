@@ -43,8 +43,7 @@ dependencies = [
     "mcp>=1.0.0",
     "minio>=7.2.0",
     "fastembed>=0.4.0",
-    "playwright>=1.49.0",
-    "pillow>=10.0.0",
+
     "cryptography>=47.0.0",
     "docker>=7.0.0",
     "jsonpath-ng>=1.6.0",

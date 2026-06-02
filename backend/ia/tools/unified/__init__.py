@@ -11,6 +11,5 @@ This eliminates duplication between:
 
 from backend.ia.tools.unified.rag import create_rag_tool
 from backend.ia.tools.unified.mcp import create_mcp_tool
-from backend.ia.tools.unified.computer import create_computer_tool
 
-__all__ = ["create_rag_tool", "create_mcp_tool", "create_computer_tool"]
+__all__ = ["create_rag_tool", "create_mcp_tool"]

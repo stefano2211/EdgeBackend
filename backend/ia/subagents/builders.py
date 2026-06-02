@@ -7,7 +7,7 @@ System prompts for MCP and RAG are built dynamically with tool/KB catalogs.
 from __future__ import annotations
 
 from backend.core.logging import logging
-from backend.ia.langchain_models import get_chat_model, get_multimodal_chat_model
+from backend.ia.langchain_models import get_chat_model
 from backend.ia.prompts.subagents import (
     RAG_AGENT_DESCRIPTION,
     build_rag_system_prompt,
@@ -15,15 +15,8 @@ from backend.ia.prompts.subagents import (
     build_mcp_system_prompt,
     HISTORICAL_AGENT_DESCRIPTION,
     HISTORICAL_AGENT_SYSTEM_PROMPT,
-    VL_AGENT_DESCRIPTION,
-    VL_AGENT_SYSTEM_PROMPT,
 )
-from backend.ia.tools.credential_tool import get_secret_credential
-from backend.ia.tools.unified.computer import (
-    create_computer_tool,
-    create_browser_navigate_tool,
-    create_browser_dom_tool,
-)
+
 from backend.ia.subagents.plugin_registry import SubagentPlugin, SubagentRegistry
 
 logger = logging.getLogger(__name__)
@@ -150,27 +143,6 @@ def _build_historical_subagent(
     }
 
 
-def _build_vl_subagent(
-    context: str,
-    tools: list,
-    **_,
-) -> dict:
-    instance = "reactive" if context == "reactive" else "chat"
-    logger.info("[VL-Subagent] Building for context=%s instance=%s", context, instance)
-    return {
-        "name": "vl-agent",
-        "description": VL_AGENT_DESCRIPTION,
-        "system_prompt": VL_AGENT_SYSTEM_PROMPT,
-        "tools": [
-            create_browser_navigate_tool(instance=instance),
-            create_browser_dom_tool(instance=instance),
-            create_computer_tool(instance=instance),
-            get_secret_credential,
-        ],
-        "model": get_multimodal_chat_model(),
-    }
-
-
 # ── Auto-register on import ──
 SubagentRegistry.register(SubagentPlugin(
     name="rag",
@@ -199,11 +171,4 @@ SubagentRegistry.register(SubagentPlugin(
     requires_mcp=False,
 ))
 
-SubagentRegistry.register(SubagentPlugin(
-    name="vl",
-    description=VL_AGENT_DESCRIPTION,
-    builder=_build_vl_subagent,
-    applies_to={"proactive", "reactive"},
-    requires_rag=False,
-    requires_mcp=False,
-))
+

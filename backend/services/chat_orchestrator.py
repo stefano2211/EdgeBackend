@@ -242,12 +242,7 @@ class ChatOrchestrator:
             "recursion_limit": 40,  # hard cap: prevents infinite tool-call loops
         }
         
-        from backend.core.context import chat_stream_queue
-        from backend.services.browser_manager import BrowserManager
         q: asyncio.Queue = asyncio.Queue()
-        chat_stream_queue.set(q)
-        # Establecer thread_id activo en el BrowserController "chat" para HITL
-        BrowserManager.get_instance("chat").get_controller().set_active_thread_id(thread_id)
         
         full_content = ""
         reasoning_content = ""
@@ -288,17 +283,7 @@ class ChatOrchestrator:
                 for ev in events:
                     yield ev
                     
-            elif "screenshot" in item:
-                yield {"type": "screenshot", "data": item["screenshot"]}
 
-            elif "type" in item and item["type"] == "takeover":
-                # Human-in-the-loop: reenviar evento takeover tal cual al frontend
-                yield item
-
-            elif "thought" in item:
-                # Modo Cinema: pensamiento del agente
-                yield {"type": "thought", "content": item["thought"]}
-                
             elif "error" in item:
                 logger.exception("Orchestrator streaming failed: %s", item["error"])
                 error_msg = f"\n\n[System error during processing: {item['error']}]"

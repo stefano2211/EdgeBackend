@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import sys
+# Ensure project root is on path for backend.* imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.services.webhook_mapping_engine import WebhookMappingEngine
-from src.services.event_metric_service import EventMetricService
-from src.services.domain_config_service import DomainConfigService
+from backend.services.webhook_mapping_engine import WebhookMappingEngine
+from backend.services.event_metric_service import EventMetricService
+from backend.services.domain_config_service import DomainConfigService
 
 
 class TestWebhookMappingEngine:
@@ -81,7 +86,7 @@ class TestDomainConfigService:
         service = DomainConfigService(session)
         service.repo = repo
 
-        from src.core.exceptions import ConflictError
+        from backend.core.exceptions import ConflictError
 
         with pytest.raises(ConflictError):
             await service.create(
@@ -97,7 +102,7 @@ class TestDomainConfigService:
         service = DomainConfigService(session)
         service.repo = repo
 
-        from src.core.exceptions import NotFoundError
+        from backend.core.exceptions import NotFoundError
 
         with pytest.raises(NotFoundError):
             await service.get_for_user(domain_id=99, user_id=1)
@@ -112,7 +117,7 @@ class TestDomainConfigService:
         service = DomainConfigService(session)
         service.repo = repo
 
-        from src.core.exceptions import NotFoundError
+        from backend.core.exceptions import NotFoundError
 
         with pytest.raises(NotFoundError):
             await service.get_for_user(domain_id=1, user_id=1)
@@ -123,14 +128,14 @@ class TestMCPSourceSecurity:
 
     @pytest.mark.asyncio
     async def test_reactive_source_ownership_enforced(self):
-        from src.core.exceptions import NotFoundError
+        from backend.core.exceptions import NotFoundError
 
         session = AsyncMock()
         source = MagicMock()
         source.user_id = 2  # belongs to user 2
         repo = AsyncMock()
         repo.get_by_id.return_value = source
-        from src.services.reactive_mcp_source_service import ReactiveMCPSourceService
+        from backend.services.reactive_mcp_source_service import ReactiveMCPSourceService
 
         service = ReactiveMCPSourceService(session)
         service.repo = repo

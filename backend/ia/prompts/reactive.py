@@ -20,20 +20,6 @@ REACTIVE_S2_TRIAGE_PROMPT = load_prompt("reactive_triage")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  PHASE 2 — S1 COORDINATOR PROMPT
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def build_s1_coordinator_prompt() -> str:
-    return load_prompt(
-        "reactive_s1_coordinator",
-        notification_email=settings.REACTIVE_NOTIFICATION_EMAIL,
-    )
-
-
-REACTIVE_S1_COORDINATOR_PROMPT = build_s1_coordinator_prompt()
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 #  PHASE 3 — S2 SYNTHESIS PROMPT
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -129,11 +115,6 @@ def build_reactive_s2_orchestrator_prompt(
         "Uses fine-tuned weights, no external tools. Always fast and cheap to invoke."
     )
 
-    subagent_lines.append(
-        '- task("vl-agent", ...) [TEMPORARILY DISABLED] → Autonomous Computer Use agent. '
-        "DISABLED FOR MAINTENANCE. DO NOT DELEGATE TASKS TO THIS AGENT."
-    )
-
     subagents_section = "\n".join(subagent_lines)
     data_delegation_rules = "\n".join(delegation_rules)
 
@@ -171,14 +152,7 @@ _LEGACY_SUBAGENT_DESCRIPTIONS = {
         "Identifies precedents, recurring failure patterns, and correlations with past incidents. "
         "Knowledge baked into fine-tuned weights — does NOT use external tools."
     ),
-    "vl-agent": (
-        "Autonomous Computer Use agent implementing the Observe-Think-Act loop. "
-        "Capabilities: open any GUI application (web browser, dashboards, portals, "
-        "email clients), navigate screens step by step, "
-        "read values, fill forms, click buttons. "
-        "Pass a single, precise, self-contained instruction. "
-        "This is the ONLY agent that can interact with screens and websites."
-    ),
+
 }
 
 _UNAVAILABLE_MSG = "(NOT AVAILABLE — do not use)"
@@ -213,7 +187,7 @@ def build_reactive_orchestrator_prompt(available_subagents: List[str]) -> str:
 S1_COORDINATOR_DESCRIPTION = (
     "System-1 Fast Intuition Coordinator. "
     "Delegates in parallel to historical-agent (pattern matching >6 months) "
-    "and vl-agent (visual verification + web automation). "
+
     "Performs visual verification of dashboards and web interfaces when required. "
     "Use ALWAYS when an alarm or problem is detected to get fast patterns and visual confirmation."
 )

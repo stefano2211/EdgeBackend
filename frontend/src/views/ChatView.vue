@@ -30,28 +30,7 @@ interface SubagentStatus {
 }
 const activeSubagents = ref<SubagentStatus[]>([])
 
-interface ClickPos { x: number; y: number; type: string }
-interface ScreenshotFrame {
-  b64: string
-  step: number
-  has_omniparser: boolean
-  action?: string | null
-  click?: ClickPos | null
-}
-const currentScreenshot = ref<ScreenshotFrame | null>(null)
-const showScreenViewer = ref(false)
-const isThinking = ref(false)
-const clickRipple = ref<ClickPos | null>(null)
-let _thinkingTimer: ReturnType<typeof setTimeout> | null = null
-let _rippleTimer: ReturnType<typeof setTimeout> | null = null
 
-// Human-in-the-loop state
-const takeoverState = ref<{ message: string, thread_id: string, action_type: string } | null>(null)
-const takeoverResponse = ref('')
-const isResuming = ref(false)
-
-// Takeover overlay dentro del panel (no inline)
-// (takeoverState, takeoverResponse, isResuming ya definidos arriba)
 
 function scrollToBottom() {
   nextTick(() => {
@@ -78,14 +57,6 @@ async function handleSendMessage(content: string) {
   streamingContent.value = ''
   streamingReasoning.value = ''
   activeSubagents.value = []
-  currentScreenshot.value = null
-  showScreenViewer.value = false
-  isThinking.value = false
-  clickRipple.value = null
-  takeoverState.value = null
-  takeoverResponse.value = ''
-  if (_thinkingTimer) { clearTimeout(_thinkingTimer); _thinkingTimer = null }
-  if (_rippleTimer)   { clearTimeout(_rippleTimer);   _rippleTimer   = null }
   scrollToBottom()
 
   try {
@@ -127,8 +98,6 @@ async function handleSendMessage(content: string) {
         streamingContent.value = ''
         streamingReasoning.value = ''
         isLoading.value = false
-        isThinking.value = false
-        if (_thinkingTimer) { clearTimeout(_thinkingTimer); _thinkingTimer = null }
 
         const threadId = activeThreadId.value || 'unknown'
         onMessageSent(threadId, { role: 'user', content }, assistantMsg)
@@ -142,9 +111,6 @@ async function handleSendMessage(content: string) {
         streamingContent.value = ''
         activeSubagents.value = []
         isLoading.value = false
-        isThinking.value = false
-        if (_thinkingTimer) { clearTimeout(_thinkingTimer); _thinkingTimer = null }
-        // Keep viewer open on error so user can see last known state
       },
       // onSubagent
       (subagent: { status: string, name: string, input?: any }) => {
@@ -160,33 +126,11 @@ async function handleSendMessage(content: string) {
         }
         scrollToBottom()
       },
-      // onScreenshot
-      (screenshot: { b64: string, step: number, has_omniparser: boolean, action?: string, click?: ClickPos | null }) => {
-        currentScreenshot.value = screenshot
-        showScreenViewer.value = true
-        // Reset thinking indicator
-        isThinking.value = false
-        if (_thinkingTimer) clearTimeout(_thinkingTimer)
-        // Show click ripple if there was a click
-        if (screenshot.click) {
-          if (_rippleTimer) clearTimeout(_rippleTimer)
-          clickRipple.value = screenshot.click
-          _rippleTimer = setTimeout(() => { clickRipple.value = null }, 800)
-        }
-        // Start thinking timer — if no new screenshot in 2s, show thinking badge
-        _thinkingTimer = setTimeout(() => {
-          if (isLoading.value) isThinking.value = true
-        }, 2000)
-      },
       // useGeneralist
       useGeneralist.value,
       // onReasoning
       (reasoning: string) => {
         streamingReasoning.value += reasoning
-      },
-      // onTakeover
-      (takeover: { message: string, thread_id: string, action_type: string }) => {
-        takeoverState.value = takeover
       }
     )
   } catch (error) {
@@ -204,22 +148,6 @@ function copyMessage(content: string) {
   navigator.clipboard.writeText(content)
 }
 
-async function sendTakeoverResponse() {
-  if (!takeoverState.value || !takeoverResponse.value.trim()) return
-  isResuming.value = true
-  try {
-    await chatService.resumeThread(takeoverState.value.thread_id, takeoverResponse.value.trim())
-    // Add the user's response as a message in the chat
-    activeMessages.value.push({ role: 'user', content: takeoverResponse.value.trim() })
-    takeoverState.value = null
-    takeoverResponse.value = ''
-  } catch (err) {
-    console.error('Resume error', err)
-    activeMessages.value.push({ role: 'assistant', content: 'Error al enviar respuesta. Inténtalo de nuevo.' })
-  } finally {
-    isResuming.value = false
-  }
-}
 </script>
 
 <template>
@@ -352,193 +280,15 @@ async function sendTakeoverResponse() {
         </button>
       </div>
       <ChatInput 
-        :disabled="isLoading || !!takeoverState"
+        :disabled="isLoading"
         @send="handleSendMessage"
       />
     </div>
     </div><!-- end main chat area -->
 
-    <!-- Live Screen Viewer Panel (RIGHT side) -->
-    <transition name="slide-right">
-      <div
-        v-if="showScreenViewer && currentScreenshot"
-        class="hidden lg:flex flex-col flex-shrink-0 w-[480px] border-l border-white/[0.06] bg-[#141414]"
-      >
-        <!-- Header -->
-        <div class="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-          <div class="flex items-center gap-2">
-            <div class="w-2 h-2 rounded-full" :class="isLoading ? 'bg-emerald-400 animate-pulse' : 'bg-white/30'"></div>
-            <span class="text-[12px] font-medium text-white/70 font-mono">sistema1-vl</span>
-            <span class="text-[11px] text-white/30">step {{ currentScreenshot.step }}</span>
-            <span v-if="currentScreenshot.has_omniparser" class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">SoM</span>
-          </div>
-          <button @click="showScreenViewer = false" class="text-white/30 hover:text-white/60 transition-colors p-1 rounded hover:bg-white/5">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <!-- Screenshot with crossfade between frames -->
-        <div class="flex-1 overflow-hidden relative bg-black">
-          <transition name="screenshot-fade" mode="out-in">
-            <img
-              :key="currentScreenshot.step"
-              :src="`data:image/png;base64,${currentScreenshot.b64}`"
-              class="w-full h-full object-contain"
-              alt="Agent screen"
-            />
-          </transition>
-
-          <!-- Click ripple animation -->
-          <div
-            v-if="clickRipple"
-            class="click-ripple"
-            :style="{ left: clickRipple.x + '%', top: clickRipple.y + '%' }"
-          />
-
-          <!-- Thinking badge (AI processing state) -->
-          <transition name="action-fade">
-            <div
-              v-if="isThinking"
-              class="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 backdrop-blur-md border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
-            >
-              <div class="relative flex items-center justify-center">
-                <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                <div class="absolute w-4 h-4 rounded-full bg-emerald-400/20 animate-ping"></div>
-              </div>
-              <span class="text-[11px] font-medium text-emerald-300 tracking-wide">Pensando...</span>
-              <div class="flex gap-0.5">
-                <div class="w-1 h-1 rounded-full bg-emerald-400/60 animate-bounce" style="animation-delay: 0ms"></div>
-                <div class="w-1 h-1 rounded-full bg-emerald-400/60 animate-bounce" style="animation-delay: 150ms"></div>
-                <div class="w-1 h-1 rounded-full bg-emerald-400/60 animate-bounce" style="animation-delay: 300ms"></div>
-              </div>
-            </div>
-          </transition>
-
-          <!-- Action label overlay -->
-          <transition name="action-fade">
-            <div
-              v-if="currentScreenshot.action"
-              :key="currentScreenshot.step + '-action'"
-              class="absolute bottom-3 left-3 right-3 text-[10px] font-mono text-white/50 bg-black/60 rounded px-2 py-1 truncate backdrop-blur-sm border border-white/[0.06]"
-            >
-              ↳ {{ currentScreenshot.action }}
-            </div>
-          </transition>
-
-          <!-- Takeover overlay (Human-in-the-Loop) -->
-          <transition name="action-fade">
-            <div
-              v-if="takeoverState"
-              class="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-30"
-            >
-              <div class="bg-[#1a1a1a] border border-amber-500/30 rounded-xl px-5 py-4 max-w-[90%] w-full mx-4">
-                <div class="flex items-start gap-3 mb-3">
-                  <div class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                  </div>
-                  <p class="text-sm text-amber-200/90">{{ takeoverState.message }}</p>
-                </div>
-                <div class="flex gap-2">
-                  <input
-                    v-model="takeoverResponse"
-                    type="text"
-                    placeholder="Tu respuesta..."
-                    class="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-amber-500/50"
-                    @keyup.enter="sendTakeoverResponse"
-                  />
-                  <button
-                    @click="sendTakeoverResponse"
-                    :disabled="isResuming || !takeoverResponse.trim()"
-                    class="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-sm font-medium rounded-lg border border-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {{ isResuming ? '...' : 'Enviar' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </transition>
-        </div>
-        <!-- Loading scan-line bar -->
-        <div v-if="isLoading" class="h-[2px] bg-white/5 overflow-hidden">
-          <div class="h-full bg-emerald-400/50 animate-scan"></div>
-        </div>
-      </div>
-    </transition>
-
   </div><!-- end outer flex -->
 </template>
 
 <style scoped>
-/* ── Panel slide-in from right ────────────────────────────────────────────── */
-.slide-right-enter-active,
-.slide-right-leave-active {
-  transition: all 0.25s ease;
-}
-.slide-right-enter-from,
-.slide-right-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
-}
-
-/* ── Screenshot crossfade (video-like frame transition) ───────────────────── */
-.screenshot-fade-enter-active {
-  transition: opacity 0.15s ease;
-}
-.screenshot-fade-leave-active {
-  transition: opacity 0.1s ease;
-  position: absolute;
-  inset: 0;
-}
-.screenshot-fade-enter-from,
-.screenshot-fade-leave-to {
-  opacity: 0;
-}
-
-/* ── Action label fade ────────────────────────────────────────────────────── */
-.action-fade-enter-active,
-.action-fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.action-fade-enter-from,
-.action-fade-leave-to {
-  opacity: 0;
-}
-
-/* ── Scan-line animation (loading indicator) ──────────────────────────────── */
-@keyframes scan {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(400%); }
-}
-.animate-scan {
-  width: 25%;
-  animation: scan 1.2s ease-in-out infinite;
-}
-
-/* ── Click ripple animation ────────────────────────────────────────────────── */
-@keyframes ripple {
-  0%   { transform: translate(-50%, -50%) scale(1);   opacity: 0.9; }
-  100% { transform: translate(-50%, -50%) scale(3);   opacity: 0; }
-}
-@keyframes ripple-inner {
-  0%   { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
-  40%  { transform: translate(-50%, -50%) scale(1.3); opacity: 0.8; }
-  100% { transform: translate(-50%, -50%) scale(1);   opacity: 0.6; }
-}
-.click-ripple {
-  position: absolute;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2px solid rgba(110, 231, 183, 0.95);
-  animation: ripple 0.75s ease-out forwards;
-  pointer-events: none;
-  z-index: 10;
-}
-.click-ripple::after {
-  content: '';
-  position: absolute;
-  inset: 4px;
-  border-radius: 50%;
-  background: rgba(110, 231, 183, 0.5);
-  animation: ripple-inner 0.75s ease-out forwards;
-}
+/* Chat-specific styles can be added here */
 </style>

@@ -87,7 +87,7 @@ Paste it below in the **connection_string** field.
         category="communication",
         source_type="custom",
         command="python",
-        args=["-m", "src.integrations.custom_mcp_servers.gmail.server"],
+        args=["-m", "backend.integrations.custom_mcp_servers.gmail.server"],
         env_prefix="GMAIL_",
         auth_type="oauth2",
         auth_env_var_mapping={
@@ -204,7 +204,7 @@ The script will:
         category="industrial",
         source_type="custom",
         command="python",
-        args=["-m", "src.integrations.custom_mcp_servers.maquinaria.server"],
+        args=["-m", "backend.integrations.custom_mcp_servers.maquinaria.server"],
         env_prefix="MAQUINARIA_",
         auth_type="none",
         auth_env_var_mapping={},

@@ -24,11 +24,8 @@ export const chatService = {
         onDone: (fullContent: string) => void,
         onError: (error: string) => void,
         onSubagent: (subagent: { status: string, name: string, input?: any }) => void = () => {},
-        onScreenshot: (screenshot: { b64: string, step: number, has_omniparser: boolean, action?: string, click?: { x: number, y: number, type: string } | null }) => void = () => {},
         useGeneralist: boolean = false,
         onReasoning: (reasoning: string) => void = () => {},
-        onTakeover: (takeover: { message: string, thread_id: string, action_type: string }) => void = () => {},
-        onThought: (thought: string) => void = () => {},
     ): Promise<void> {
         const token = localStorage.getItem('token')
         const baseURL = import.meta.env.PROD ? (import.meta.env.VITE_API_URL || '') : ''
@@ -84,19 +81,10 @@ export const chatService = {
                             onMeta(data)
                         } else if (data.type === 'subagent') {
                             onSubagent(data)
-                        } else if (data.type === 'screenshot') {
-                            onScreenshot(data.data)
                         } else if (data.type === 'done') {
                             onDone(data.full_content)
                         } else if (data.type === 'error') {
                             onError(data.detail)
-                        } else if (data.type === 'takeover') {
-                            onTakeover(data)
-                        } else if (data.type === 'thought') {
-                            onThought(data.content)
-                        } else if (data.thought) {
-                            // Fallback para formato legacy directo
-                            onThought(data.thought)
                         }
                     } catch (e) {
                         // Skip malformed JSON lines
@@ -106,12 +94,5 @@ export const chatService = {
         }
     },
 
-    // Resume a paused thread after human-in-the-loop input
-    async resumeThread(threadId: string, userResponse: string) {
-        const response = await api.post('/api/v1/chat/chat/resume', {
-            thread_id: threadId,
-            user_response: userResponse,
-        })
-        return response.data
-    }
+
 }

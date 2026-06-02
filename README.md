@@ -90,4 +90,4 @@ See `.env.example` for all available options.
 - **Vector DB:** Qdrant
 - **Object Storage:** MinIO (S3-compatible)
 - **Cache/Queue:** Redis
-- **Browser Automation:** Playwright (Chromium)
+- **Automation:** MCP integrations for external system actions

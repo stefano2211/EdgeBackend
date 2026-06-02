@@ -6,7 +6,6 @@ import eventService, {
   type EventSeverityText,
   type EventStatus,
   type SSEPayload,
-  type LiveScreenshot,
   type DemoPreset,
   DEMO_PRESETS,
 } from '@/services/eventService'
@@ -77,16 +76,6 @@ const eventLogs = computed(() => {
   return store.getEventLogs(selectedEvent.value.id)
 })
 
-const vlmAnalysisText = computed(() => {
-  if (!selectedEvent.value) return null
-  return store.getVlmAnalysis(selectedEvent.value.id)
-})
-
-const liveScreenshot = computed(() => {
-  if (!selectedEvent.value) return null
-  return store.getLiveScreenshot(selectedEvent.value.id)
-})
-
 const triageResult = computed(() => {
   if (!selectedEvent.value) return null
   return store.getTriageResult(selectedEvent.value.id)
@@ -95,43 +84,6 @@ const triageResult = computed(() => {
 const historicalAnalysis = computed(() => {
   if (!selectedEvent.value) return null
   return store.getHistoricalAnalysis(selectedEvent.value.id)
-})
-
-
-
-// ── S1 Visual Verification panel state ──
-const vlPanelExpanded = ref(false)
-const vlPanelMinimized = ref(false)
-
-const hasVlActivity = computed(() => {
-  if (!selectedEvent.value) return false
-  const id = selectedEvent.value.id
-  return store.getVlScreenshots(id).length > 0 || store.getVlThoughts(id).length > 0
-})
-
-const vlScreenshots = computed(() => {
-  if (!selectedEvent.value) return []
-  return store.getVlScreenshots(selectedEvent.value.id)
-})
-
-const vlThoughts = computed(() => {
-  if (!selectedEvent.value) return []
-  return store.getVlThoughts(selectedEvent.value.id)
-})
-
-const vlActions = computed(() => {
-  if (!selectedEvent.value) return []
-  return store.getVlActions(selectedEvent.value.id)
-})
-
-const vlProgress = computed(() => {
-  if (!selectedEvent.value) return null
-  return store.getVlProgress(selectedEvent.value.id)
-})
-
-const latestVlScreenshot = computed(() => {
-  const ss = vlScreenshots.value
-  return ss.length > 0 ? ss[ss.length - 1] : null
 })
 
 
@@ -222,40 +174,6 @@ function handleSSE(payload: SSEPayload) {
       store.updateEvent({
         id: eventId,
         agent_plan: data.plan,
-      })
-      break
-
-    case 'vl_screenshot': {
-      const ss: LiveScreenshot = {
-        b64: data.b64,
-        step: data.step,
-        action: data.action,
-        click: data.click,
-      }
-      store.appendVlScreenshot(eventId, ss)
-      // Auto-expand panel on first screenshot
-      if (!vlPanelMinimized.value && !vlPanelExpanded.value) {
-        vlPanelExpanded.value = true
-      }
-      break
-    }
-
-    case 'vl_thought':
-      store.appendVlThought(eventId, data.thought)
-      break
-
-    case 'vl_result':
-      store.appendVlThought(eventId, `Resultado Final: ${data.result}`)
-      break
-
-    case 'vl_action_executed':
-      store.appendVlAction(eventId, data.action)
-      break
-
-    case 'vl_progress':
-      store.setVlProgress(eventId, {
-        current_step: data.current_step,
-        max_steps: data.max_steps,
       })
       break
 
@@ -413,9 +331,6 @@ function selectEvent(event: AuraEvent) {
     feedbackSubmitting.value = false
     activeTab.value = 'overview'
   }
-  // Reset VL panel state for new event
-  vlPanelExpanded.value = false
-  vlPanelMinimized.value = false
 }
 
 async function checkReactiveConfig() {
@@ -701,8 +616,8 @@ function formatTime(d: string) {
                     <svg v-if="triageResult.needs_realtime_data" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
                     Realtime Data
                   </span>
-                  <span class="px-2 py-1 rounded text-[10px] border flex items-center gap-1" :class="triageResult.needs_visual_verification ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-[#555] border-white/10'">
-                    <svg v-if="triageResult.needs_visual_verification" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+                  <span class="px-2 py-1 rounded text-[10px] border flex items-center gap-1 bg-white/5 text-[#555] border-white/10">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
                     Visual Verify
                   </span>
                   <span v-if="triageResult.justification" class="text-[11px] text-[#7a7a7a] ml-2">{{ triageResult.justification }}</span>
@@ -836,18 +751,7 @@ function formatTime(d: string) {
                 </div>
               </div>
 
-              <!-- VL Gallery -->
-              <div v-if="hasVlActivity" class="space-y-3">
-                <div class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Visual Verification</div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div v-for="(ss, idx) in vlScreenshots" :key="idx" class="bg-[#111] rounded-xl border border-white/[0.08] overflow-hidden">
-                    <img :src="`data:image/png;base64,${ss.b64}`" class="w-full h-32 object-contain bg-[#050505]" />
-                    <div class="px-3 py-2 text-[10px] text-[#7a7a7a]">Step {{ ss.step }}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="!selectedEvent.actions_taken?.length && !hasVlActivity" class="text-center py-8 text-[#555]">
+              <div v-if="!selectedEvent.actions_taken?.length" class="text-center py-8 text-[#555]">
                 <p class="text-[13px]">No actions recorded yet</p>
               </div>
             </template>
@@ -991,119 +895,6 @@ function formatTime(d: string) {
     </Teleport>
 
 
-
-    <!-- ── S1 Visual Verification Mini Panel (floating) ─────────────────── -->
-    <Teleport to="body">
-      <Transition
-        enter-active-class="transition-all duration-300 ease-out"
-        enter-from-class="opacity-0 scale-90 translate-y-4"
-        enter-to-class="opacity-100 scale-100 translate-y-0"
-        leave-active-class="transition-all duration-200 ease-in"
-        leave-from-class="opacity-100 scale-100 translate-y-0"
-        leave-to-class="opacity-0 scale-90 translate-y-4"
-      >
-        <div
-          v-if="hasVlActivity && !vlPanelMinimized"
-          class="fixed bottom-6 right-6 z-50"
-        >
-          <!-- Expanded panel -->
-          <div
-            v-if="vlPanelExpanded"
-            class="w-[380px] bg-[#111]/90 backdrop-blur-xl border border-purple-500/25 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden ring-1 ring-purple-500/10"
-          >
-            <!-- Header -->
-            <div class="px-4 py-3 bg-gradient-to-r from-purple-500/10 to-transparent border-b border-purple-500/15 flex items-center justify-between">
-              <div class="flex items-center gap-2.5">
-                <span class="relative flex h-2.5 w-2.5">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,1)]"></span>
-                </span>
-                <span class="text-[12px] font-bold text-purple-300 uppercase tracking-widest">Aura Visión</span>
-                <span v-if="vlProgress" class="text-[10px] text-purple-400/60 font-mono">
-                  {{ vlProgress.current_step }}/{{ vlProgress.max_steps }}
-                </span>
-              </div>
-              <div class="flex items-center gap-1">
-                <button @click="vlPanelExpanded = false" class="p-1 hover:bg-white/8 rounded-md transition-colors text-[#888] hover:text-white" title="Minimizar">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
-                </button>
-                <button @click="vlPanelMinimized = true" class="p-1 hover:bg-white/8 rounded-md transition-colors text-[#888] hover:text-white" title="Cerrar">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Screenshot -->
-            <div v-if="latestVlScreenshot" class="relative bg-[#050505] overflow-hidden">
-              <img
-                :src="`data:image/png;base64,${latestVlScreenshot.b64}`"
-                class="w-full h-auto max-h-[200px] object-cover"
-                alt="S1 Visual"
-              />
-              <div class="absolute top-2 right-2">
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-200 border border-purple-500/30 font-mono">
-                  STEP {{ latestVlScreenshot.step }}
-                </span>
-              </div>
-            </div>
-            <div v-else class="h-[100px] flex items-center justify-center bg-[#0a0a0a]">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin text-purple-400"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-            </div>
-
-            <!-- Thoughts -->
-            <div v-if="vlThoughts.length > 0" class="px-4 py-2.5 border-t border-purple-500/10 max-h-[100px] overflow-y-auto space-y-1.5">
-              <div v-for="(thought, idx) in vlThoughts.slice(-3)" :key="idx" class="flex gap-2 text-[11px]">
-                <span class="text-purple-400/50 shrink-0">💭</span>
-                <span class="text-[#b4b4b4] leading-relaxed">{{ thought }}</span>
-              </div>
-            </div>
-
-            <!-- Actions -->
-            <div v-if="vlActions.length > 0" class="px-4 py-2 border-t border-purple-500/10">
-              <div class="text-[10px] text-purple-400/40 uppercase tracking-wider mb-1.5">Acciones</div>
-              <div class="space-y-1">
-                <div v-for="(action, idx) in vlActions.slice(-3)" :key="idx" class="flex items-center gap-2 text-[11px] font-mono">
-                  <span class="text-purple-400/40">❯</span>
-                  <span class="text-[#888]">{{ action.type }}</span>
-                  <span v-if="action.args" class="text-[#555] truncate">{{ action.args }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Progress bar -->
-            <div v-if="vlProgress" class="px-4 py-2.5 border-t border-purple-500/10">
-              <div class="h-1 bg-white/5 rounded-full overflow-hidden">
-                <div
-                  class="h-full bg-purple-500 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]"
-                  :style="`width: ${(vlProgress.current_step / vlProgress.max_steps) * 100}%`"
-                ></div>
-              </div>
-              <div class="flex justify-between mt-1">
-                <span class="text-[10px] text-purple-400/50">Paso {{ vlProgress.current_step }} de {{ vlProgress.max_steps }}</span>
-                <span class="text-[10px] text-purple-400/50">{{ Math.round((vlProgress.current_step / vlProgress.max_steps) * 100) }}%</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Collapsed chip (when not expanded) -->
-          <button
-            v-else
-            @click="vlPanelExpanded = true"
-            class="flex items-center gap-2.5 bg-[#111]/90 backdrop-blur-xl border border-purple-500/30 rounded-full px-4 py-2.5 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:border-purple-500/50 transition-all duration-200 hover:scale-105 group"
-          >
-            <span class="relative flex h-2.5 w-2.5">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,1)]"></span>
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-300"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-            <span class="text-[12px] font-medium text-purple-200">Aura Verificando</span>
-            <span v-if="vlProgress" class="text-[10px] text-purple-400/60 font-mono">
-              {{ vlProgress.current_step }}/{{ vlProgress.max_steps }}
-            </span>
-          </button>
-        </div>
-      </Transition>
-    </Teleport>
 
     <!-- Admin Modal -->
     <AdminModal v-if="route.query.admin" />
