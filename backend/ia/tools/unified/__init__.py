@@ -11,5 +11,11 @@ This eliminates duplication between:
 
 from backend.ia.tools.unified.rag import create_rag_tool
 from backend.ia.tools.unified.mcp import create_mcp_tool
+from backend.ia.tools.unified.db import create_db_query_tool, create_db_schema_tool
 
-__all__ = ["create_rag_tool", "create_mcp_tool"]
+__all__ = [
+    "create_rag_tool",
+    "create_mcp_tool",
+    "create_db_query_tool",
+    "create_db_schema_tool",
+]
