@@ -1,4 +1,6 @@
-"""Database Connector package."""
-from backend.database_connector.models import DatabaseConnection
+"""Database Connector package for external SQL database connections."""
 
-__all__ = ["DatabaseConnection"]
+from backend.database_connector.models import DatabaseConnection
+from backend.database_connector.credential_model import DbConnectionCredential
+
+__all__ = ["DatabaseConnection", "DbConnectionCredential"]
