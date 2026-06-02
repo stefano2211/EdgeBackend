@@ -87,17 +87,28 @@ def build_orchestrator_prompt(
         )
 
     routing_rules += (
+        "[IF] The user asks about data, tables, metrics, analytics, or anything related to their connected databases\n"
+        "     → [DELEGATE] to db-agent via task()\n"
+        "     → The db-agent will inspect the schema and generate read-only SQL.\n\n"
+
         "[IF] Query is about historical trends, past performance, time-series, comparisons\n"
         "     → [DELEGATE] to historical-agent via task()\n"
         "     → historical-agent reasons from fine-tuned weights, no tools needed\n\n"
 
         "[IF] Query is pure reasoning (math, unit conversions, general explanations)\n"
         "     → [ANSWER] directly without any tools or delegation\n\n"
+
         "[IF] Query spans multiple domains (historical + live + documents)\n"
         "     → [DELEGATE] to MULTIPLE sub-agents in parallel, then synthesize"
     )
 
     routing_examples += (
+        '<example>\n'
+        '<user_query>Cuales son los 5 productos mas vendidos?</user_query>\n'
+        '<reasoning>Requires querying the database for sales data → delegate to db-agent.</reasoning>\n'
+        '<correct_action>task() → db-agent</correct_action>\n'
+        '</example>\n\n'
+
         '<example>\n'
         '<user_query>What were the trends last year compared to this year?</user_query>\n'
         '<reasoning>Historical time-series comparison → delegate to historical-agent.</reasoning>\n'

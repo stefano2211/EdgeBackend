@@ -62,4 +62,21 @@ HISTORICAL_AGENT_DESCRIPTION = (
 HISTORICAL_AGENT_SYSTEM_PROMPT = load_prompt("subagent_historical")
 
 
+# ── DB Agent ──
+DB_AGENT_DESCRIPTION = (
+    "Database query and structured data retrieval specialist. "
+    "Use ONLY when the user asks to query, analyze, or explore data from their connected databases. "
+    "Has access to: db_schema (discover tables/columns) and db_query (execute read-only SQL). "
+    "ALWAYS delegate here for questions about data, tables, metrics, analytics, or reporting. "
+    "Do NOT use for: document search (rag-agent), live API calls (mcp-agent), or historical reasoning (historical-agent)."
+)
+
+
+def build_db_system_prompt(db_catalog: str = "") -> str:
+    return load_prompt("subagent_db", db_catalog=db_catalog)
+
+
+DB_AGENT_SYSTEM_PROMPT = build_db_system_prompt()
+
+
 

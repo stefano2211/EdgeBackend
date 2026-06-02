@@ -12,8 +12,11 @@ from backend.ia.prompts.subagents import (
     MCP_AGENT_SYSTEM_PROMPT,
     HISTORICAL_AGENT_DESCRIPTION,
     HISTORICAL_AGENT_SYSTEM_PROMPT,
+    DB_AGENT_DESCRIPTION,
+    DB_AGENT_SYSTEM_PROMPT,
     build_mcp_system_prompt,
     build_rag_system_prompt,
+    build_db_system_prompt,
 )
 
 __all__ = [
@@ -25,6 +28,9 @@ __all__ = [
     "MCP_AGENT_SYSTEM_PROMPT",
     "HISTORICAL_AGENT_DESCRIPTION",
     "HISTORICAL_AGENT_SYSTEM_PROMPT",
+    "DB_AGENT_DESCRIPTION",
+    "DB_AGENT_SYSTEM_PROMPT",
     "build_mcp_system_prompt",
     "build_rag_system_prompt",
+    "build_db_system_prompt",
 ]

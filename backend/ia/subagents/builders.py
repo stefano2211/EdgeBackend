@@ -15,6 +15,8 @@ from backend.ia.prompts.subagents import (
     build_mcp_system_prompt,
     HISTORICAL_AGENT_DESCRIPTION,
     HISTORICAL_AGENT_SYSTEM_PROMPT,
+    DB_AGENT_DESCRIPTION,
+    build_db_system_prompt,
 )
 
 from backend.ia.subagents.plugin_registry import SubagentPlugin, SubagentRegistry
@@ -143,6 +145,31 @@ def _build_historical_subagent(
     }
 
 
+def _build_db_subagent(
+    context: str,
+    tools: list,
+    db_catalog: str = "",
+    **_,
+) -> dict:
+    from backend.ia.tools.unified.db import create_db_query_tool, create_db_schema_tool
+
+    # Get user_id from context or default to 1
+    user_id = 1  # Will be resolved at runtime via the orchestrator
+
+    db_tools = [
+        create_db_query_tool(user_id=user_id, context=context),
+        create_db_schema_tool(user_id=user_id, context=context),
+    ]
+
+    return {
+        "name": "db-agent",
+        "description": DB_AGENT_DESCRIPTION,
+        "system_prompt": build_db_system_prompt(db_catalog=db_catalog),
+        "tools": db_tools + tools,
+        "model": get_chat_model(),
+    }
+
+
 # ── Auto-register on import ──
 SubagentRegistry.register(SubagentPlugin(
     name="rag",
@@ -166,6 +193,15 @@ SubagentRegistry.register(SubagentPlugin(
     name="historical",
     description=HISTORICAL_AGENT_DESCRIPTION,
     builder=_build_historical_subagent,
+    applies_to={"proactive", "reactive"},
+    requires_rag=False,
+    requires_mcp=False,
+))
+
+SubagentRegistry.register(SubagentPlugin(
+    name="db",
+    description=DB_AGENT_DESCRIPTION,
+    builder=_build_db_subagent,
     applies_to={"proactive", "reactive"},
     requires_rag=False,
     requires_mcp=False,

@@ -115,6 +115,18 @@ def build_reactive_s2_orchestrator_prompt(
         "Uses fine-tuned weights, no external tools. Always fast and cheap to invoke."
     )
 
+    subagent_lines.append(
+        '- task("db-agent", ...) → Database query specialist. '
+        "Executes safe read-only SQL queries against connected databases. "
+        "Returns structured tabular results and schema information."
+    )
+
+    delegation_rules.append(
+        "[DELEGATE to db-agent] when:\n"
+        "  - The event requires SQL-based investigation, aggregate statistics, or database data retrieval.\n"
+        "  - The triage indicates needs_database_query=true.\n"
+    )
+
     subagents_section = "\n".join(subagent_lines)
     data_delegation_rules = "\n".join(delegation_rules)
 
