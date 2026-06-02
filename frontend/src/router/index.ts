@@ -121,6 +121,19 @@ const router = createRouter({
                     component: IntegrationRegistryView
                 }
             ]
+        },
+        {
+            path: '/database',
+            component: () => import('@/views/database/DatabaseLayout.vue'),
+            meta: { layout: 'dashboard', requiresAuth: true },
+            children: [
+                { path: '', redirect: '/database/connections' },
+                {
+                    path: 'connections',
+                    name: 'database-connections',
+                    component: () => import('@/views/database/DatabaseConnectionsView.vue'),
+                },
+            ]
         }
     ],
 })

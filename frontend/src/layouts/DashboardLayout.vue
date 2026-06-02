@@ -23,6 +23,11 @@ const navItems: NavItem[] = [
     icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'
   },
   {
+    label: 'Bases de Datos',
+    path: '/database',
+    icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5l0 6m0-6l-2-2m2 2l2 2'
+  },
+  {
     label: 'Conocimiento',
     path: '/reactive/knowledge',
     icon: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20'
@@ -78,7 +83,15 @@ function isActive(path: string): boolean {
         :key="item.path"
         @click="router.push(item.path)"
         class="w-10 h-10 rounded-lg flex items-center justify-center transition-all group relative"
-        :class="isActive(item.path) ? 'bg-white/10 text-white' : 'text-[#666] hover:text-white hover:bg-white/5'"
+        :class="[
+          isActive(item.path)
+            ? item.path === '/database'
+              ? 'bg-cyan-400/20 text-cyan-400'
+              : 'bg-white/10 text-white'
+            : item.path === '/database'
+              ? 'text-[#666] hover:text-cyan-400 hover:bg-cyan-400/5'
+              : 'text-[#666] hover:text-white hover:bg-white/5'
+        ]"
         :title="item.label"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
