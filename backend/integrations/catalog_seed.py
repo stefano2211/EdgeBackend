@@ -197,26 +197,6 @@ The script will:
 5. Paste the token below in the **api_key** field.
 """,
     ),
-    IntegrationCatalogCreate(
-        slug="maquinaria",
-        name="Monitoreo Maquinaria",
-        description="Consulta métricas industriales en tiempo real (temperatura, vibración, presión, corriente, RPM) desde el servidor de pruebas apiEjemplo.",
-        category="industrial",
-        source_type="custom",
-        command="python",
-        args=["-m", "backend.integrations.custom_mcp_servers.maquinaria.server"],
-        env_prefix="MAQUINARIA_",
-        auth_type="none",
-        auth_env_var_mapping={},
-        auth_setup_guide_markdown="""## Setup Monitoreo Maquinaria
-
-1. Asegúrate de que **apiEjemplo** esté corriendo en `http://localhost:7000`
-   (o en la URL configurada en la variable de entorno `MAQUINARIA_API_URL`).
-2. Esta integración no requiere credenciales — se conecta directamente vía HTTP REST.
-3. Una vez creada la instancia, el proceso stdio arrancará automáticamente
-   y descubrirá las tools disponibles (`get_machinery_metrics`, `list_equipment_status`).
-""",
-    ),
 ]
 
 
@@ -227,6 +207,16 @@ async def seed_integration_catalog(session: AsyncSession) -> tuple[int, int]:
     service = CatalogService(session)
     created = 0
     skipped = 0
+
+    # ── CLEANUP OUTDATED INTEGRATIONS ───────────────────
+    # Delete 'maquinaria' catalog slug if it exists
+    try:
+        await service.delete("maquinaria")
+        logger.info("Outdated catalog entry 'maquinaria' removed from database")
+    except ValueError:
+        pass
+    except Exception as exc:
+        logger.warning("Could not delete outdated catalog entry 'maquinaria': %s", exc)
 
     for entry in CATALOG_SEED:
         existing = await service.get_by_slug(entry.slug)

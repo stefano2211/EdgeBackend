@@ -456,7 +456,7 @@ class IntegrationService:
                 auth_env_var_mapping=catalog.auth_env_var_mapping,
             )
 
-            # Ensure child process keeps necessary variables (such as MAQUINARIA_API_URL)
+            # Ensure child process keeps necessary environment variables
             import os
             stdio_env = {**os.environ, **(env or {})}
 

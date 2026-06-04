@@ -202,7 +202,7 @@ async def _mcp_execute_impl(
                 # The MCP SDK replaces the entire process environment when
                 # StdioServerParameters.env is set (it only inherits 6 safe
                 # vars by default).  Merge the full parent environment so
-                # child processes keep config vars like MAQUINARIA_API_URL.
+                # child processes keep configuration environment variables.
                 import os
                 stdio_env = {**os.environ, **(cred_env or {})}
 
