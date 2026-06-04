@@ -68,13 +68,11 @@ class EngineFactory:
 
     @classmethod
     async def test_connection(cls, connection: DatabaseConnection) -> bool:
+        from sqlalchemy import text
         try:
             engine = await cls.get_engine(connection)
             async with engine.connect() as conn:
-                if connection.db_type == "postgresql":
-                    await conn.execute("SELECT 1")
-                else:
-                    await conn.execute("SELECT 1")
+                await conn.execute(text("SELECT 1"))
             return True
         except Exception:
             return False

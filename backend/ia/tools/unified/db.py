@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from langchain.tools import StructuredTool
+from langchain_core.tools import StructuredTool
 
 from backend.database_connector.service import DatabaseConnectionService
 from backend.database_connector.schemas import QueryResult
@@ -46,7 +46,7 @@ def create_db_query_tool(user_id: int, context: str = "chat") -> StructuredTool:
             return "\n".join(lines)
 
     return StructuredTool.from_function(
-        func=_db_query,
+        coroutine=_db_query,
         name="db_query",
         description=(
             "Execute a SQL SELECT query against a connected database. "
@@ -75,7 +75,7 @@ def create_db_schema_tool(user_id: int, context: str = "chat") -> StructuredTool
                 return await service.build_schema_context_all(user_id, context)
 
     return StructuredTool.from_function(
-        func=_db_schema,
+        coroutine=_db_schema,
         name="db_schema",
         description=(
             "Get the database schema for one or all connected databases. "
