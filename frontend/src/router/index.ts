@@ -9,7 +9,6 @@ import EventsView from '../views/EventsView.vue'
 import WebhooksSettingsView from '../views/settings/WebhooksSettingsView.vue'
 import ReactiveKnowledgeListView from '../views/reactive/ReactiveKnowledgeListView.vue'
 import ReactiveKnowledgeDetailView from '../views/reactive/ReactiveKnowledgeDetailView.vue'
-import ReactiveCredentialsView from '../views/reactive/ReactiveCredentialsView.vue'
 import IntegrationsLayout from '../views/integrations/IntegrationsLayout.vue'
 import IntegrationCatalogView from '../views/integrations/IntegrationCatalogView.vue'
 import IntegrationInstancesView from '../views/integrations/IntegrationInstancesView.vue'
@@ -80,12 +79,6 @@ const router = createRouter({
             name: 'reactive-knowledge-detail',
             component: ReactiveKnowledgeDetailView,
             props: true,
-            meta: { layout: 'dashboard', requiresAuth: true }
-        },
-        {
-            path: '/reactive/credentials',
-            name: 'reactive-credentials',
-            component: ReactiveCredentialsView,
             meta: { layout: 'dashboard', requiresAuth: true }
         },
         {
