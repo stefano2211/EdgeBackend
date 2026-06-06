@@ -36,8 +36,11 @@ class ConversationService:
         return await self.repo.list_by_user(user_id, include_archived)
 
     async def archive_conversation(
-        self, thread_id: str, archive: bool = True
+        self, thread_id: str, user_id: int, archive: bool = True
     ) -> Conversation | None:
+        conv = await self.repo.get_by_thread_id(thread_id)
+        if not conv or conv.user_id != user_id:
+            return None
         conv = await self.repo.archive(thread_id, archive)
         if conv:
             await self.session.commit()

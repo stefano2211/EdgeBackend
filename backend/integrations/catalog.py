@@ -1,24 +1,40 @@
-"""Auto-seed data for the integration catalog.
-
-This module contains the canonical list of pre-configured third-party
-integrations.  It is imported by:
-  - src.main      → startup auto-seed (if table is empty)
-  - seed_catalog  → manual CLI seed script
-"""
+"""Static catalogue of available third-party integrations."""
 
 from __future__ import annotations
 
-import logging
+from dataclasses import dataclass, field
+from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.integrations.catalog_service import CatalogService
-from backend.integrations.schemas import IntegrationCatalogCreate
+@dataclass
+class IntegrationCatalogConfig:
+    slug: str
+    name: str
+    description: str | None = None
+    icon_url: str | None = None
+    category: str | None = None
+    source_type: str = "official"  # "official" | "custom" | "rest_bridge"
+    command: str | None = None
+    args: list[str] = field(default_factory=list)
+    env_prefix: str | None = None
+    rest_bridge_url_template: str | None = None
+    auth_type: str = "none"  # "token" | "oauth2" | "basic" | "connection_string" | "api_key" | "none"
+    auth_env_var_mapping: dict[str, str] = field(default_factory=dict)
+    auth_setup_guide_markdown: str | None = None
+    is_enabled: bool = True
+    is_official_verified: bool = False
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    updated_at: datetime = field(default_factory=datetime.utcnow)
 
-logger = logging.getLogger(__name__)
+    # Added mock ID to maintain backwards compatibility with Pydantic serialization
+    @property
+    def id(self) -> int:
+        # Generate a stable positive integer hash of the slug
+        return abs(hash(self.slug)) % 1000000 + 1
 
-CATALOG_SEED = [
-    IntegrationCatalogCreate(
+
+CATALOG: dict[str, IntegrationCatalogConfig] = {
+    "github": IntegrationCatalogConfig(
         slug="github",
         name="GitHub",
         description="Access repositories, issues, pull requests and commits via the official GitHub MCP server.",
@@ -29,6 +45,7 @@ CATALOG_SEED = [
         env_prefix="GITHUB_",
         auth_type="token",
         auth_env_var_mapping={"PERSONAL_ACCESS_TOKEN": "token"},
+        is_official_verified=True,
         auth_setup_guide_markdown="""## GitHub Setup
 
 1. Go to [GitHub Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens)
@@ -38,7 +55,7 @@ CATALOG_SEED = [
 5. Paste it below in the **token** field.
 """,
     ),
-    IntegrationCatalogCreate(
+    "slack": IntegrationCatalogConfig(
         slug="slack",
         name="Slack",
         description="Send messages and read channel history via the official Slack MCP server.",
@@ -49,6 +66,7 @@ CATALOG_SEED = [
         env_prefix="SLACK_",
         auth_type="token",
         auth_env_var_mapping={"BOT_TOKEN": "token", "TEAM_ID": "team_id"},
+        is_official_verified=True,
         auth_setup_guide_markdown="""## Slack Setup
 
 1. Go to [Slack API → Your Apps](https://api.slack.com/apps)
@@ -60,7 +78,7 @@ CATALOG_SEED = [
 7. Paste both values below.
 """,
     ),
-    IntegrationCatalogCreate(
+    "postgres": IntegrationCatalogConfig(
         slug="postgres",
         name="PostgreSQL",
         description="Query PostgreSQL databases via the official MCP server.",
@@ -71,6 +89,7 @@ CATALOG_SEED = [
         env_prefix="POSTGRES_",
         auth_type="connection_string",
         auth_env_var_mapping={"CONNECTION_STRING": "connection_string"},
+        is_official_verified=True,
         auth_setup_guide_markdown="""## PostgreSQL Setup
 
 Provide a connection string in the format:
@@ -80,7 +99,7 @@ postgresql://user:password@host:port/database
 Paste it below in the **connection_string** field.
 """,
     ),
-    IntegrationCatalogCreate(
+    "gmail": IntegrationCatalogConfig(
         slug="gmail",
         name="Gmail",
         description="Send and read emails via a custom Gmail MCP server with OAuth2 support.",
@@ -153,7 +172,7 @@ The script will:
 | **client_secret** | Your OAuth Client Secret (a 24-character random string) |
 """,
     ),
-    IntegrationCatalogCreate(
+    "aws": IntegrationCatalogConfig(
         slug="aws",
         name="AWS",
         description="Interact with AWS services (S3, CloudWatch, EC2) via the official AWS MCP server.",
@@ -168,6 +187,7 @@ The script will:
             "SECRET_ACCESS_KEY": "secret_access_key",
             "REGION": "region",
         },
+        is_official_verified=True,
         auth_setup_guide_markdown="""## AWS Setup
 
 1. Go to [AWS IAM Console](https://console.aws.amazon.com/iam/)
@@ -177,7 +197,7 @@ The script will:
 5. Paste both below along with your preferred AWS region (e.g. `us-east-1`).
 """,
     ),
-    IntegrationCatalogCreate(
+    "notion": IntegrationCatalogConfig(
         slug="notion",
         name="Notion",
         description="Read and write Notion pages via the official Notion MCP server.",
@@ -188,6 +208,7 @@ The script will:
         env_prefix="NOTION_",
         auth_type="api_key",
         auth_env_var_mapping={"API_TOKEN": "api_key"},
+        is_official_verified=True,
         auth_setup_guide_markdown="""## Notion Setup
 
 1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
@@ -197,43 +218,4 @@ The script will:
 5. Paste the token below in the **api_key** field.
 """,
     ),
-]
-
-
-async def seed_integration_catalog(session: AsyncSession) -> tuple[int, int]:
-    """Idempotently seed the catalog.  Returns (created_count, skipped_count)."""
-    from sqlalchemy.exc import IntegrityError
-
-    service = CatalogService(session)
-    created = 0
-    skipped = 0
-
-    # ── CLEANUP OUTDATED INTEGRATIONS ───────────────────
-    # Delete 'maquinaria' catalog slug if it exists
-    try:
-        await service.delete("maquinaria")
-        logger.info("Outdated catalog entry 'maquinaria' removed from database")
-    except ValueError:
-        pass
-    except Exception as exc:
-        logger.warning("Could not delete outdated catalog entry 'maquinaria': %s", exc)
-
-    for entry in CATALOG_SEED:
-        existing = await service.get_by_slug(entry.slug)
-        if existing:
-            logger.debug("Catalog seed: '%s' already exists — skipping", entry.slug)
-            skipped += 1
-            continue
-
-        try:
-            await service.create(entry)
-            logger.info("Catalog seed: created entry '%s'", entry.slug)
-            created += 1
-        except IntegrityError:
-            logger.debug("Catalog seed: '%s' already exists (race) — skipping", entry.slug)
-            skipped += 1
-            await session.rollback()
-
-    if created:
-        logger.info("Catalog auto-seed complete: %d created, %d skipped", created, skipped)
-    return created, skipped
+}

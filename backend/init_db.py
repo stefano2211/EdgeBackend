@@ -7,7 +7,6 @@ import sys
 from backend.core.database import engine
 from backend.persistencia.models import Base  # noqa: F401  (registers all models)
 from backend.integrations.models import (  # noqa: F401  (registers integration models)
-    IntegrationCatalog,
     IntegrationInstance,
     IntegrationCredential,
 )

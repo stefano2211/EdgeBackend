@@ -51,6 +51,7 @@ class SubagentRegistry:
         enable_mcp: bool = True,
         enable_knowledge: bool = True,
         db_connection_ids: list[str] | None = None,
+        user_id: int | None = None,
     ) -> list[dict]:
         """Build subagent configs for the given context.
 
@@ -87,6 +88,7 @@ class SubagentRegistry:
                 kb_names=kb_names,
                 tool_schemas=tool_schemas,
                 db_connection_ids=db_connection_ids,
+                user_id=user_id,
             )
             result.append(cfg)
         return result

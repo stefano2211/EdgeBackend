@@ -14,7 +14,7 @@ from backend.services.chat_service import ChatService
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),
@@ -25,7 +25,7 @@ async def chat(
     return ChatResponse(**result)
 
 
-@router.post("/chat/stream")
+@router.post("/stream")
 async def chat_stream(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),

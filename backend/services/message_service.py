@@ -66,5 +66,7 @@ class MessageService:
         for msg in history[-history_limit:]:
             if msg.role in ("user", "assistant"):
                 messages.append({"role": msg.role, "content": msg.content})
-        messages.append({"role": "user", "content": request.query})
+        
+        if not history or history[-1].role != "user" or history[-1].content != request.query:
+            messages.append({"role": "user", "content": request.query})
         return messages

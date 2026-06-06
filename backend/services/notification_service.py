@@ -26,7 +26,7 @@ from backend.core.config import settings
 from backend.core.logging import logging
 from backend.integrations.credentials import CredentialManager
 from backend.integrations.custom_mcp_servers.gmail.client import GmailClient
-from backend.integrations.models import IntegrationInstance, IntegrationCatalog
+from backend.integrations.models import IntegrationInstance
 from backend.integrations.repositories.integration_repository import IntegrationInstanceRepository
 from backend.persistencia.models.event import Event
 from backend.persistencia.models.notification_log import NotificationLog
@@ -223,14 +223,12 @@ class NotificationService:
         """Try to build a GmailClient from the user's IntegrationInstance credentials."""
         stmt = (
             select(IntegrationInstance)
-            .join(IntegrationCatalog)
             .where(
                 IntegrationInstance.user_id == user_id,
                 IntegrationInstance.is_enabled.is_(True),
-                IntegrationCatalog.slug.in_(["gmail", "google", "google-mail"]),
+                IntegrationInstance.catalog_slug.in_(["gmail", "google", "google-mail"]),
             )
             .options(selectinload(IntegrationInstance.credentials))
-            .options(selectinload(IntegrationInstance.catalog))
         )
         result = await self._session.execute(stmt)
         instance = result.scalar_one_or_none()

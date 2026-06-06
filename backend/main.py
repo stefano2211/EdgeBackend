@@ -64,17 +64,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("SSE broadcast subscriber not started: %s", exc)
 
-    # Auto-seed integration catalog if empty
-    try:
-        from backend.core.database import AsyncSessionLocal
-        from backend.integrations.catalog_seed import seed_integration_catalog
 
-        async with AsyncSessionLocal() as session:
-            created, _ = await seed_integration_catalog(session)
-            if created:
-                logger.info("Auto-seeded %d integration catalog entries on startup", created)
-    except Exception as exc:
-        logger.warning("Integration catalog auto-seed skipped: %s", exc)
 
     # Start correlation worker (periodic event dedup/grouping)
     try:

@@ -243,6 +243,7 @@ class ReactiveOrchestrator:
             domain=event.domain or "generic",
             tool_schemas=tool_schemas,
             kb_names=enabled_kb_names,
+            user_id=event.triggered_by_user_id,
         )
 
 
@@ -371,28 +372,30 @@ class ReactiveOrchestrator:
     async def _resolve_tool_schemas(
         self, session: AsyncSession, user_id: int | None
     ) -> list[dict]:
-        """Resolve MCP tool schemas from DB for dynamic prompt injection."""
+        """Resolve MCP tool schemas from active integrations dynamically."""
+        if user_id is None:
+            return []
         try:
-            from backend.persistencia.repositories.reactive_tool_repository import (
-                ReactiveToolRepository,
-            )
-            repo = ReactiveToolRepository(session)
-            if user_id is not None:
-                tools = await repo.list_enabled_by_user(user_id)
-            else:
-                tools = await repo.list()
-                tools = [t for t in tools if t.is_enabled]
+            from sqlalchemy import select
+            from backend.integrations.models import IntegrationInstance
+            from backend.integrations.integration_service import IntegrationService
 
-            return [
-                {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameter_schema": t.parameter_schema,
-                }
-                for t in tools
-            ]
+            stmt = select(IntegrationInstance).where(
+                IntegrationInstance.user_id == user_id,
+                IntegrationInstance.is_enabled.is_(True),
+                IntegrationInstance.available_in_reactive.is_(True),
+            )
+            result = await session.execute(stmt)
+            instances = result.scalars().all()
+
+            integration_service = IntegrationService(session)
+            all_tools = []
+            for instance in instances:
+                tools = await integration_service._discover_tools(instance)
+                all_tools.extend(tools)
+            return all_tools
         except Exception as e:
-            logger.warning("Failed to resolve tool schemas: %s", e)
+            logger.warning("Failed to resolve reactive tool schemas dynamically: %s", e)
             return []
 
     async def _emit(self, event_type: str, event_id: int, data: dict) -> None:

@@ -7,56 +7,16 @@ All methods are async and accept / return domain models.
 from __future__ import annotations
 
 from datetime import timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.integrations.interfaces import (
-    IIntegrationCatalogRepository,
     IIntegrationInstanceRepository,
 )
-from backend.integrations.models import IntegrationCatalog, IntegrationCredential, IntegrationInstance
-
-
-class IntegrationCatalogRepository(IIntegrationCatalogRepository):
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
-
-    async def get_by_slug(self, slug: str) -> IntegrationCatalog | None:
-        result = await self._session.execute(
-            select(IntegrationCatalog).where(IntegrationCatalog.slug == slug)
-        )
-        return result.scalar_one_or_none()
-
-    async def get_by_id(self, catalog_id: int) -> IntegrationCatalog | None:
-        result = await self._session.execute(
-            select(IntegrationCatalog).where(IntegrationCatalog.id == catalog_id)
-        )
-        return result.scalar_one_or_none()
-
-    async def list_all(self, *, enabled_only: bool = True) -> list[IntegrationCatalog]:
-        stmt = select(IntegrationCatalog)
-        if enabled_only:
-            stmt = stmt.where(IntegrationCatalog.is_enabled.is_(True))
-        stmt = stmt.order_by(IntegrationCatalog.name)
-        result = await self._session.execute(stmt)
-        return list(result.scalars().all())
-
-    async def create(self, obj: IntegrationCatalog) -> IntegrationCatalog:
-        self._session.add(obj)
-        await self._session.commit()
-        await self._session.refresh(obj)
-        return obj
-
-    async def update(self, obj: IntegrationCatalog) -> IntegrationCatalog:
-        await self._session.commit()
-        await self._session.refresh(obj)
-        return obj
-
-    async def delete(self, obj: IntegrationCatalog) -> None:
-        await self._session.delete(obj)
-        await self._session.commit()
+from backend.integrations.models import IntegrationCredential, IntegrationInstance
 
 
 class IntegrationInstanceRepository(IIntegrationInstanceRepository):
@@ -67,7 +27,6 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
         result = await self._session.execute(
             select(IntegrationInstance)
             .where(IntegrationInstance.id == instance_id)
-            .options(selectinload(IntegrationInstance.catalog))
             .options(selectinload(IntegrationInstance.credentials))
         )
         return result.scalar_one_or_none()
@@ -77,7 +36,6 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
             select(IntegrationInstance)
             .where(IntegrationInstance.id == instance_id)
             .where(IntegrationInstance.user_id == user_id)
-            .options(selectinload(IntegrationInstance.catalog))
             .options(selectinload(IntegrationInstance.credentials))
         )
         return result.scalar_one_or_none()
@@ -127,7 +85,6 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
         result = await self._session.execute(
             select(IntegrationInstance)
             .where(IntegrationInstance.user_id == user_id)
-            .options(selectinload(IntegrationInstance.catalog))
             .order_by(IntegrationInstance.created_at.desc())
         )
         return list(result.scalars().all())
@@ -136,7 +93,6 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
         """Return every integration instance in the system (used by health loops)."""
         result = await self._session.execute(
             select(IntegrationInstance)
-            .options(selectinload(IntegrationInstance.catalog))
             .order_by(IntegrationInstance.created_at.desc())
         )
         return list(result.scalars().all())

@@ -1,6 +1,5 @@
 from backend.integrations.repositories.integration_repository import (
-    IntegrationCatalogRepository,
     IntegrationInstanceRepository,
 )
 
-__all__ = ["IntegrationCatalogRepository", "IntegrationInstanceRepository"]
+__all__ = ["IntegrationInstanceRepository"]

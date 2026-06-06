@@ -65,7 +65,7 @@ async def archive_conversation(
     session: AsyncSession = Depends(get_db),
 ):
     service = ChatService(session)
-    conv = await service.archive_conversation(thread_id, archive)
+    conv = await service.archive_conversation(thread_id, current_user.id, archive)
     if not conv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     return conv

@@ -39,12 +39,6 @@ class User(Base):
     events: Mapped[list["Event"]] = relationship(
         "Event", back_populates="triggered_by", lazy="selectin"
     )
-    reactive_tool_configs: Mapped[list["ReactiveToolConfig"]] = relationship(
-        "ReactiveToolConfig", back_populates="user", lazy="selectin"
-    )
-    reactive_mcp_sources: Mapped[list["ReactiveMCPSource"]] = relationship(
-        "ReactiveMCPSource", back_populates="user", lazy="selectin"
-    )
     domain_configs: Mapped[list["DomainConfig"]] = relationship(
         "DomainConfig", back_populates="user", lazy="selectin", cascade="all, delete-orphan"
     )

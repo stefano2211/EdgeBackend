@@ -151,16 +151,17 @@ def _build_db_subagent(
     context: str,
     tools: list,
     db_catalog: str = "",
+    user_id: int | None = None,
     **_,
 ) -> dict:
     from backend.ia.tools.unified.db import create_db_query_tool, create_db_schema_tool
 
     # Get user_id from context or default to 1
-    user_id = 1  # Will be resolved at runtime via the orchestrator
+    uid = user_id or 1
 
     db_tools = [
-        create_db_query_tool(user_id=user_id, context=context),
-        create_db_schema_tool(user_id=user_id, context=context),
+        create_db_query_tool(user_id=uid, context=context),
+        create_db_schema_tool(user_id=uid, context=context),
     ]
 
     return {
@@ -176,19 +177,19 @@ def _build_data_analyst_subagent(
     context: str,
     tools: list,
     db_connection_ids: list[str] | None = None,
+    user_id: int | None = None,
     **_,
 ) -> dict:
     from backend.ia.tools.unified.data_analyst import create_data_analyst_tools
 
-    # user_id will be resolved at runtime via the orchestrator/config
-    # For now we use 1 as placeholder (the tool factory accepts user_id)
-    user_id = 1
+    # Get user_id from context or default to 1
+    uid = user_id or 1
     data_analyst_tools = create_data_analyst_tools(
-        user_id=user_id, context=context, db_connection_ids=db_connection_ids
+        user_id=uid, context=context, db_connection_ids=db_connection_ids
     )
 
     return {
-        "name": "data-analyst-agent",
+        "name": "data_analyst-agent",
         "description": DATA_ANALYST_AGENT_DESCRIPTION,
         "system_prompt": build_data_analyst_system_prompt(),
         "tools": data_analyst_tools + tools,

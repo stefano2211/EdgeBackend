@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import html
 import json
 from pathlib import Path
 
@@ -236,8 +237,8 @@ async def oauth_start(
         raise HTTPException(status_code=404, detail=str(exc))
 
     catalog = instance.catalog
-    if catalog.auth_type != "oauth2":
-        raise HTTPException(status_code=400, detail="This integration does not use OAuth2")
+    if not catalog or catalog.auth_type != "oauth2":
+        raise HTTPException(status_code=400, detail="This integration does not use OAuth2 or catalog config is missing")
 
     code_verifier, code_challenge = generate_pkce_pair()
     state_manager = get_state_manager()
@@ -278,28 +279,29 @@ async def oauth_callback(
     template = template_path.read_text(encoding="utf-8")
 
     if error:
+        escaped_error = html.escape(error)
         payload = {"type": "oauth-error", "provider": "gmail", "error": error, "error_description": error_description}
-        html = (
+        html_content = (
             template
             .replace("{{icon}}", "❌")
             .replace("{{title}}", "Authorization failed")
-            .replace("{{message}}", f"{error}. This window will close automatically.")
-            .replace("{{payload_json}}", json.dumps(payload))
-            .replace("{{origin}}", settings.FRONTEND_ORIGIN)
+            .replace("{{message}}", f"{escaped_error}. This window will close automatically.")
+            .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
+            .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
         )
-        return HTMLResponse(content=html, status_code=400)
+        return HTMLResponse(content=html_content, status_code=400)
 
     if not code or not state:
         payload = {"type": "oauth-error", "provider": "gmail", "error": "missing_params"}
-        html = (
+        html_content = (
             template
             .replace("{{icon}}", "❌")
             .replace("{{title}}", "Invalid request")
             .replace("{{message}}", "Missing code or state. This window will close automatically.")
-            .replace("{{payload_json}}", json.dumps(payload))
-            .replace("{{origin}}", settings.FRONTEND_ORIGIN)
+            .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
+            .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
         )
-        return HTMLResponse(content=html, status_code=400)
+        return HTMLResponse(content=html_content, status_code=400)
 
     from backend.core.database import AsyncSessionLocal
     async with AsyncSessionLocal() as session:
@@ -310,37 +312,39 @@ async def oauth_callback(
                 state=state,
             )
             payload = {"type": "oauth-success", "provider": "gmail"}
-            html = (
+            html_content = (
                 template
                 .replace("{{icon}}", "✅")
                 .replace("{{title}}", "Authorization successful")
                 .replace("{{message}}", "Gmail connected successfully. This window will close automatically.")
-                .replace("{{payload_json}}", json.dumps(payload))
-                .replace("{{origin}}", settings.FRONTEND_ORIGIN)
+                .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
+                .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
             )
-            return HTMLResponse(content=html)
+            return HTMLResponse(content=html_content)
         except ValueError as exc:
+            escaped_exc = html.escape(str(exc))
             payload = {"type": "oauth-error", "provider": "gmail", "error": "validation", "detail": str(exc)}
-            html = (
+            html_content = (
                 template
                 .replace("{{icon}}", "❌")
                 .replace("{{title}}", "Authorization failed")
-                .replace("{{message}}", f"{exc}. This window will close automatically.")
-                .replace("{{payload_json}}", json.dumps(payload))
-                .replace("{{origin}}", settings.FRONTEND_ORIGIN)
+                .replace("{{message}}", f"{escaped_exc}. This window will close automatically.")
+                .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
+                .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
             )
-            return HTMLResponse(content=html, status_code=400)
+            return HTMLResponse(content=html_content, status_code=400)
         except RuntimeError as exc:
+            escaped_exc = html.escape(str(exc))
             payload = {"type": "oauth-error", "provider": "gmail", "error": "runtime", "detail": str(exc)}
-            html = (
+            html_content = (
                 template
                 .replace("{{icon}}", "❌")
                 .replace("{{title}}", "Authorization failed")
-                .replace("{{message}}", f"{exc}. This window will close automatically.")
-                .replace("{{payload_json}}", json.dumps(payload))
-                .replace("{{origin}}", settings.FRONTEND_ORIGIN)
+                .replace("{{message}}", f"{escaped_exc}. This window will close automatically.")
+                .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
+                .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
             )
-            return HTMLResponse(content=html, status_code=502)
+            return HTMLResponse(content=html_content, status_code=502)
 
 
 # ---------------------------------------------------------------------------

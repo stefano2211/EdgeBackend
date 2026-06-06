@@ -47,9 +47,9 @@ class ChatService:
         return await self.conv_service.list_conversations(user_id, include_archived)
 
     async def archive_conversation(
-        self, thread_id: str, archive: bool = True
+        self, thread_id: str, user_id: int, archive: bool = True
     ) -> Conversation | None:
-        return await self.conv_service.archive_conversation(thread_id, archive)
+        return await self.conv_service.archive_conversation(thread_id, user_id, archive)
 
     async def delete_conversation(self, thread_id: str, user_id: int) -> bool:
         return await self.conv_service.delete_conversation(thread_id, user_id)
@@ -104,7 +104,7 @@ class ChatService:
         reasoning_content = ""
         agents_used: list[str] = []
 
-        async for event in self.orchestrator.stream(request, messages, conv.thread_id, session=self.session):
+        async for event in self.orchestrator.stream(request, messages, conv.thread_id, user_id=user_id, session=self.session):
             if event.get("_internal"):
                 full_content = event["full_content"]
                 reasoning_content = event.get("reasoning_content") or ""
@@ -118,7 +118,7 @@ class ChatService:
 
     async def process_non_stream(self, request: ChatRequest, user_id: int) -> dict:
         conv, messages = await self._prepare_chat(request, user_id)
-        result = await self.orchestrator.non_stream(request, messages, conv.thread_id, session=self.session)
+        result = await self.orchestrator.non_stream(request, messages, conv.thread_id, user_id=user_id, session=self.session)
 
         await self._persist_assistant_message(
             conv.id,

@@ -1,69 +1,65 @@
-"""Reactive Tools router — functional CRUD for ReactiveToolConfig and ReactiveMCPSource.
+"""Reactive Tools router — emulates ReactiveToolConfig and ReactiveMCPSource endpoints dynamically."""
 
-⚠️  Route ordering matters: static routes MUST come before dynamic
-`/{param}` segments, otherwise FastAPI matches the parameter route first
-and the static route never gets hit.
-"""
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from datetime import datetime
 
 from backend.api.v1.schemas.reactive_tool import (
-    ReactiveToolConfigCreate,
-    ReactiveToolConfigUpdate,
     ReactiveToolConfigOut,
-    ReactiveMCPSourceCreate,
-    ReactiveMCPSourceUpdate,
     ReactiveMCPSourceOut,
 )
 from backend.core.deps import get_db, get_current_user
-from backend.core.exceptions import NotFoundError
-from backend.core.logging import logging
 from backend.persistencia.models.user import User
-from backend.services.reactive_tool_config_service import ReactiveToolConfigService
-from backend.services.reactive_mcp_source_service import ReactiveMCPSourceService
+from backend.integrations.models import IntegrationInstance
+from backend.integrations.integration_service import IntegrationService
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reactive/tools", tags=["reactive-tools"])
 
 
-# ── Helpers ──
-
-def _raise_not_found(entity: str, entity_id: int) -> None:
-    raise HTTPException(status_code=404, detail=f"{entity} {entity_id} not found")
-
-
-def _raise_forbidden(detail: str = "Not authorized") -> None:
-    raise HTTPException(status_code=403, detail=detail)
-
-
 # ═══════════════════════════════════════════════════════════════════════════
-#  STATIC ROUTES — must be registered BEFORE any `/{param}` routes
+#  STATIC ROUTES
 # ═══════════════════════════════════════════════════════════════════════════
-
-# ── Reactive ToolConfig ──
 
 @router.get("", response_model=list[ReactiveToolConfigOut])
 async def list_reactive_tools(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ReactiveToolConfigService(session)
-    return await service.repo.list_by_user(current_user.id)
+    stmt = select(IntegrationInstance).where(
+        IntegrationInstance.user_id == current_user.id,
+        IntegrationInstance.is_enabled.is_(True),
+        IntegrationInstance.available_in_reactive.is_(True),
+    )
+    result = await session.execute(stmt)
+    instances = result.scalars().all()
 
-
-@router.post("", response_model=ReactiveToolConfigOut, status_code=201)
-async def create_reactive_tool(
-    data: ReactiveToolConfigCreate,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-):
-    service = ReactiveToolConfigService(session)
-    return await service.create_for_user(data, current_user.id)
+    integration_service = IntegrationService(session)
+    tools_out = []
+    for instance in instances:
+        discovered = await integration_service._discover_tools(instance)
+        for t in discovered:
+            tool_name = t["name"]
+            tool_id = abs(hash(f"{instance.id}:{tool_name}")) % 1000000 + 1
+            tools_out.append(
+                ReactiveToolConfigOut(
+                    id=tool_id,
+                    user_id=current_user.id,
+                    name=tool_name,
+                    description=t.get("description") or "",
+                    is_enabled=True,
+                    config=t.get("config") or {"transport": "stdio"},
+                    parameter_schema=t.get("parameter_schema") or {},
+                    source_id=instance.id,
+                    created_at=instance.created_at,
+                    updated_at=instance.updated_at,
+                )
+            )
+    return tools_out
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  DYNAMIC ROUTES — `/{tool_id}` and sub-resources
+#  DYNAMIC ROUTES
 # ═══════════════════════════════════════════════════════════════════════════
 
 @router.get("/{tool_id}", response_model=ReactiveToolConfigOut)
@@ -72,47 +68,26 @@ async def get_reactive_tool(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ReactiveToolConfigService(session)
-    try:
-        tool = await service.get(tool_id)
-    except NotFoundError:
-        _raise_not_found("ReactiveToolConfig", tool_id)
-    if tool.user_id != current_user.id:
-        _raise_forbidden("Not authorized to access this tool")
-    return tool
+    tools = await list_reactive_tools(current_user=current_user, session=session)
+    for t in tools:
+        if t.id == tool_id:
+            return t
+    raise HTTPException(status_code=404, detail=f"ReactiveToolConfig {tool_id} not found")
 
 
-@router.patch("/{tool_id}", response_model=ReactiveToolConfigOut)
+@router.patch("/{tool_id}", response_model=dict)
 async def update_reactive_tool(
     tool_id: int,
-    data: ReactiveToolConfigUpdate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
 ):
-    service = ReactiveToolConfigService(session)
-    try:
-        tool = await service.get(tool_id)
-    except NotFoundError:
-        _raise_not_found("ReactiveToolConfig", tool_id)
-    if tool.user_id != current_user.id:
-        _raise_forbidden("Not authorized to modify this tool")
-    return await service.update(tool_id, data)
+    return {"status": "ok", "message": "Managed dynamically via Integrations page"}
 
 
 @router.delete("/{tool_id}", status_code=204)
 async def delete_reactive_tool(
     tool_id: int,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
 ):
-    service = ReactiveToolConfigService(session)
-    try:
-        tool = await service.get(tool_id)
-    except NotFoundError:
-        _raise_not_found("ReactiveToolConfig", tool_id)
-    if tool.user_id != current_user.id:
-        _raise_forbidden("Not authorized to delete this tool")
-    await service.delete(tool_id)
     return None
 
 
@@ -123,49 +98,50 @@ async def list_reactive_sources(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
-    service = ReactiveMCPSourceService(session)
-    return await service.repo.list_by_user(current_user.id)
+    stmt = select(IntegrationInstance).where(
+        IntegrationInstance.user_id == current_user.id,
+        IntegrationInstance.is_enabled.is_(True),
+        IntegrationInstance.available_in_reactive.is_(True),
+    )
+    result = await session.execute(stmt)
+    instances = result.scalars().all()
+
+    sources_out = []
+    for inst in instances:
+        sources_out.append(
+            ReactiveMCPSourceOut(
+                id=inst.id,
+                user_id=current_user.id,
+                name=inst.instance_name,
+                description=(inst.catalog.description if inst.catalog else None) or f"Dynamic reactive integration for {inst.instance_name}",
+                url="stdio",
+                type="stdio",
+                is_enabled=inst.is_enabled,
+                created_at=inst.created_at,
+                updated_at=inst.updated_at,
+            )
+        )
+    return sources_out
 
 
-@router.post("/sources/", response_model=ReactiveMCPSourceOut, status_code=201)
+@router.post("/sources/", response_model=dict, status_code=201)
 async def create_reactive_source(
-    data: ReactiveMCPSourceCreate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
 ):
-    service = ReactiveMCPSourceService(session)
-    return await service.create_for_user(data, current_user.id)
+    return {"status": "ok", "message": "Managed dynamically via Integrations page"}
 
 
-@router.patch("/sources/{source_id}", response_model=ReactiveMCPSourceOut)
+@router.patch("/sources/{source_id}", response_model=dict)
 async def update_reactive_source(
     source_id: int,
-    data: ReactiveMCPSourceUpdate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
 ):
-    service = ReactiveMCPSourceService(session)
-    try:
-        source = await service.get(source_id)
-    except NotFoundError:
-        _raise_not_found("ReactiveMCPSource", source_id)
-    if source.user_id != current_user.id:
-        _raise_forbidden("Not authorized to modify this source")
-    return await service.update(source_id, data)
+    return {"status": "ok", "message": "Managed dynamically via Integrations page"}
 
 
 @router.delete("/sources/{source_id}", status_code=204)
 async def delete_reactive_source(
     source_id: int,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
 ):
-    service = ReactiveMCPSourceService(session)
-    try:
-        source = await service.get(source_id)
-    except NotFoundError:
-        _raise_not_found("ReactiveMCPSource", source_id)
-    if source.user_id != current_user.id:
-        _raise_forbidden("Not authorized to delete this source")
-    await service.delete(source_id)
     return None

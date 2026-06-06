@@ -10,60 +10,13 @@ import json
 from typing import Literal
 
 from langchain_core.tools import StructuredTool
+from langchain_core.runnables import RunnableConfig
 
 from backend.core.database import AsyncSessionLocal
 from backend.core.logging import logging
 
 logger = logging.getLogger(__name__)
 
-# ── Configuration maps per context ──
-class _LRUCache:
-    """Simple bounded dict cache with FIFO eviction."""
-
-    def __init__(self, maxsize: int = 256) -> None:
-        self._maxsize = maxsize
-        self._data: dict = {}
-        self._order: list = []
-
-    def get(self, key):
-        return self._data.get(key)
-
-    def set(self, key, value):
-        if key in self._data:
-            self._order.remove(key)
-        elif len(self._data) >= self._maxsize:
-            oldest = self._order.pop(0)
-            del self._data[oldest]
-        self._data[key] = value
-        self._order.append(key)
-
-    def invalidate(self, prefix: str | None = None) -> None:
-        """Remove entries matching an optional key prefix."""
-        if prefix is None:
-            self._data.clear()
-            self._order.clear()
-            return
-        keys_to_remove = [k for k in list(self._order) if k.startswith(prefix)]
-        for k in keys_to_remove:
-            self._data.pop(k, None)
-            if k in self._order:
-                self._order.remove(k)
-
-
-_CONFIG = {
-    "chat": {
-        "repo_cls": "backend.persistencia.repositories.tool_repository.ToolRepository",
-        "source_cls": "backend.persistencia.models.tool_config.MCPSource",
-        "cache": _LRUCache(maxsize=256),
-        "lock": asyncio.Lock(),
-    },
-    "reactive": {
-        "repo_cls": "backend.persistencia.repositories.reactive_tool_repository.ReactiveToolRepository",
-        "source_cls": "backend.persistencia.models.reactive_mcp_source.ReactiveMCPSource",
-        "cache": _LRUCache(maxsize=256),
-        "lock": asyncio.Lock(),
-    },
-}
 
 # Lazy singleton for MCPService (shared, stateless)
 _mcp_service = None
@@ -80,21 +33,13 @@ async def _get_mcp_service():
     return _mcp_service
 
 
-def _import_class(dotted_path: str):
-    parts = dotted_path.split(".")
-    module_path = ".".join(parts[:-1])
-    cls_name = parts[-1]
-    mod = __import__(module_path, fromlist=[cls_name])
-    return getattr(mod, cls_name)
-
-
 async def _mcp_execute_impl(
     tool_config_name: str,
     parameters: dict | None,
     source: Literal["chat", "reactive"],
+    config: RunnableConfig | None = None,
 ) -> str:
-    """Execute MCP tool from the specified context."""
-    cfg = _CONFIG[source]
+    """Execute MCP tool from the specified context dynamically."""
     if parameters is None:
         parameters = {}
 
@@ -105,106 +50,103 @@ async def _mcp_execute_impl(
     )
 
     async with AsyncSessionLocal() as session:
-        RepoCls = _import_class(cfg["repo_cls"])
-        SourceCls = _import_class(cfg["source_cls"])
-        repo = RepoCls(session)
-        tool_config = await repo.get_by_name(tool_config_name)
+        # Resolve user_id from thread_id in config
+        configurable = config.get("configurable", {}) if config else {}
+        thread_id = configurable.get("thread_id")
+        user_id = None
+        if thread_id:
+            try:
+                from sqlalchemy import select
+                if thread_id.startswith("event-"):
+                    parts = thread_id.split("-")
+                    if len(parts) >= 2:
+                        event_id = int(parts[1])
+                        from backend.persistencia.models.event import Event
+                        res = await session.execute(select(Event).where(Event.id == event_id))
+                        evt = res.scalar_one_or_none()
+                        if evt:
+                            user_id = evt.triggered_by_user_id
+                else:
+                    from backend.persistencia.models.conversation import Conversation
+                    res = await session.execute(select(Conversation).where(Conversation.thread_id == thread_id))
+                    conv = res.scalar_one_or_none()
+                    if conv:
+                        user_id = conv.user_id
+            except Exception as e:
+                logger.warning("Error resolving user_id from thread_id=%s: %s", thread_id, e)
 
-        if not tool_config:
-            return json.dumps({"error": f"Tool '{tool_config_name}' not found in {source}."})
+        if not user_id:
+            # Fallback for health checks or testing when user context is missing
+            user_id = 1
+
+        # Find which active IntegrationInstance of the user has the tool
+        from sqlalchemy import select
+        from backend.integrations.models import IntegrationInstance
+        from backend.integrations.integration_service import IntegrationService
+        from backend.integrations.repositories.integration_repository import IntegrationInstanceRepository
+        from backend.integrations.credentials import CredentialManager
+
+        stmt = select(IntegrationInstance).where(
+            IntegrationInstance.user_id == user_id,
+            IntegrationInstance.is_enabled.is_(True)
+        )
+        if source == "chat":
+            stmt = stmt.where(IntegrationInstance.available_in_chat.is_(True))
+        else:
+            stmt = stmt.where(IntegrationInstance.available_in_reactive.is_(True))
+        
+        result = await session.execute(stmt)
+        instances = result.scalars().all()
+
+        target_instance = None
+        target_tool = None
+        integration_service = IntegrationService(session)
+
+        for instance in instances:
+            discovered = await integration_service._discover_tools(instance)
+            matching = next((t for t in discovered if t["name"] == tool_config_name), None)
+            if matching:
+                target_instance = instance
+                target_tool = matching
+                break
+
+        if not target_instance or not target_tool:
+            return json.dumps({"error": f"Tool '{tool_config_name}' not found for user {user_id} in {source} context."})
 
         mcp_service = await _get_mcp_service()
-        config_data = tool_config.config or {}
+        config_data = target_tool.get("config") or {"transport": "stdio"}
         execution_url = config_data.get("url", "")
-        transport_type = config_data.get("transport", "mcp")
+        transport_type = config_data.get("transport", "stdio")
         method = config_data.get("method", "GET")
-        parameter_schema = tool_config.parameter_schema or {}
+        parameter_schema = target_tool.get("parameter_schema") or {}
         schema_hints = parameter_schema.get("response") or {}
 
         clean_arguments = parameters.copy()
-        # Legacy filter params — kept for REST transport backward compat
         kv_filter = clean_arguments.pop("key_values", None)
         kf_filter = clean_arguments.pop("key_figures", None)
 
-        cache = cfg["cache"]
-        lock = cfg["lock"]
-
-        # URL resolution with per-context cache
-        if execution_url and "://" not in execution_url:
-            cache_key = f"{tool_config.source_id}:{execution_url}"
-            cached_url = cache.get(cache_key)
-            if cached_url is not None:
-                execution_url = cached_url
-            else:
-                source_obj = await session.get(SourceCls, tool_config.source_id)
-                if source_obj and source_obj.url:
-                    base = source_obj.url.rstrip("/")
-                    path = execution_url.lstrip("/")
-                    execution_url = f"{base}/{path}"
-                    async with lock:
-                        cache.set(cache_key, execution_url)
-
-        if execution_url and "://" in execution_url:
-            scheme, rest = execution_url.split("://", 1)
-            # Separate path and query to avoid corrupting query params
-            if "?" in rest:
-                path_part, query_part = rest.split("?", 1)
-                while "//" in path_part:
-                    path_part = path_part.replace("//", "/")
-                execution_url = f"{scheme}://{path_part}?{query_part}"
-            else:
-                while "//" in rest:
-                    rest = rest.replace("//", "/")
-                execution_url = f"{scheme}://{rest}"
-
-        # Heuristic REST detection
-        if transport_type == "mcp" and execution_url and "://" in execution_url:
-            if any(domain in execution_url for domain in ["api.", "/api/"]):
-                transport_type = "rest"
-
-        # Resolve stdio config if needed
+        # Stdio environment resolution
         stdio_command = None
         stdio_args = None
         stdio_env = None
-        if transport_type == "stdio":
-            from sqlalchemy import select
-            from backend.integrations.models import IntegrationInstance
-            from backend.integrations.credentials import CredentialManager
-            from backend.integrations.repositories.integration_repository import (
-                IntegrationInstanceRepository,
+        
+        if target_instance.catalog and (transport_type == "stdio" or target_instance.catalog.command):
+            transport_type = "stdio"
+            catalog = target_instance.catalog
+            stdio_command = catalog.command
+            stdio_args = catalog.args or []
+
+            cred_manager = CredentialManager(
+                IntegrationInstanceRepository(session)
             )
-
-            if source == "chat":
-                stmt = select(IntegrationInstance).where(
-                    IntegrationInstance.mcp_source_id == tool_config.source_id
-                )
-            else:
-                stmt = select(IntegrationInstance).where(
-                    IntegrationInstance.reactive_mcp_source_id == tool_config.source_id
-                )
-            result = await session.execute(stmt)
-            instance = result.scalar_one_or_none()
-
-            if instance and instance.catalog:
-                catalog = instance.catalog
-                stdio_command = catalog.command
-                stdio_args = catalog.args or []
-
-                cred_manager = CredentialManager(
-                    IntegrationInstanceRepository(session)
-                )
-                credentials = await cred_manager.get_credentials(instance)
-                cred_env = cred_manager.inject_for_stdio(
-                    credentials,
-                    catalog.env_prefix,
-                    auth_env_var_mapping=catalog.auth_env_var_mapping,
-                )
-                # The MCP SDK replaces the entire process environment when
-                # StdioServerParameters.env is set (it only inherits 6 safe
-                # vars by default).  Merge the full parent environment so
-                # child processes keep configuration environment variables.
-                import os
-                stdio_env = {**os.environ, **(cred_env or {})}
+            credentials = await cred_manager.get_credentials(target_instance)
+            cred_env = cred_manager.inject_for_stdio(
+                credentials,
+                catalog.env_prefix,
+                auth_env_var_mapping=catalog.auth_env_var_mapping,
+            )
+            import os
+            stdio_env = {**os.environ, **(cred_env or {})}
 
         response = await mcp_service.execute_tool(
             base_url=execution_url,
@@ -231,7 +173,7 @@ async def _mcp_execute_impl(
                 "data": response.raw_response,
             }, ensure_ascii=False)
 
-        # Legacy fallback for REST sources without raw_response
+        # Legacy fallback
         result = {
             "source": response.source,
             "key_figures": [
@@ -249,22 +191,16 @@ async def _mcp_execute_impl(
         return json.dumps(result, ensure_ascii=False)
 
 
-def create_mcp_tool(source: Literal["chat", "reactive"] = "chat") -> StructuredTool:
-    """Create an MCP tool bound to a context (chat or reactive).
-
-    Args:
-        source: Which DB tables to read from.
-
-    Returns:
-        StructuredTool ready for DeepAgents.
-    """
-
+def create_mcp_tool(source: Literal["chat", "reactive"]) -> StructuredTool:
+    """Create a LangChain tool wrapper for MCP execution."""
+    
     async def _bound_mcp_execute(
         tool_config_name: str,
         parameters: dict | None = None,
+        config: RunnableConfig | None = None,
     ) -> str:
         return await _mcp_execute_impl(
-            tool_config_name, parameters, source=source
+            tool_config_name, parameters, source=source, config=config
         )
 
     return StructuredTool.from_function(
@@ -284,17 +220,5 @@ def create_mcp_tool(source: Literal["chat", "reactive"] = "chat") -> StructuredT
 
 
 def invalidate_mcp_cache(context: Literal["chat", "reactive"], source_id: int | None = None) -> None:
-    """Invalidate the MCP URL cache for a given context.
-
-    Call this after updating or deleting an MCP source so stale resolved
-    URLs are evicted.
-    """
-    cfg = _CONFIG.get(context)
-    if not cfg:
-        return
-    cache = cfg["cache"]
-    if source_id is not None:
-        cache.invalidate(f"{source_id}:")
-    else:
-        cache.invalidate(None)
-    logger.info("[%s MCP] Cache invalidated for source_id=%s", context, source_id)
+    # No-op since we dynamically discover tools and caches are handled by MCPService connection TTL
+    pass

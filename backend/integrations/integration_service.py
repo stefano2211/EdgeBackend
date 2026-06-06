@@ -1,14 +1,10 @@
-"""IntegrationService — orchestrates the full lifecycle of a user integration.
+"""IntegrationService — orchestrates the lifecycle of a user integration.
 
 Responsibilities:
   1. Create / update / delete IntegrationInstance records
   2. Encrypt and store credentials
-  3. Discover and register MCP tools into the existing ToolConfig system
-  4. Handle both proactive (chat) and reactive contexts
-  5. Dynamically query process statuses from the MCP session cache
-
-Design: depends on abstractions (interfaces) so every collaborator can be
-mocked in tests.
+  3. Verify connection health on credential submission
+  4. Dynamically query process statuses from the MCP session cache
 """
 
 from __future__ import annotations
@@ -23,8 +19,9 @@ from backend.integrations.auth_strategies import get_strategy
 from backend.integrations.credentials import CredentialManager
 from backend.integrations.credential_vault import CredentialVault
 from backend.integrations.interfaces import ICredentialVault
-from backend.integrations.models import IntegrationCatalog, IntegrationInstance
-from backend.integrations.repositories import IntegrationCatalogRepository, IntegrationInstanceRepository
+from backend.integrations.models import IntegrationInstance
+from backend.integrations.repositories import IntegrationInstanceRepository
+from backend.integrations.catalog_service import CatalogService
 from backend.integrations.schemas import (
     CredentialsSubmit,
     IntegrationInstanceCreate,
@@ -46,7 +43,7 @@ class IntegrationService:
         credential_vault: ICredentialVault | None = None,
     ) -> None:
         self._session = session
-        self._catalog_repo = IntegrationCatalogRepository(session)
+        self._catalog_service = CatalogService(session)
         self._instance_repo = IntegrationInstanceRepository(session)
         self._vault = credential_vault or CredentialVault()
         self._credential_manager = CredentialManager(self._instance_repo, self._vault)
@@ -58,7 +55,7 @@ class IntegrationService:
     async def create_instance(
         self, user_id: int, data: IntegrationInstanceCreate
     ) -> IntegrationInstance:
-        catalog = await self._catalog_repo.get_by_slug(data.catalog_slug)
+        catalog = await self._catalog_service.get_by_slug(data.catalog_slug)
         if not catalog:
             raise ValueError(f"Catalog '{data.catalog_slug}' not found")
         if not catalog.is_enabled:
@@ -66,7 +63,7 @@ class IntegrationService:
 
         instance = IntegrationInstance(
             user_id=user_id,
-            catalog_id=catalog.id,
+            catalog_slug=catalog.slug,
             instance_name=data.instance_name,
             available_in_chat=data.available_in_chat,
             available_in_reactive=data.available_in_reactive,
@@ -94,62 +91,17 @@ class IntegrationService:
         self, instance_id: int, user_id: int, data: IntegrationInstanceUpdate
     ) -> IntegrationInstance:
         instance = await self.get_instance(instance_id, user_id)
-        old_chat = instance.available_in_chat
-        old_reactive = instance.available_in_reactive
 
         update_dict = data.model_dump(exclude_unset=True)
         for field, value in update_dict.items():
             setattr(instance, field, value)
         await self._instance_repo.update(instance)
 
-        # Auto-discover & register tools when a context is newly enabled
-        # and credentials are already present.
-        chat_turned_on = (
-            not old_chat and instance.available_in_chat and not instance.mcp_source_id
-        )
-        reactive_turned_on = (
-            not old_reactive
-            and instance.available_in_reactive
-            and not instance.reactive_mcp_source_id
-        )
-
-        if (chat_turned_on or reactive_turned_on) and instance.credentials:
-            try:
-                discovered = await self._discover_tools(instance)
-                if discovered:
-                    if chat_turned_on:
-                        chat_source_id = await self._register_in_chat_context(
-                            instance, instance.catalog, discovered
-                        )
-                        instance.mcp_source_id = chat_source_id
-                    if reactive_turned_on:
-                        reactive_source_id = await self._register_in_reactive_context(
-                            instance, instance.catalog, discovered
-                        )
-                        instance.reactive_mcp_source_id = reactive_source_id
-                    await self._instance_repo.update(instance)
-                    logger.info(
-                        "Auto-registered %d tools for instance id=%s (chat=%s, reactive=%s)",
-                        len(discovered),
-                        instance_id,
-                        chat_turned_on,
-                        reactive_turned_on,
-                    )
-            except Exception as exc:
-                logger.exception(
-                    "Auto-registration failed for instance id=%s after toggle: %s",
-                    instance_id,
-                    exc,
-                )
-
         logger.info("Updated integration instance id=%s", instance_id)
         return instance
 
     async def delete_instance(self, instance_id: int, user_id: int) -> None:
         instance = await self.get_instance(instance_id, user_id)
-
-        # 1. Delete associated MCP sources
-        await self._cleanup_previous_sources(instance)
 
         # Audit: credential deletion
         try:
@@ -165,7 +117,7 @@ class IntegrationService:
         except Exception:
             pass
 
-        # 2. Delete DB record (cascades to credentials)
+        # Delete DB record (cascades to credentials)
         await self._instance_repo.delete(instance)
         logger.info("Deleted integration instance id=%s", instance_id)
 
@@ -176,6 +128,8 @@ class IntegrationService:
     async def get_setup_guide(self, instance_id: int, user_id: int) -> dict[str, Any]:
         instance = await self.get_instance(instance_id, user_id)
         catalog = instance.catalog
+        if not catalog:
+            raise ValueError(f"Catalog config not found for instance '{instance_id}'")
         required_fields = list(catalog.auth_env_var_mapping.values())
         return {
             "catalog_name": catalog.name,
@@ -193,6 +147,8 @@ class IntegrationService:
     ) -> IntegrationInstance:
         instance = await self.get_instance(instance_id, user_id)
         catalog = instance.catalog
+        if not catalog:
+            raise ValueError(f"Catalog config not found for instance '{instance_id}'")
 
         # 1. Validate credentials
         strategy = get_strategy(catalog.auth_type)
@@ -229,27 +185,13 @@ class IntegrationService:
             instance_id,
         )
 
-        # 5. Discover tools from the MCP server and register them
+        # 5. Discover tools from the MCP server to verify connection health
         discovered = await self._discover_tools(instance)
-        if discovered:
-            if instance.available_in_chat:
-                chat_source_id = await self._register_in_chat_context(
-                    instance, catalog, discovered
-                )
-                instance.mcp_source_id = chat_source_id
-            if instance.available_in_reactive:
-                reactive_source_id = await self._register_in_reactive_context(
-                    instance, catalog, discovered
-                )
-                instance.reactive_mcp_source_id = reactive_source_id
-            await self._instance_repo.update(instance)
-            logger.info(
-                "Instance id=%s registered %d tools (chat=%s, reactive=%s)",
-                instance_id,
-                len(discovered),
-                instance.mcp_source_id,
-                instance.reactive_mcp_source_id,
-            )
+        logger.info(
+            "Instance id=%s verified. Discovered %d tools dynamically.",
+            instance_id,
+            len(discovered),
+        )
 
         # Audit: credential creation
         try:
@@ -291,6 +233,8 @@ class IntegrationService:
 
         instance = await self.get_instance(instance_id, user_id)
         catalog = instance.catalog
+        if not catalog:
+            raise ValueError(f"Catalog config not found for instance '{instance_id}'")
 
         # Exchange code for tokens
         token_data = await exchange_code(
@@ -343,27 +287,13 @@ class IntegrationService:
             instance_id,
         )
 
-        # Discover tools from the MCP server and register them
+        # Discover tools from the MCP server to verify connection health
         discovered = await self._discover_tools(instance)
-        if discovered:
-            if instance.available_in_chat:
-                chat_source_id = await self._register_in_chat_context(
-                    instance, catalog, discovered
-                )
-                instance.mcp_source_id = chat_source_id
-            if instance.available_in_reactive:
-                reactive_source_id = await self._register_in_reactive_context(
-                    instance, catalog, discovered
-                )
-                instance.reactive_mcp_source_id = reactive_source_id
-            await self._instance_repo.update(instance)
-            logger.info(
-                "Instance id=%s registered %d tools (chat=%s, reactive=%s)",
-                instance_id,
-                len(discovered),
-                instance.mcp_source_id,
-                instance.reactive_mcp_source_id,
-            )
+        logger.info(
+            "OAuth completed. Discovered %d tools dynamically for instance id=%s",
+            len(discovered),
+            instance_id,
+        )
 
         # Audit: OAuth credential creation
         try:
@@ -380,60 +310,6 @@ class IntegrationService:
 
         return instance
 
-    async def _cleanup_previous_sources(self, instance: IntegrationInstance) -> None:
-        """Delete previous MCP sources and their tools to avoid duplicates."""
-        mcp_source_id = instance.mcp_source_id
-        reactive_mcp_source_id = instance.reactive_mcp_source_id
-
-        if mcp_source_id or reactive_mcp_source_id:
-            instance.mcp_source_id = None
-            instance.reactive_mcp_source_id = None
-            await self._instance_repo.update(instance)
-
-        if mcp_source_id:
-            await self._delete_mcp_source(mcp_source_id)
-
-        if reactive_mcp_source_id:
-            await self._delete_reactive_mcp_source(reactive_mcp_source_id)
-
-    async def _delete_mcp_source(self, source_id: int) -> None:
-        from backend.persistencia.repositories.tool_repository import (
-            MCPSourceRepository,
-            ToolRepository,
-        )
-
-        tool_repo = ToolRepository(self._session)
-        tools = await tool_repo.list_by_source(source_id)
-        for tool in tools:
-            await self._session.delete(tool)
-
-        source_repo = MCPSourceRepository(self._session)
-        source = await source_repo.get_by_id(source_id)
-        if source:
-            await self._session.delete(source)
-
-        await self._session.commit()
-        logger.info("Deleted MCP source id=%s with %d tools", source_id, len(tools))
-
-    async def _delete_reactive_mcp_source(self, source_id: int) -> None:
-        from backend.persistencia.repositories.reactive_tool_repository import (
-            ReactiveMCPSourceRepository,
-            ReactiveToolRepository,
-        )
-
-        tool_repo = ReactiveToolRepository(self._session)
-        tools = await tool_repo.list_by_source(source_id)
-        for tool in tools:
-            await self._session.delete(tool)
-
-        source_repo = ReactiveMCPSourceRepository(self._session)
-        source = await source_repo.get_by_id(source_id)
-        if source:
-            await self._session.delete(source)
-
-        await self._session.commit()
-        logger.info("Deleted reactive MCP source id=%s with %d tools", source_id, len(tools))
-
     async def _discover_tools(
         self, instance: IntegrationInstance
     ) -> list[dict]:
@@ -443,6 +319,9 @@ class IntegrationService:
         the running process, calls tools/list, and normalises the result.
         """
         catalog = instance.catalog
+        if not catalog:
+            logger.warning("Catalog config not found for instance %s", instance.id)
+            return []
 
         try:
             from mcp import ClientSession, StdioServerParameters
@@ -466,123 +345,25 @@ class IntegrationService:
                 env=stdio_env,
             )
 
-            discovered: list[dict] = []
             async with stdio_client(server_params) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
-                    tools_response = await session.list_tools()
-                    for tool in tools_response.tools:
-                        discovered.append(
-                            {
-                                "name": tool.name,
-                                "description": tool.description or "",
-                                "parameter_schema": tool.inputSchema or {},
-                                "config": {"transport": "stdio"},
-                            }
-                        )
-
-            logger.info(
-                "Discovered %d tools for instance id=%s", len(discovered), instance.id
-            )
-            return discovered
+                    result = await session.list_tools()
+                    discovered = []
+                    for tool in result.tools:
+                        discovered.append({
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameter_schema": tool.inputSchema,
+                            "config": {"transport": "stdio"},
+                        })
+                    return discovered
 
         except Exception as exc:
             logger.exception(
                 "Tool discovery failed for instance id=%s: %s", instance.id, exc
             )
             return []
-
-    async def _register_in_chat_context(
-        self,
-        instance: IntegrationInstance,
-        catalog: IntegrationCatalog,
-        discovered: list[dict],
-        context_mode: str = "chat",
-    ) -> int:
-        from backend.persistencia.models.tool_config import MCPSource, ToolConfig
-        from backend.persistencia.repositories.tool_repository import MCPSourceRepository, ToolRepository
-
-        source_repo = MCPSourceRepository(self._session)
-        tool_repo = ToolRepository(self._session)
-
-        source_name = f"{catalog.slug}-u{instance.user_id}-i{instance.id}"
-        source = MCPSource(
-            name=source_name,
-            description=f"{catalog.name} integration for user {instance.user_id}",
-            url="stdio",  # stdio transport
-            type="stdio",
-            is_enabled=True,
-            context_mode=context_mode,
-        )
-        await source_repo.create(source)
-        await self._session.flush()
-
-        for tool_def in discovered:
-            name = tool_def.get("name")
-            if not name:
-                continue
-            tool = ToolConfig(
-                name=name,
-                description=tool_def.get("description") or "",
-                parameter_schema=tool_def.get("parameter_schema")
-                or tool_def.get("inputSchema")
-                or {},
-                config=tool_def.get("config", {"transport": "stdio"}),
-                source_id=source.id,
-                is_enabled=True,
-            )
-            await tool_repo.create(tool)
-
-        await self._session.commit()
-        return source.id
-
-    async def _register_in_reactive_context(
-        self,
-        instance: IntegrationInstance,
-        catalog: IntegrationCatalog,
-        discovered: list[dict],
-    ) -> int:
-        from backend.persistencia.models.reactive_mcp_source import ReactiveMCPSource
-        from backend.persistencia.models.reactive_tool_config import ReactiveToolConfig
-        from backend.persistencia.repositories.reactive_tool_repository import (
-            ReactiveMCPSourceRepository,
-            ReactiveToolRepository,
-        )
-
-        source_repo = ReactiveMCPSourceRepository(self._session)
-        tool_repo = ReactiveToolRepository(self._session)
-
-        source_name = f"{catalog.slug}-u{instance.user_id}-i{instance.id}-reactive"
-        source = ReactiveMCPSource(
-            user_id=instance.user_id,
-            name=source_name,
-            description=f"{catalog.name} reactive integration for user {instance.user_id}",
-            url="stdio",
-            type="stdio",
-            is_enabled=True,
-        )
-        await source_repo.create(source)
-        await self._session.flush()
-
-        for tool_def in discovered:
-            name = tool_def.get("name")
-            if not name:
-                continue
-            tool = ReactiveToolConfig(
-                user_id=instance.user_id,
-                name=name,
-                description=tool_def.get("description") or "",
-                parameter_schema=tool_def.get("parameter_schema")
-                or tool_def.get("inputSchema")
-                or {},
-                config=tool_def.get("config", {"transport": "stdio"}),
-                source_id=source.id,
-                is_enabled=True,
-            )
-            await tool_repo.create(tool)
-
-        await self._session.commit()
-        return source.id
 
     async def get_status(self, instance_id: int, user_id: int) -> dict[str, Any]:
         """Query process status. Checks if the instance is active in the MCPService session cache."""
@@ -599,76 +380,56 @@ class IntegrationService:
         is_active = False
         try:
             catalog = instance.catalog
-            credentials = await self._credential_manager.get_credentials(instance)
-            env = self._credential_manager.inject_for_stdio(
-                credentials,
-                catalog.env_prefix,
-                auth_env_var_mapping=catalog.auth_env_var_mapping,
-            )
-            stdio_env = {**os.environ, **(env or {})}
-            server_params = StdioServerParameters(
-                command=catalog.command or "",
-                args=catalog.args or [],
-                env=stdio_env,
-            )
-            cache_key = MCPService._stdio_cache_key(server_params)
-            if cache_key in MCPService._stdio_cache:
-                is_active = True
-                status = "running"
+            if catalog:
+                credentials = await self._credential_manager.get_credentials(instance)
+                env = self._credential_manager.inject_for_stdio(
+                    credentials,
+                    catalog.env_prefix,
+                    auth_env_var_mapping=catalog.auth_env_var_mapping,
+                )
+                stdio_env = {**os.environ, **(env or {})}
+                server_params = StdioServerParameters(
+                    command=catalog.command or "",
+                    args=catalog.args or [],
+                    env=stdio_env,
+                )
+                cache_key = MCPService._stdio_cache_key(server_params)
+                if cache_key in MCPService._stdio_cache:
+                    is_active = True
+                    status = "running"
         except Exception:
             pass
+
+        command_list = []
+        if instance.catalog:
+            command_list = [instance.catalog.command] + (instance.catalog.args or [])
 
         return {
             "instance": instance,
             "process": {
                 "pid": 0 if is_active else None,
                 "status": status,
-                "command": [instance.catalog.command] + (instance.catalog.args or []),
+                "command": command_list,
             },
         }
 
     async def sync_instance(self, instance_id: int, user_id: int) -> IntegrationInstance:
-        """Force re-discovery and re-registration of tools for an instance.
-
-        Useful when a user toggles a context on after credentials were already
-        submitted, or when the MCP server tool set has changed.
-        """
+        """Force re-discovery of tools for an instance to verify it is healthy."""
         instance = await self.get_instance(instance_id, user_id)
-        catalog = instance.catalog
-
-        # Clean up previous tool registrations to avoid duplicates
-        await self._cleanup_previous_sources(instance)
 
         instance.process_pid = None
         instance.process_status = "running"
         await self._instance_repo.update(instance)
 
-        # Discover current tools from the MCP server
+        # Discover current tools from the MCP server to verify health
         discovered = await self._discover_tools(instance)
-        if discovered:
-            if instance.available_in_chat:
-                chat_source_id = await self._register_in_chat_context(
-                    instance, catalog, discovered
-                )
-                instance.mcp_source_id = chat_source_id
-            if instance.available_in_reactive:
-                reactive_source_id = await self._register_in_reactive_context(
-                    instance, catalog, discovered
-                )
-                instance.reactive_mcp_source_id = reactive_source_id
-            await self._instance_repo.update(instance)
-            logger.info(
-                "Synced instance id=%s — registered %d tools (chat=%s, reactive=%s)",
-                instance_id,
-                len(discovered),
-                instance.available_in_chat,
-                instance.available_in_reactive,
-            )
-        else:
-            logger.info(
-                "Synced instance id=%s — no tools discovered",
-                instance_id,
-            )
+        logger.info(
+            "Synced instance id=%s — verified %d tools dynamically (chat=%s, reactive=%s)",
+            instance_id,
+            len(discovered),
+            instance.available_in_chat,
+            instance.available_in_reactive,
+        )
 
         return instance
 

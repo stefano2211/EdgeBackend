@@ -130,27 +130,43 @@ class ChatOrchestrator:
     """Handles interaction with DeepAgents orchestrator, isolated from persistence."""
 
     async def _resolve_chat_tool_schemas(
-        self, session: AsyncSession
+        self, session: AsyncSession, user_id: int, mcp_source_id: str | None = None
     ) -> list[dict]:
-        """Resolve MCP tool schemas for the chat (proactive) context.
+        """Resolve MCP tool schemas for the chat (proactive) context dynamically.
 
-        Reads enabled ToolConfig records from the chat MCP sources,
-        returning {name, description, parameter_schema} for each.
+        Reads enabled IntegrationInstance records for the user,
+        fetches their tools dynamically via the running MCP servers,
+        returning {name, description, parameter_schema, config: {transport: ...}} for each.
         """
         try:
-            from backend.persistencia.repositories.tool_repository import ToolRepository
-            repo = ToolRepository(session)
-            tools = await repo.list_enabled()
-            return [
-                {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameter_schema": t.parameter_schema,
-                }
-                for t in tools
-            ]
+            from sqlalchemy import select
+            from backend.integrations.models import IntegrationInstance
+            from backend.integrations.integration_service import IntegrationService
+
+            stmt = select(IntegrationInstance).where(
+                IntegrationInstance.user_id == user_id,
+                IntegrationInstance.is_enabled.is_(True),
+                IntegrationInstance.available_in_chat.is_(True),
+            )
+            # If a specific source is selected in request.mcp_source_id
+            if mcp_source_id and mcp_source_id != "none":
+                try:
+                    stmt = stmt.where(IntegrationInstance.id == int(mcp_source_id))
+                except ValueError:
+                    pass
+
+            result = await session.execute(stmt)
+            instances = result.scalars().all()
+
+            integration_service = IntegrationService(session)
+            all_tools = []
+            for instance in instances:
+                # Get dynamic tool list
+                tools = await integration_service._discover_tools(instance)
+                all_tools.extend(tools)
+            return all_tools
         except Exception as e:
-            logger.warning("Failed to resolve chat tool schemas: %s", e)
+            logger.warning("Failed to resolve chat tool schemas dynamically: %s", e)
             return []
 
     async def _resolve_chat_kb_names(
@@ -170,7 +186,7 @@ class ChatOrchestrator:
         return []
 
     async def _create_orchestrator(
-        self, request: ChatRequest, session: AsyncSession | None = None
+        self, request: ChatRequest, user_id: int, session: AsyncSession | None = None
     ):
         """Create a DeepAgents orchestrator respecting user RAG/MCP toggles.
 
@@ -191,7 +207,9 @@ class ChatOrchestrator:
             kb_names = None
             if session:
                 if enable_mcp:
-                    tool_schemas = await self._resolve_chat_tool_schemas(session)
+                    tool_schemas = await self._resolve_chat_tool_schemas(
+                        session, user_id, request.mcp_source_id
+                    )
                 if enable_knowledge:
                     kb_names = await self._resolve_chat_kb_names(
                         session, request.knowledge_base_id
@@ -213,6 +231,7 @@ class ChatOrchestrator:
                 tool_schemas=tool_schemas,
                 kb_names=kb_names,
                 db_connection_ids=request.db_connection_ids,
+                user_id=user_id,
             )
         except Exception as e:
             logger.exception("Failed to create orchestrator: %s", e)
@@ -223,10 +242,11 @@ class ChatOrchestrator:
         request: ChatRequest,
         messages: list[dict[str, str]],
         thread_id: str,
+        user_id: int,
         session: AsyncSession | None = None,
     ) -> AsyncIterator[dict]:
         """Yield SSE events from DeepAgents streaming."""
-        orchestrator = await self._create_orchestrator(request, session=session)
+        orchestrator = await self._create_orchestrator(request, user_id=user_id, session=session)
         if orchestrator is None:
             response_text = f"[Orchestrator unavailable — Echo: {request.query}]"
             full_content = ""
@@ -249,7 +269,7 @@ class ChatOrchestrator:
         reasoning_content = ""
         current_agent = "orchestrator"
         agents_used: set[str] = set()
-
+ 
         async def _run_astream():
             try:
                 async for chunk in orchestrator.astream(
@@ -310,10 +330,11 @@ class ChatOrchestrator:
         request: ChatRequest,
         messages: list[dict[str, str]],
         thread_id: str,
+        user_id: int,
         session: AsyncSession | None = None,
     ) -> dict:
         """Non-streaming chat via DeepAgents."""
-        orchestrator = await self._create_orchestrator(request, session=session)
+        orchestrator = await self._create_orchestrator(request, user_id=user_id, session=session)
         if orchestrator is None:
             return {
                 "thread_id": thread_id,

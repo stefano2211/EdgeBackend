@@ -179,6 +179,8 @@ class CredentialManager:
 
     def _detect_provider(self, instance: IntegrationInstance) -> str:
         """Detect OAuth provider from catalog metadata."""
+        if not instance.catalog:
+            return "unknown"
         slug = instance.catalog.slug.lower()
         if "google" in slug or "gmail" in slug:
             return "google"
