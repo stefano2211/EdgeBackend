@@ -60,3 +60,24 @@
 html {
   scroll-behavior: smooth;
 }
+
+/* ApexCharts dark-theme overrides */
+.apexcharts-tooltip {
+  background: #141414 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ececec !important;
+}
+.apexcharts-tooltip-title {
+  background: #1a1a1a !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  font-family: inherit !important;
+}
+.apexcharts-text {
+  fill: #a0a0a0 !important;
+}
+.apexcharts-legend-text {
+  color: #a0a0a0 !important;
+}
+.apexcharts-datalabels text {
+  fill: #ececec !important;
+}

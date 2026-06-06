@@ -22,7 +22,13 @@ const router = createRouter({
         {
             path: '/',
             name: 'home',
-            redirect: '/events'
+            redirect: '/dashboard'
+        },
+        {
+            path: '/dashboard',
+            name: 'dashboard',
+            component: () => import('@/views/DashboardView.vue'),
+            meta: { layout: 'dashboard', requiresAuth: true }
         },
         {
             path: '/login',
@@ -145,8 +151,8 @@ router.beforeEach((to, _from, next) => {
         // Not authenticated → redirect to login
         next({ name: 'login' })
     } else if ((to.name === 'login' || to.name === 'register') && token) {
-        // Already logged in → redirect to operations center (home)
-        next({ name: 'events' })
+        // Already logged in → redirect to dashboard
+        next({ name: 'dashboard' })
     } else {
         next()
     }
