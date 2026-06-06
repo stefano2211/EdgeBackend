@@ -33,14 +33,14 @@ const navItems: NavItem[] = [
     icon: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20'
   },
   {
-    label: 'Admin',
-    path: '/events?admin=users',
-    icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm10 0h.01M19 12h.01M19 17h.01'
-  },
-  {
     label: 'Webhooks',
     path: '/settings/webhooks',
     icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z'
+  },
+  {
+    label: 'Admin',
+    path: '/events?admin=users',
+    icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm10 0h.01M19 12h.01M19 17h.01'
   }
 ]
 

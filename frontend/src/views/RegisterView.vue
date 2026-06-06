@@ -29,7 +29,7 @@ async function handleRegister() {
     
     if (data.access_token) {
       localStorage.setItem('token', data.access_token)
-      router.push('/chat')
+      router.push('/events')
     }
   } catch (error: any) {
     errorMessage.value = error.response?.data?.detail || 'Failed to create account. Email may already exist.'
