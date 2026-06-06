@@ -404,6 +404,10 @@ class IntegrationService:
         if instance.catalog:
             command_list = [instance.catalog.command] + (instance.catalog.args or [])
 
+        tools_registered = []
+        if status in ("running", "ready"):
+            tools_registered = await self._discover_tools(instance)
+
         return {
             "instance": instance,
             "process": {
@@ -411,6 +415,7 @@ class IntegrationService:
                 "status": status,
                 "command": command_list,
             },
+            "tools_registered": tools_registered,
         }
 
     async def sync_instance(self, instance_id: int, user_id: int) -> IntegrationInstance:
