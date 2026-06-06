@@ -90,14 +90,14 @@ def create_orchestrator(
     # Resolve KB IDs uniformly
     if context == "reactive":
         kb_ids = knowledge_base_ids if enable_knowledge else None
-        default_names = ["historical", "db", "data_analyst"]
+        default_names = ["historical", "db_analyst"]
         if has_rag:
             default_names.insert(0, "rag")
         if has_mcp:
             default_names.append("mcp")
     else:
         kb_ids = [knowledge_base_id] if (knowledge_base_id and enable_knowledge) else None
-        default_names = ["rag", "mcp", "historical", "db", "data_analyst"]
+        default_names = ["rag", "mcp", "historical", "db_analyst"]
         if not has_rag and "rag" in default_names:
             default_names.remove("rag")
         if not has_mcp and "mcp" in default_names:

@@ -15,10 +15,8 @@ from backend.ia.prompts.subagents import (
     build_mcp_system_prompt,
     HISTORICAL_AGENT_DESCRIPTION,
     HISTORICAL_AGENT_SYSTEM_PROMPT,
-    DB_AGENT_DESCRIPTION,
-    build_db_system_prompt,
-    DATA_ANALYST_AGENT_DESCRIPTION,
-    build_data_analyst_system_prompt,
+    DB_ANALYST_AGENT_DESCRIPTION,
+    build_db_analyst_system_prompt,
 )
 
 from backend.ia.subagents.plugin_registry import SubagentPlugin, SubagentRegistry
@@ -147,52 +145,32 @@ def _build_historical_subagent(
     }
 
 
-def _build_db_subagent(
+def _build_db_analyst_subagent(
     context: str,
     tools: list,
     db_catalog: str = "",
-    user_id: int | None = None,
-    **_,
-) -> dict:
-    from backend.ia.tools.unified.db import create_db_query_tool, create_db_schema_tool
-
-    # Get user_id from context or default to 1
-    uid = user_id or 1
-
-    db_tools = [
-        create_db_query_tool(user_id=uid, context=context),
-        create_db_schema_tool(user_id=uid, context=context),
-    ]
-
-    return {
-        "name": "db-agent",
-        "description": DB_AGENT_DESCRIPTION,
-        "system_prompt": build_db_system_prompt(db_catalog=db_catalog),
-        "tools": db_tools + tools,
-        "model": get_chat_model(),
-    }
-
-
-def _build_data_analyst_subagent(
-    context: str,
-    tools: list,
     db_connection_ids: list[str] | None = None,
     user_id: int | None = None,
     **_,
 ) -> dict:
     from backend.ia.tools.unified.data_analyst import create_data_analyst_tools
+    from backend.ia.tools.unified.db import create_db_query_tool, create_db_schema_tool
 
-    # Get user_id from context or default to 1
     uid = user_id or 1
-    data_analyst_tools = create_data_analyst_tools(
+
+    analyst_tools = create_data_analyst_tools(
         user_id=uid, context=context, db_connection_ids=db_connection_ids
     )
+    db_direct_tools = [
+        create_db_query_tool(user_id=uid, context=context),
+        create_db_schema_tool(user_id=uid, context=context),
+    ]
 
     return {
-        "name": "data_analyst-agent",
-        "description": DATA_ANALYST_AGENT_DESCRIPTION,
-        "system_prompt": build_data_analyst_system_prompt(),
-        "tools": data_analyst_tools + tools,
+        "name": "db_analyst-agent",
+        "description": DB_ANALYST_AGENT_DESCRIPTION,
+        "system_prompt": build_db_analyst_system_prompt(db_catalog=db_catalog),
+        "tools": analyst_tools + db_direct_tools + tools,
         "model": get_chat_model(),
     }
 
@@ -226,18 +204,9 @@ SubagentRegistry.register(SubagentPlugin(
 ))
 
 SubagentRegistry.register(SubagentPlugin(
-    name="db",
-    description=DB_AGENT_DESCRIPTION,
-    builder=_build_db_subagent,
-    applies_to={"proactive", "reactive"},
-    requires_rag=False,
-    requires_mcp=False,
-))
-
-SubagentRegistry.register(SubagentPlugin(
-    name="data_analyst",
-    description=DATA_ANALYST_AGENT_DESCRIPTION,
-    builder=_build_data_analyst_subagent,
+    name="db_analyst",
+    description=DB_ANALYST_AGENT_DESCRIPTION,
+    builder=_build_db_analyst_subagent,
     applies_to={"proactive", "reactive"},
     requires_rag=False,
     requires_mcp=False,

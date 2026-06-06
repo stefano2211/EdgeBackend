@@ -245,7 +245,7 @@ class TestMessageServiceHistory:
 class TestUserPropagationAndNaming:
     """Verify that user_id is passed to builders and the analyst agent name is correct."""
 
-    def test_data_analyst_agent_spelling_and_propagation(self):
+    def test_db_analyst_agent_spelling_and_propagation(self):
         from backend.ia.subagents.plugin_registry import SubagentRegistry
         
         # Build all with a mock user_id
@@ -256,16 +256,16 @@ class TestUserPropagationAndNaming:
             user_id=42
         )
         
-        # Check that data_analyst is present and has the correct name
-        analyst = next((s for s in subagents if s.get("name") == "data_analyst-agent"), None)
-        assert analyst is not None, "data_analyst-agent should be in the list with spelling using underscore"
+        # Check that db_analyst is present and has the correct name
+        analyst = next((s for s in subagents if s.get("name") == "db_analyst-agent"), None)
+        assert analyst is not None, "db_analyst-agent should be in the list"
         
         # Check that the tools are instantiated with user_id = 42
         # Data analyst tools are first in the list
         tool_args = analyst["tools"][0].args
         # The tool constructor should use the propagated user_id
         # Let's verify that the tool has our user_id bound or config
-        assert analyst["name"] == "data_analyst-agent"
+        assert analyst["name"] == "db_analyst-agent"
 
 
 class TestOAuthCallbackXssPrevention:
@@ -290,6 +290,133 @@ class TestOAuthCallbackXssPrevention:
         # Verify script tag payload is escaped and not executed as HTML
         assert "<script>alert('XSS')</script>" not in html_content
         assert "&lt;script&gt;alert(&#x27;XSS&#x27;)&lt;/script&gt;" in html_content
+
+
+class TestOAuthOriginResolution:
+    """Verify dynamic resolution of frontend origin."""
+
+    @pytest.mark.asyncio
+    async def test_callback_peeks_origin_from_state(self):
+        from backend.integrations.routers import oauth_callback
+        from backend.integrations.oauth.state_manager import get_state_manager
+        from unittest.mock import patch
+
+        # Mock state manager's peek to return a payload with custom frontend_origin
+        state_mgr = get_state_manager()
+        mock_peek = AsyncMock(return_value={
+            "frontend_origin": "http://my-custom-frontend:3000",
+            "instance_id": 123
+        })
+        
+        with patch.object(state_mgr, "peek", mock_peek):
+            # Also mock the database/service calls to avoid real Redis/DB hits
+            with patch("backend.integrations.routers.IntegrationService") as MockService:
+                mock_service_inst = MockService.return_value
+                mock_service_inst.complete_oauth = AsyncMock()
+
+                req = MagicMock()
+                response = await oauth_callback(
+                    request=req,
+                    code="valid_code",
+                    state="valid_state"
+                )
+                
+                assert response.status_code == 200
+                html_content = response.body.decode("utf-8")
+                # The response should include the custom origin in postMessage
+                assert "http://my-custom-frontend:3000" in html_content
+
+
+class TestSyncInstanceCredentialsGuard:
+    """Verify that sync_instance raises ValueError when credentials are missing."""
+
+    @pytest.mark.asyncio
+    async def test_sync_raises_value_error_without_credentials(self):
+        from backend.integrations.integration_service import IntegrationService
+        from backend.integrations.models import IntegrationInstance
+        from backend.integrations.catalog import IntegrationCatalogConfig
+        
+        session = AsyncMock()
+        service = IntegrationService(session)
+        
+        # Mock instance repo
+        instance_repo = AsyncMock()
+        service._instance_repo = instance_repo
+        
+        # Mock instance with empty credentials and a catalog that requires auth
+        instance = MagicMock(spec=IntegrationInstance)
+        instance.id = 1
+        instance.user_id = 1
+        instance.credentials = []
+        
+        catalog = MagicMock(spec=IntegrationCatalogConfig)
+        catalog.auth_type = "oauth2"
+        instance.catalog = catalog
+        
+        instance_repo.get_by_id_for_user.return_value = instance
+        
+        with pytest.raises(ValueError, match="No credentials configured"):
+            await service.sync_instance(instance_id=1, user_id=1)
+            
+    @pytest.mark.asyncio
+    async def test_discover_tools_returns_empty_without_credentials(self):
+        from backend.integrations.integration_service import IntegrationService
+        from backend.integrations.models import IntegrationInstance
+        from backend.integrations.catalog import IntegrationCatalogConfig
+        
+        session = AsyncMock()
+        service = IntegrationService(session)
+        
+        # Mock instance with empty credentials and a catalog that requires auth
+        instance = MagicMock(spec=IntegrationInstance)
+        instance.id = 1
+        instance.credentials = []
+        
+        catalog = MagicMock(spec=IntegrationCatalogConfig)
+        catalog.auth_type = "oauth2"
+        instance.catalog = catalog
+        
+        discovered = await service._discover_tools(instance)
+        assert discovered == []
+
+
+class TestIntegrationInstanceMcpSourceProperties:
+    """Verify that IntegrationInstance returns correctly computed mcp_source_id properties."""
+
+    def test_mcp_source_id_properties_when_running(self):
+        from backend.integrations.models import IntegrationInstance
+
+        instance = IntegrationInstance()
+        instance.id = 7
+        instance.is_enabled = True
+        instance.process_status = "running"
+
+        assert instance.mcp_source_id == 7
+        assert instance.reactive_mcp_source_id == 7
+
+    def test_mcp_source_id_properties_when_stopped(self):
+        from backend.integrations.models import IntegrationInstance
+
+        instance = IntegrationInstance()
+        instance.id = 7
+        instance.is_enabled = True
+        instance.process_status = "stopped"
+
+        assert instance.mcp_source_id is None
+        assert instance.reactive_mcp_source_id is None
+
+    def test_mcp_source_id_properties_when_disabled(self):
+        from backend.integrations.models import IntegrationInstance
+
+        instance = IntegrationInstance()
+        instance.id = 7
+        instance.is_enabled = False
+        instance.process_status = "running"
+
+        assert instance.mcp_source_id is None
+        assert instance.reactive_mcp_source_id is None
+
+
 
 
 

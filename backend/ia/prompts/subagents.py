@@ -62,41 +62,21 @@ HISTORICAL_AGENT_DESCRIPTION = (
 HISTORICAL_AGENT_SYSTEM_PROMPT = load_prompt("subagent_historical")
 
 
-# ── DB Agent ──
-DB_AGENT_DESCRIPTION = (
-    "Database query and structured data retrieval specialist. "
-    "Use ONLY when the user asks to query, analyze, or explore data from their connected databases. "
-    "Has access to: db_schema (discover tables/columns) and db_query (execute read-only SQL). "
-    "ALWAYS delegate here for questions about data, tables, metrics, analytics, or reporting. "
-    "Do NOT use for: document search (rag-agent), live API calls (mcp-agent), or historical reasoning (historical-agent)."
+# ── DB Analyst Agent ──
+DB_ANALYST_AGENT_DESCRIPTION = (
+    "Database query, reporting, and data analysis specialist. "
+    "Use ONLY when the user asks to query, analyze, aggregate, explore, or report data from their connected databases (e.g. counting, averaging, listing records, finding top/max values). "
+    "Has access to: list_db_connections, retrieve_relevant_schema, db_schema, execute_data_query, db_query, and explain_sql_query. "
+    "ALWAYS delegate here for questions about data, tables, metrics, database analytics, or reporting. "
+    "Do NOT use for: document search (use rag-agent), live API calls to non-DB services (use mcp-agent)."
 )
 
 
-def build_db_system_prompt(db_catalog: str = "") -> str:
-    return load_prompt("subagent_db", db_catalog=db_catalog)
+def build_db_analyst_system_prompt(db_catalog: str = "") -> str:
+    return load_prompt("subagent_db_analyst", db_catalog=db_catalog)
 
 
-DB_AGENT_SYSTEM_PROMPT = build_db_system_prompt()
-
-
-# ── Data Analyst Agent ──
-DATA_ANALYST_AGENT_DESCRIPTION = (
-    "Natural-language data analyst specialist. "
-    "Use when the user asks questions about their connected databases in plain language. "
-    "Converts natural-language questions into SQL, executes them with auto-correction, "
-    "and returns interpreted insights in Spanish. "
-    "Has access to: list_db_connections, retrieve_relevant_schema, execute_data_query, explain_sql_query. "
-    "ALWAYS delegate here for: data exploration, business questions about DB contents, "
-    "metrics, reporting, aggregations, filtering, or any question that starts with 'how many', 'top', 'average', 'list', etc. "
-    "Do NOT use for: document search (rag-agent), live API calls (mcp-agent), historical reasoning without DB (historical-agent)."
-)
-
-
-def build_data_analyst_system_prompt() -> str:
-    return load_prompt("subagent_data_analyst")
-
-
-DATA_ANALYST_AGENT_SYSTEM_PROMPT = build_data_analyst_system_prompt()
+DB_ANALYST_AGENT_SYSTEM_PROMPT = build_db_analyst_system_prompt()
 
 
 

@@ -42,6 +42,7 @@ class OAuthStateManager:
         client_secret: str,
         code_verifier: str,
         provider: str,
+        frontend_origin: str | None = None,
         ttl: int = _DEFAULT_TTL,
     ) -> str:
         """Generate a random state, store context in Redis, return the state."""
@@ -53,12 +54,22 @@ class OAuthStateManager:
             "client_secret": client_secret,
             "code_verifier": code_verifier,
             "provider": provider,
+            "frontend_origin": frontend_origin,
         }
         client = await self._client()
         key = f"{_PREFIX}:{state}"
         await client.setex(key, ttl, json.dumps(payload))
         logger.info("[OAuthState] Stored state=%s instance=%s ttl=%s", state[:8] + "...", instance_id, ttl)
         return state
+
+    async def peek(self, state: str) -> dict[str, Any] | None:
+        """Retrieve the stored context without deleting it."""
+        client = await self._client()
+        key = f"{_PREFIX}:{state}"
+        raw = await client.get(key)
+        if raw:
+            return json.loads(raw)
+        return None
 
     async def get(self, state: str) -> dict[str, Any] | None:
         """Retrieve and delete the stored context (one-time read)."""

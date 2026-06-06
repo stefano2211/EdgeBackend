@@ -323,6 +323,15 @@ class IntegrationService:
             logger.warning("Catalog config not found for instance %s", instance.id)
             return []
 
+        # If the integration requires credentials but none are configured, we cannot start the server
+        if catalog.auth_type != "none" and not instance.credentials:
+            logger.warning(
+                "Cannot discover tools for instance %s: catalog requires '%s' auth but no credentials are saved",
+                instance.id,
+                catalog.auth_type,
+            )
+            return []
+
         try:
             from mcp import ClientSession, StdioServerParameters
             from mcp.client.stdio import stdio_client
@@ -421,6 +430,10 @@ class IntegrationService:
     async def sync_instance(self, instance_id: int, user_id: int) -> IntegrationInstance:
         """Force re-discovery of tools for an instance to verify it is healthy."""
         instance = await self.get_instance(instance_id, user_id)
+
+        catalog = instance.catalog
+        if catalog and catalog.auth_type != "none" and not instance.credentials:
+            raise ValueError("No credentials configured. Please set up authentication for this integration first.")
 
         instance.process_pid = None
         instance.process_status = "running"

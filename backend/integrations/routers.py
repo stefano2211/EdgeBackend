@@ -212,6 +212,7 @@ class OAuthStartResponse(BaseModel):
 async def oauth_start(
     instance_id: int,
     provider: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
@@ -240,6 +241,17 @@ async def oauth_start(
     if not catalog or catalog.auth_type != "oauth2":
         raise HTTPException(status_code=400, detail="This integration does not use OAuth2 or catalog config is missing")
 
+    # Resolve frontend origin dynamically from request headers
+    frontend_origin = request.headers.get("origin")
+    if not frontend_origin:
+        referer = request.headers.get("referer")
+        if referer:
+            from urllib.parse import urlparse
+            parsed = urlparse(referer)
+            frontend_origin = f"{parsed.scheme}://{parsed.netloc}"
+    if not frontend_origin:
+        frontend_origin = settings.FRONTEND_ORIGIN
+
     code_verifier, code_challenge = generate_pkce_pair()
     state_manager = get_state_manager()
     state = await state_manager.create(
@@ -249,6 +261,7 @@ async def oauth_start(
         client_secret=settings.GMAIL_CLIENT_SECRET,
         code_verifier=code_verifier,
         provider=provider,
+        frontend_origin=frontend_origin,
     )
 
     auth_url = build_authorization_url(
@@ -278,6 +291,14 @@ async def oauth_callback(
     template_path = Path(__file__).parent / "oauth" / "callback_template.html"
     template = template_path.read_text(encoding="utf-8")
 
+    # Resolve target origin from stored OAuth state if possible
+    frontend_origin = settings.FRONTEND_ORIGIN
+    if state:
+        state_manager = get_state_manager()
+        ctx = await state_manager.peek(state)
+        if ctx and "frontend_origin" in ctx and ctx["frontend_origin"]:
+            frontend_origin = ctx["frontend_origin"]
+
     if error:
         escaped_error = html.escape(error)
         payload = {"type": "oauth-error", "provider": "gmail", "error": error, "error_description": error_description}
@@ -287,7 +308,7 @@ async def oauth_callback(
             .replace("{{title}}", "Authorization failed")
             .replace("{{message}}", f"{escaped_error}. This window will close automatically.")
             .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
-            .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
+            .replace("{{origin}}", html.escape(frontend_origin))
         )
         return HTMLResponse(content=html_content, status_code=400)
 
@@ -299,7 +320,7 @@ async def oauth_callback(
             .replace("{{title}}", "Invalid request")
             .replace("{{message}}", "Missing code or state. This window will close automatically.")
             .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
-            .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
+            .replace("{{origin}}", html.escape(frontend_origin))
         )
         return HTMLResponse(content=html_content, status_code=400)
 
@@ -318,7 +339,7 @@ async def oauth_callback(
                 .replace("{{title}}", "Authorization successful")
                 .replace("{{message}}", "Gmail connected successfully. This window will close automatically.")
                 .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
-                .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
+                .replace("{{origin}}", html.escape(frontend_origin))
             )
             return HTMLResponse(content=html_content)
         except ValueError as exc:
@@ -330,7 +351,7 @@ async def oauth_callback(
                 .replace("{{title}}", "Authorization failed")
                 .replace("{{message}}", f"{escaped_exc}. This window will close automatically.")
                 .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
-                .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
+                .replace("{{origin}}", html.escape(frontend_origin))
             )
             return HTMLResponse(content=html_content, status_code=400)
         except RuntimeError as exc:
@@ -342,7 +363,7 @@ async def oauth_callback(
                 .replace("{{title}}", "Authorization failed")
                 .replace("{{message}}", f"{escaped_exc}. This window will close automatically.")
                 .replace("{{payload_json}}", json.dumps(payload).replace("</", "<\\/"))
-                .replace("{{origin}}", html.escape(settings.FRONTEND_ORIGIN))
+                .replace("{{origin}}", html.escape(frontend_origin))
             )
             return HTMLResponse(content=html_content, status_code=502)
 

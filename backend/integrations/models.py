@@ -72,6 +72,18 @@ class IntegrationInstance(Base):
             return self.catalog.id
         return 0
 
+    @property
+    def mcp_source_id(self) -> int | None:
+        if self.process_status in ("running", "ready") and self.is_enabled:
+            return self.id
+        return None
+
+    @property
+    def reactive_mcp_source_id(self) -> int | None:
+        if self.process_status in ("running", "ready") and self.is_enabled:
+            return self.id
+        return None
+
 
 class IntegrationCredential(Base):
     """Encrypted secret bound to an IntegrationInstance."""
