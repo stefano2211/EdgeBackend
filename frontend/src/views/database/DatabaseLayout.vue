@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 const tabs = [
-    { name: 'Conexiones', path: '/database/connections' },
+    { name: 'Conexiones', path: '/connections' },
 ]
 
 function isActive(path: string): boolean {

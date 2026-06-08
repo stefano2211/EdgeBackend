@@ -54,7 +54,7 @@ onMounted(load)
           {{ enabledCount }}/{{ items.length }} activas
         </div>
         <button
-          @click="router.push('/events')"
+          @click="router.push('/operations')"
           class="px-3 py-1.5 rounded-lg text-[12px] bg-purple-500/15 text-purple-300 border border-purple-500/20 hover:bg-purple-500/25 transition-colors"
         >
           Volver a Eventos

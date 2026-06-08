@@ -4,7 +4,7 @@
     <header class="px-8 mb-8 flex items-center justify-between shrink-0">
       <div class="flex items-center gap-5">
         <router-link 
-          to="/reactive/knowledge" 
+          to="/resources/knowledge" 
           class="w-10 h-10 rounded-xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-[#7a7a7a] hover:text-white hover:bg-white/[0.08] transition-all group"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="group-hover:-translate-x-0.5 transition-transform"><path d="m15 18-6-6 6-6"/></svg>

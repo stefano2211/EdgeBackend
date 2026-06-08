@@ -36,7 +36,7 @@ function formatDate(d: string) {
 }
 
 function goToEvents() {
-  router.push('/events')
+  router.push('/operations')
 }
 </script>
 

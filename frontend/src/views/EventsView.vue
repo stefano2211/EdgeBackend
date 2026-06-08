@@ -446,7 +446,7 @@ function formatTime(d: string) {
           <button @click="showCreateModal = true" class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Nuevo evento manual">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
           </button>
-          <button @click="router.push('/events?admin=users')" class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Panel de Administración">
+          <button @click="router.push('/admin/users')" class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Panel de Administración">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </button>
           <button @click="loadEvents" class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Refrescar">
@@ -529,7 +529,7 @@ function formatTime(d: string) {
           <span class="text-[12px] text-purple-300">No tienes herramientas ni bases de conocimiento activadas para eventos reactivos.</span>
         </div>
         <button
-          @click="router.push('/reactive/tools')"
+          @click="router.push('/config/tools')"
           class="shrink-0 px-3 py-1 rounded-lg text-[11px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition-colors"
         >
           Configurar ahora
@@ -815,7 +815,7 @@ function formatTime(d: string) {
                 </select>
               </template>
               <template v-else>
-                <button @click="router.push('/settings/webhooks'); showCreateModal = false" class="text-[11px] text-violet-400 hover:text-violet-300 underline">
+                <button @click="router.push('/config/webhooks'); showCreateModal = false" class="text-[11px] text-violet-400 hover:text-violet-300 underline">
                   Configurar Webhook primero
                 </button>
               </template>

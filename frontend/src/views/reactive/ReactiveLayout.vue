@@ -7,13 +7,13 @@ const router = useRouter()
 const navItems = [
   {
     label: 'Conocimiento',
-    path: '/reactive/knowledge',
+    path: '/resources/knowledge',
     icon: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20',
     color: 'emerald'
   },
   {
     label: 'Bases de Datos',
-    path: '/reactive/database',
+    path: '/connections',
     icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
     color: 'cyan'
   },
@@ -73,7 +73,7 @@ function getNavItemClasses(item: any) {
       <!-- Back to Events -->
       <div class="px-4 py-6 border-t border-white/[0.03] relative z-10">
         <button
-          @click="router.push('/events')"
+          @click="router.push('/operations')"
           class="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-[13px] font-medium transition-all text-left text-[#4a4a4a] hover:bg-white/[0.03] hover:text-white group"
         >
           <div class="w-8 h-8 rounded-lg bg-white/[0.02] flex items-center justify-center group-hover:bg-white/[0.05]">

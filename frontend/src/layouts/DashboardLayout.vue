@@ -19,7 +19,7 @@ const navItems: NavItem[] = [
   },
   {
     label: 'Operations',
-    path: '/events',
+    path: '/operations',
     icon: 'M13 2 3 14h9l-1 8 10-12h-9l1-8z'
   },
   {
@@ -28,42 +28,24 @@ const navItems: NavItem[] = [
     icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'
   },
   {
-    label: 'Bases de Datos',
-    path: '/database',
+    label: 'Connections',
+    path: '/connections',
     icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5l0 6m0-6l-2-2m2 2l2 2'
   },
   {
-    label: 'Conocimiento',
-    path: '/reactive/knowledge',
+    label: 'Knowledge',
+    path: '/resources/knowledge',
     icon: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20'
   },
-  {
-    label: 'Webhooks',
-    path: '/settings/webhooks',
-    icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z'
-  },
+
   {
     label: 'Admin',
-    path: '/events?admin=users',
+    path: '/admin/users',
     icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm10 0h.01M19 12h.01M19 17h.01'
   }
 ]
 
 function isActive(path: string): boolean {
-  if (path.includes('?')) {
-    const [basePath, queryStr] = path.split('?')
-    const params = new URLSearchParams(queryStr)
-    const matchesBase = route.path === basePath
-    for (const [key, value] of params.entries()) {
-      if (route.query[key] !== value) return false
-    }
-    return matchesBase
-  }
-
-  if (path === '/events' && route.query.admin) {
-    return false
-  }
-
   return route.path === path || route.path.startsWith(path + '/')
 }
 </script>

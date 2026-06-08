@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 const tabs = [
-  { name: 'Prompts', path: '/workspace/prompts' }
+  { name: 'Prompts', path: '/config/prompts' }
 ]
 </script>
 

@@ -10,14 +10,15 @@ const summary = ref<DashboardSummary | null>(null)
 const isLoading = ref(false)
 const error = ref('')
 
-async function load() {
+  async function load() {
   isLoading.value = true
   error.value = ''
   try {
     summary.value = await getDashboardSummary()
-  } catch (e) {
-    error.value = 'No se pudo cargar el dashboard.'
-    console.error(e)
+  } catch (e: any) {
+    const backendMsg = e?.response?.data?.detail
+    error.value = backendMsg || 'No se pudo cargar el dashboard.'
+    console.error('Dashboard load error:', e)
   } finally {
     isLoading.value = false
   }
