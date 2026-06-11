@@ -93,7 +93,7 @@ class CredentialManager:
         # Audit: log credential access (fire-and-forget, values never logged)
         try:
             from sqlalchemy.ext.asyncio import AsyncSession
-            session = self._repo._session  # Access the underlying session
+            session = self._repo.session  # Access the underlying session
             await log_credential_event(
                 session,
                 CredentialAction.ACCESSED,
@@ -150,7 +150,7 @@ class CredentialManager:
             logger.info("OAuth2 token refreshed for instance=%s", instance.id)
             try:
                 await log_credential_event(
-                    self._repo._session,
+                    self._repo.session,
                     CredentialAction.REFRESHED,
                     user_id=instance.user_id,
                     instance_id=instance.id,
@@ -164,7 +164,7 @@ class CredentialManager:
             logger.exception("OAuth2 refresh failed for instance=%s: %s", instance.id, exc)
             try:
                 await log_credential_event(
-                    self._repo._session,
+                    self._repo.session,
                     CredentialAction.REFRESH_FAILED,
                     user_id=instance.user_id,
                     instance_id=instance.id,

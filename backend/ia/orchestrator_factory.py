@@ -24,7 +24,7 @@ from backend.ia.memory import get_checkpointer, get_store
 from backend.ia.prompts.orchestrator import build_orchestrator_prompt
 from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
 from backend.ia.subagents.plugin_registry import SubagentRegistry
-from backend.ia.subagents.builders import *  # ensure plugins are registered
+import backend.ia.subagents.builders  # ensure plugins are registered
 
 logger = logging.getLogger(__name__)
 

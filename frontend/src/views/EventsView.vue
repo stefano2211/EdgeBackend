@@ -29,10 +29,38 @@ const sseConnected = ref(false)
 let sseSource: EventSource | null = null
 const showConfigBanner = ref(false)
 
-// Filters
-const filterSeverity = ref<EventSeverityText | ''>('')
-const filterStatus = ref<EventStatus | ''>('')
-const filterSource = ref<string>('')
+// Filters (agnostic)
+interface FilterDef {
+  key: keyof AuraEvent
+  label: string
+  order?: string[]
+  labelMap?: Record<string, string>
+}
+
+const filterDefinitions: FilterDef[] = [
+  {
+    key: 'severity_text',
+    label: 'Severidad',
+    order: ['critical', 'error', 'warning', 'info', 'debug'],
+    labelMap: { critical: 'Crítica', error: 'Error', warning: 'Advertencia', info: 'Info', debug: 'Debug' },
+  },
+  {
+    key: 'status',
+    label: 'Estado',
+    order: ['pending', 'analyzing', 'awaiting_approval', 'executing', 'completed', 'failed', 'suppressed'],
+    labelMap: { pending: 'Pendiente', analyzing: 'Analizando…', awaiting_approval: 'Esperando aprobación', executing: 'Ejecutando…', completed: 'Completado', failed: 'Fallido', suppressed: 'Suprimido' },
+  },
+  {
+    key: 'source',
+    label: 'Fuente',
+  },
+]
+
+const activeFilters = ref<Record<string, string>>({
+  severity_text: '',
+  status: '',
+  source: '',
+})
 
 // Modals
 const showCreateModal = ref(false)
@@ -64,9 +92,10 @@ const feedbackSubmitting = ref(false)
 // ── Computed ──────────────────────────────────────────────────────────────────
 const filteredEvents = computed(() => {
   return state.events.filter(e => {
-    if (filterSeverity.value && e.severity_text !== filterSeverity.value) return false
-    if (filterStatus.value && e.status !== filterStatus.value) return false
-    if (filterSource.value && e.source !== filterSource.value) return false
+    for (const def of filterDefinitions) {
+      const val = activeFilters.value[def.key]
+      if (val && (e as any)[def.key] !== val) return false
+    }
     return true
   })
 })
@@ -86,7 +115,37 @@ const historicalAnalysis = computed(() => {
   return store.getHistoricalAnalysis(selectedEvent.value.id)
 })
 
+// ── Dynamic filter options (agnostic) ─────────────────────────────────────────
+const filterOptions = computed(() => {
+  const result: Record<string, { label: string; options: { value: string; label: string }[] }> = {}
+  for (const def of filterDefinitions) {
+    const rawValues = new Set(state.events.map(e => String((e as any)[def.key] ?? '')).filter(v => v))
+    let sorted: string[]
+    if (def.order) {
+      sorted = def.order.filter(o => rawValues.has(o))
+    } else {
+      sorted = Array.from(rawValues).sort((a, b) => a.localeCompare(b))
+    }
+    result[def.key] = {
+      label: def.label,
+      options: sorted.map(v => ({
+        value: v,
+        label: def.labelMap?.[v] ?? v,
+      })),
+    }
+  }
+  return result
+})
 
+// Auto-clear stale filter selections when the dataset changes
+watch(filterOptions, (opts) => {
+  for (const def of filterDefinitions) {
+    const current = activeFilters.value[def.key]
+    if (current && !opts[def.key].options.some(o => o.value === current)) {
+      activeFilters.value[def.key] = ''
+    }
+  }
+})
 
 // ── Data loading ──────────────────────────────────────────────────────────────
 async function loadEvents() {
@@ -386,6 +445,15 @@ function severityDot(s: EventSeverityText) {
   }
 }
 
+function severityLabel(s: EventSeverityText) {
+  return {
+    critical: 'Crítica',
+    error: 'Error',
+    warning: 'Advertencia',
+    info: 'Info',
+    debug: 'Debug',
+  }[s] ?? s
+}
 
 function statusColor(s: EventStatus) {
   return {
@@ -457,26 +525,16 @@ function formatTime(d: string) {
 
       <!-- Filters -->
       <div class="px-3 py-2 border-b border-white/[0.06] flex gap-2 flex-wrap">
-        <select v-model="filterSeverity" class="text-[12px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[#ececec] focus:outline-none focus:border-white/20">
-          <option value="">Severidad</option>
-          <option value="low">Baja</option>
-          <option value="medium">Media</option>
-          <option value="high">Alta</option>
-          <option value="critical">Crítica</option>
-        </select>
-        <select v-model="filterStatus" class="text-[12px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[#ececec] focus:outline-none focus:border-white/20">
-          <option value="">Estado</option>
-          <option value="pending">Pendiente</option>
-          <option value="analyzing">Analizando</option>
-          <option value="completed">Completado</option>
-          <option value="failed">Fallido</option>
-        </select>
-        <select v-model="filterSource" class="text-[12px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[#ececec] focus:outline-none focus:border-white/20">
-          <option value="">Fuente</option>
-          <option value="sensor">Sensor</option>
-          <option value="db_collector">DB Collector</option>
-          <option value="manual">Manual</option>
-          <option value="webhook">Webhook</option>
+        <select
+          v-for="def in filterDefinitions"
+          :key="def.key"
+          v-model="activeFilters[def.key]"
+          class="text-[12px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[#ececec] focus:outline-none focus:border-white/20"
+        >
+          <option value="">{{ def.label }}</option>
+          <option v-for="opt in filterOptions[def.key]?.options" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
         </select>
       </div>
 

@@ -116,14 +116,13 @@ def build_reactive_s2_orchestrator_prompt(
     )
 
     subagent_lines.append(
-        '- task("db-agent", ...) → Database query specialist. '
-        "Executes safe read-only SQL queries against connected databases. "
-        "Returns structured tabular results and schema information."
+        '- task("db_analyst-agent", ...) → Database query, reporting, and data analysis specialist. '
+        "Executes read-only queries, lists tables/schemas, and analyzes database data to return insights."
     )
 
     delegation_rules.append(
-        "[DELEGATE to db-agent] when:\n"
-        "  - The event requires SQL-based investigation, aggregate statistics, or database data retrieval.\n"
+        "[DELEGATE to db_analyst-agent] when:\n"
+        "  - The event requires querying, analyzing, or retrieving data from connected databases.\n"
         "  - The triage indicates needs_database_query=true.\n"
     )
 

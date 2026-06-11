@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -273,9 +273,9 @@ class DatabaseConnectionService:
                 t.name: {"row_count": t.row_count, "columns": len(t.columns)}
                 for t in tables
             },
-            "enriched_at": datetime.utcnow().isoformat(),
+            "enriched_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         }
-        conn.last_schema_sync = datetime.utcnow()
+        conn.last_schema_sync = datetime.now(timezone.utc).replace(tzinfo=None)
         await self._session.commit()
 
         # Index schema for semantic RAG (non-blocking, best-effort)
@@ -378,7 +378,7 @@ class DatabaseConnectionService:
             pass  # SQLFluff not available, rely on regex + read-only
 
         engine = await EngineFactory.get_engine(conn)
-        start = datetime.utcnow()
+        start = datetime.now(timezone.utc)
 
         async with engine.begin() as db_conn:
             # Layer 4: Read-only transaction
@@ -398,7 +398,7 @@ class DatabaseConnectionService:
             rows = [list(row) for row in rows_raw]
             truncated = len(rows) == conn.max_rows
 
-        elapsed = int((datetime.utcnow() - start).total_seconds() * 1000)
+        elapsed = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
 
         return QueryResult(
             columns=columns,

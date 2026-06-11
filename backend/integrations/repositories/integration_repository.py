@@ -23,6 +23,10 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @property
+    def session(self) -> AsyncSession:
+        return self._session
+
     async def get_by_id(self, instance_id: int) -> IntegrationInstance | None:
         result = await self._session.execute(
             select(IntegrationInstance)
@@ -85,14 +89,6 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
         result = await self._session.execute(
             select(IntegrationInstance)
             .where(IntegrationInstance.user_id == user_id)
-            .order_by(IntegrationInstance.created_at.desc())
-        )
-        return list(result.scalars().all())
-
-    async def list_all(self) -> list[IntegrationInstance]:
-        """Return every integration instance in the system (used by health loops)."""
-        result = await self._session.execute(
-            select(IntegrationInstance)
             .order_by(IntegrationInstance.created_at.desc())
         )
         return list(result.scalars().all())

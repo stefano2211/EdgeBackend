@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Literal
 
 from langchain_core.tools import StructuredTool
 from langchain_core.runnables import RunnableConfig
+from sqlalchemy import select
 
 from backend.core.database import AsyncSessionLocal
 from backend.core.logging import logging
@@ -56,7 +58,6 @@ async def _mcp_execute_impl(
         user_id = None
         if thread_id:
             try:
-                from sqlalchemy import select
                 if thread_id.startswith("event-"):
                     parts = thread_id.split("-")
                     if len(parts) >= 2:
@@ -80,7 +81,6 @@ async def _mcp_execute_impl(
             user_id = 1
 
         # Find which active IntegrationInstance of the user has the tool
-        from sqlalchemy import select
         from backend.integrations.models import IntegrationInstance
         from backend.integrations.integration_service import IntegrationService
         from backend.integrations.repositories.integration_repository import IntegrationInstanceRepository
@@ -145,7 +145,6 @@ async def _mcp_execute_impl(
                 catalog.env_prefix,
                 auth_env_var_mapping=catalog.auth_env_var_mapping,
             )
-            import os
             stdio_env = {**os.environ, **(cred_env or {})}
 
         response = await mcp_service.execute_tool(

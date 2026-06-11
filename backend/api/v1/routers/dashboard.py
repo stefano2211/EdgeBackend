@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import traceback
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -42,7 +42,7 @@ async def get_dashboard_summary(
         metrics_agg = metric_service.aggregate_metrics(metrics_rows)
 
         # ── 2. Events in last 24h ──
-        cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+        cutoff_24h = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
         stmt_24h = select(func.count()).select_from(Event).where(
             Event.created_at >= cutoff_24h
         )
@@ -56,7 +56,7 @@ async def get_dashboard_summary(
         )
 
         # ── 4. Events by severity (last 7d) ──
-        cutoff_7d = datetime.utcnow() - timedelta(days=7)
+        cutoff_7d = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
         stmt_sev = (
             select(Event.severity_text, func.count())
             .where(Event.created_at >= cutoff_7d)

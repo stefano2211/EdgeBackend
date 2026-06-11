@@ -19,7 +19,6 @@ from typing import Callable
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from backend.core.config import settings
 from backend.core.logging import logging
 
 logger = logging.getLogger(__name__)

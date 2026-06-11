@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 from functools import partial
-from dataclasses import dataclass
 
 from backend.core.config import settings
 from backend.core.logging import logging

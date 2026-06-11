@@ -37,7 +37,6 @@ from backend.integrations.schemas import (
     IntegrationInstanceUpdate,
     IntegrationInstanceDetailOut,
     SetupGuideOut,
-    SyncResult,
 )
 from backend.persistencia.models.user import User
 
@@ -52,8 +51,8 @@ def _service(session: AsyncSession) -> IntegrationService:
     return IntegrationService(session)
 
 
-def _catalog_service(session: AsyncSession) -> CatalogService:
-    return CatalogService(session)
+def _catalog_service() -> CatalogService:
+    return CatalogService()
 
 
 # ---------------------------------------------------------------------------
@@ -63,10 +62,9 @@ def _catalog_service(session: AsyncSession) -> CatalogService:
 @router.get("/catalog", response_model=list[IntegrationCatalogOut])
 async def list_catalog(
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
 ):
     """List all enabled integrations available for setup."""
-    service = _catalog_service(session)
+    service = _catalog_service()
     items = await service.list_catalog(enabled_only=True)
     return items
 
@@ -75,10 +73,9 @@ async def list_catalog(
 async def get_catalog_item(
     slug: str,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
 ):
     """Get details of a single catalog entry."""
-    service = _catalog_service(session)
+    service = _catalog_service()
     catalog = await service.get_by_slug(slug)
     if not catalog:
         raise HTTPException(status_code=404, detail=f"Catalog '{slug}' not found")

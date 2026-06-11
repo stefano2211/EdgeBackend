@@ -111,7 +111,7 @@ async def main() -> int:
             event_id="smoke-ev-001",
             event_type="alert",
             source="hospital-monitor-01",
-            timestamp=__import__("datetime").datetime.utcnow(),
+            timestamp=__import__("datetime").datetime.now(__import__("datetime").timezone.utc).replace(tzinfo=None),
             severity_number=severity_text_to_number("critical"),
             severity_text="critical",
             title="SMOKE TEST: High heart rate",
@@ -144,7 +144,7 @@ async def main() -> int:
         print("\n[5] Metric recording...")
         metric_service = EventMetricService(session)
         await metric_service.record_event_created(event)
-        event.resolved_at = __import__("datetime").datetime.utcnow()
+        event.resolved_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).replace(tzinfo=None)
         await metric_service.record_event_resolved(event)
         await session.commit()
 

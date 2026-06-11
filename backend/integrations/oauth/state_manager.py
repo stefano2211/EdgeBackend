@@ -83,10 +83,6 @@ class OAuthStateManager:
         logger.warning("[OAuthState] State not found or expired: %s", state[:8] + "...")
         return None
 
-    async def delete(self, state: str) -> None:
-        client = await self._client()
-        await client.delete(f"{_PREFIX}:{state}")
-
 
 # Global singleton
 _state_manager: OAuthStateManager | None = None

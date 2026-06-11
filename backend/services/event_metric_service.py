@@ -8,10 +8,10 @@ SOLID:
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Any
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.persistencia.models.event import Event
@@ -66,8 +66,9 @@ class EventMetricService:
         ttd_seconds = (event.created_at - event.timestamp).total_seconds()
         ttr_seconds = (event.resolved_at - event.created_at).total_seconds()
 
-        metric.avg_ttd = self._rolling_average(metric.avg_ttd, ttd_seconds, metric.events_analyzed)
-        metric.avg_ttr = self._rolling_average(metric.avg_ttr, ttr_seconds, metric.events_analyzed)
+        resolved_count = metric.events_auto_resolved + metric.events_failed + 1
+        metric.avg_ttd = self._rolling_average(metric.avg_ttd, ttd_seconds, resolved_count)
+        metric.avg_ttr = self._rolling_average(metric.avg_ttr, ttr_seconds, resolved_count)
 
         if event.status == "completed":
             metric.events_auto_resolved += 1

@@ -20,6 +20,8 @@ from backend.ia.prompts.subagents import (
 )
 
 from backend.ia.subagents.plugin_registry import SubagentPlugin, SubagentRegistry
+from backend.ia.tools.unified.data_analyst import create_data_analyst_tools
+from backend.ia.tools.unified.db import create_db_query_tool, create_db_schema_tool
 
 logger = logging.getLogger(__name__)
 
@@ -153,9 +155,6 @@ def _build_db_analyst_subagent(
     user_id: int | None = None,
     **_,
 ) -> dict:
-    from backend.ia.tools.unified.data_analyst import create_data_analyst_tools
-    from backend.ia.tools.unified.db import create_db_query_tool, create_db_schema_tool
-
     uid = user_id or 1
 
     analyst_tools = create_data_analyst_tools(

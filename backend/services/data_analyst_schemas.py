@@ -6,7 +6,6 @@ for natural-language-to-SQL analysis.
 
 from __future__ import annotations
 
-from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -106,30 +105,7 @@ class ConnectionSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class QueryExplanationRequest(BaseModel):
-    """Request to explain a SQL query in natural language."""
-    sql: str = Field(..., min_length=1)
-    connection_id: str | None = None
-
-
-class QueryExplanation(BaseModel):
-    """Explanation of what a SQL query does."""
-    sql: str
-    explanation: str
-    tables_used: list[str] = Field(default_factory=list)
-    operations: list[str] = Field(default_factory=list)  # e.g. ["JOIN", "GROUP BY", "ORDER BY"]
-
-
-class TableDescriptionUpdate(BaseModel):
-    """Request to update a table's description."""
-    description: str | None = None
-
-
-class ColumnDescriptionUpdate(BaseModel):
-    """Request to update a column's description."""
-    description: str | None = None
-
-
 class DataAnalystError(Exception):
     """Custom exception for data analyst pipeline failures."""
     pass
+

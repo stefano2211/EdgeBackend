@@ -89,9 +89,9 @@ class EventRepository(BaseRepository[Event]):
         self, dedup_key: str, minutes: int = 5
     ) -> Event | None:
         """Check for a recent non-suppressed event with the same dedup key."""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
-        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutes)
         stmt = (
             select(Event)
             .where(Event.dedup_key == dedup_key)

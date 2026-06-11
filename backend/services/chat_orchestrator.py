@@ -19,9 +19,6 @@ from typing import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.v1.schemas.chat import ChatRequest
-from backend.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 def _detect_agent_name(chunk: dict, metadata: dict) -> str:

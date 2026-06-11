@@ -7,7 +7,6 @@ All datetime fields are rendered as ISO-8601 strings.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,36 +14,6 @@ from pydantic import BaseModel, ConfigDict, Field
 # ---------------------------------------------------------------------------
 # IntegrationCatalog
 # ---------------------------------------------------------------------------
-
-class IntegrationCatalogCreate(BaseModel):
-    slug: str = Field(..., max_length=50, pattern=r"^[a-z0-9_-]+$")
-    name: str = Field(..., max_length=100)
-    description: str | None = None
-    icon_url: str | None = None
-    category: str | None = None
-    source_type: str = Field(..., pattern=r"^(official|custom|rest_bridge)$")
-    command: str | None = None
-    args: list | None = None
-    env_prefix: str | None = None
-    rest_bridge_url_template: str | None = None
-    auth_type: str = Field(..., pattern=r"^(token|oauth2|basic|connection_string|api_key|none)$")
-    auth_env_var_mapping: dict = Field(default_factory=dict)
-    auth_setup_guide_markdown: str | None = None
-    is_enabled: bool = True
-    is_official_verified: bool = False
-
-
-class IntegrationCatalogUpdate(BaseModel):
-    name: str | None = Field(None, max_length=100)
-    description: str | None = None
-    icon_url: str | None = None
-    category: str | None = None
-    is_enabled: bool | None = None
-    auth_setup_guide_markdown: str | None = None
-    command: str | None = None
-    args: list | None = None
-    env_prefix: str | None = None
-
 
 class IntegrationCatalogOut(BaseModel):
     id: int
@@ -66,12 +35,6 @@ class IntegrationCatalogOut(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class IntegrationCatalogDetailOut(IntegrationCatalogOut):
-    """Full detail including sensitive setup config."""
-
-    rest_bridge_url_template: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -125,33 +88,6 @@ class CredentialsSubmit(BaseModel):
     """Raw credentials from user. Keys must match catalog.auth_env_var_mapping values."""
 
     credentials: dict[str, str] = Field(..., description="Key-value map of raw secrets")
-
-
-class IntegrationCredentialOut(BaseModel):
-    id: int
-    instance_id: int
-    credential_key: str
-    expires_at: datetime | None = None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# ---------------------------------------------------------------------------
-# Sync / Status
-# ---------------------------------------------------------------------------
-
-class SyncResult(BaseModel):
-    tools_discovered: int
-    tools_added: int
-    mcp_source_id: int | None = None
-    reactive_mcp_source_id: int | None = None
-
-
-class InstanceStatusOut(BaseModel):
-    instance: IntegrationInstanceOut
-    process: dict[str, Any] | None = None
-    tools_registered: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

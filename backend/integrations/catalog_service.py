@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.integrations.catalog import CATALOG, IntegrationCatalogConfig
 
@@ -11,9 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 class CatalogService:
-    def __init__(self, session: AsyncSession) -> None:
-        # DB session is kept for API dependency compatibility but not used
-        self._session = session
+    def __init__(self) -> None:
+        pass
 
     # ------------------------------------------------------------------
     # Read

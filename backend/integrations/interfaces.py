@@ -28,9 +28,6 @@ class ICredentialVault(ABC):
         ...
 
 
-
-
-
 # ---------------------------------------------------------------------------
 # Auth strategies
 # ---------------------------------------------------------------------------
@@ -57,16 +54,6 @@ class IAuthStrategy(ABC):
 # ---------------------------------------------------------------------------
 # Repositories (async)
 # ---------------------------------------------------------------------------
-
-class IIntegrationCatalogRepository(ABC):
-    """Persistence for IntegrationCatalog."""
-
-    @abstractmethod
-    async def get_by_slug(self, slug: str) -> Any | None: ...
-
-    @abstractmethod
-    async def list_all(self) -> list[Any]: ...
-
 
 class IIntegrationInstanceRepository(ABC):
     """Persistence for IntegrationInstance."""

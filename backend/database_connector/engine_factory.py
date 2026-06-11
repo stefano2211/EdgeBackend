@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
@@ -27,7 +27,7 @@ class EngineFactory:
     @classmethod
     async def get_engine(cls, connection: DatabaseConnection) -> AsyncEngine:
         cache_key = connection.id
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if cache_key in cls._engines:
             engine, created = cls._engines[cache_key]

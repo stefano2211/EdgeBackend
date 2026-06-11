@@ -75,10 +75,6 @@ def _parse_pdf_bytes(data: bytes, *, filename: str = "") -> ParsedDocument:
         return _parse_pdf_pypdf_stream(io.BytesIO(data))
 
 
-def _parse_pdf_path(file_path: str) -> ParsedDocument:
-    """Extract text from PDF file path (legacy)."""
-    with open(file_path, "rb") as f:
-        return _parse_pdf_bytes(f.read(), filename=Path(file_path).name)
 
 
 # ── Text / JSON / Markdown parsers ──
@@ -103,11 +99,6 @@ def _parse_text_bytes(data: bytes, *, ext: str = ".txt") -> ParsedDocument:
     return ParsedDocument(text=text, metadata=metadata)
 
 
-def _parse_text_path(file_path: str) -> ParsedDocument:
-    """Read a plain text / markdown / JSON file from path (legacy)."""
-    ext = Path(file_path).suffix.lower()
-    with open(file_path, "rb") as f:
-        return _parse_text_bytes(f.read(), ext=ext)
 
 
 # ── CSV parser ──
@@ -134,20 +125,16 @@ def _parse_csv_bytes(data: bytes) -> ParsedDocument:
     )
 
 
-def _parse_csv_path(file_path: str) -> ParsedDocument:
-    """Convert CSV from file path (legacy)."""
-    with open(file_path, "rb") as f:
-        return _parse_csv_bytes(f.read())
 
 
 # ── Dispatch ──
 
-_PARSER_MAP: dict[str, tuple[callable, callable]] = {
-    ".pdf": (_parse_pdf_bytes, _parse_pdf_path),
-    ".txt": (_parse_text_bytes, _parse_text_path),
-    ".md": (_parse_text_bytes, _parse_text_path),
-    ".json": (_parse_text_bytes, _parse_text_path),
-    ".csv": (_parse_csv_bytes, _parse_csv_path),
+_PARSER_MAP: dict[str, callable] = {
+    ".pdf": _parse_pdf_bytes,
+    ".txt": _parse_text_bytes,
+    ".md": _parse_text_bytes,
+    ".json": _parse_text_bytes,
+    ".csv": _parse_csv_bytes,
 }
 
 
@@ -158,17 +145,10 @@ def _resolve_ext(filename: str) -> str:
 
 def _resolve_parser(ext: str):
     """Return the sync parser function for a given file extension."""
-    return _PARSER_MAP.get(ext, (_parse_text_bytes, _parse_text_path))
+    return _PARSER_MAP.get(ext, _parse_text_bytes)
 
 
 # ── Public API ──
-
-async def parse_document(file_path: str) -> ParsedDocument:
-    """Dispatch to the appropriate parser from a file path (legacy, non-blocking)."""
-    ext = _resolve_ext(file_path)
-    _, path_parser = _resolve_parser(ext)
-    return await asyncio.to_thread(path_parser, file_path)
-
 
 async def parse_document_bytes(data: bytes, *, filename: str) -> ParsedDocument:
     """Dispatch to the appropriate parser from in-memory bytes.
@@ -181,7 +161,7 @@ async def parse_document_bytes(data: bytes, *, filename: str) -> ParsedDocument:
         ParsedDocument with extracted text and metadata.
     """
     ext = _resolve_ext(filename)
-    bytes_parser, _ = _resolve_parser(ext)
+    bytes_parser = _resolve_parser(ext)
 
     if ext == ".pdf":
         # PDF parser needs filename for fallback logging

@@ -80,9 +80,7 @@ class IntegrationInstance(Base):
 
     @property
     def reactive_mcp_source_id(self) -> int | None:
-        if self.process_status in ("running", "ready") and self.is_enabled:
-            return self.id
-        return None
+        return self.mcp_source_id
 
 
 class IntegrationCredential(Base):

@@ -15,19 +15,14 @@ SOLID:
 from __future__ import annotations
 
 import json
-import logging
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import settings
 from backend.core.logging import logging as _logging
-from backend.database_connector.schemas import (
-    SchemaDiscoveryResult,
-    SchemaTable,
-    SchemaColumn,
-    QueryResult,
-)
+from backend.database_connector.schemas import QueryResult
 from backend.database_connector.service import DatabaseConnectionService
 from backend.services.schema_embedding_service import SchemaEmbeddingService
 from backend.services.data_analyst_schemas import (
@@ -38,7 +33,6 @@ from backend.services.data_analyst_schemas import (
     QueryOutput,
     SchemaContextItem,
     ConnectionSummary,
-    DataAnalystError,
 )
 
 logger = _logging.getLogger(__name__)
@@ -557,7 +551,6 @@ class DataAnalystService:
         raw: str, connection_id: str, connection_name: str
     ) -> GeneratedSQL | None:
         """Parse the LLM JSON response into GeneratedSQL."""
-        import json
 
         cleaned = raw.strip()
         # Strip markdown fences
@@ -600,11 +593,31 @@ class DataAnalystService:
     @staticmethod
     def _extract_sql_fallback(text: str) -> str | None:
         """Last-resort SQL extraction from free-form text."""
-        import re
-        # Look for SELECT ... ; pattern
-        match = re.search(r"SELECT\s+.+?;", text, re.IGNORECASE | re.DOTALL)
-        if match:
-            return match.group(0)
+        cleaned = text.strip()
+        # Remove markdown fences if present
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            if lines[0].strip().startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+
+        # If the stripped text starts with SELECT/WITH, return it directly
+        cleaned_upper = cleaned.upper()
+        if cleaned_upper.startswith("SELECT") or cleaned_upper.startswith("WITH"):
+            return cleaned
+
+        # Try to find a SELECT or WITH block with a semicolon
+        match_semi = re.search(r"\b(SELECT|WITH)\b.+?;", cleaned, re.IGNORECASE | re.DOTALL)
+        if match_semi:
+            return match_semi.group(0)
+
+        # Try to find a SELECT or WITH block without a semicolon
+        match_no_semi = re.search(r"\b(SELECT|WITH)\b.+", cleaned, re.IGNORECASE | re.DOTALL)
+        if match_no_semi:
+            return match_no_semi.group(0)
+
         return None
 
     @staticmethod

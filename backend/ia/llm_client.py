@@ -1,5 +1,6 @@
 """Unified LLM client that supports vLLM and Ollama as backends."""
 
+import json
 from typing import Any, AsyncIterator
 import httpx
 from backend.core.config import settings
@@ -227,7 +228,6 @@ class LLMClient:
                 if not line or line == "data: [DONE]":
                     continue
                 if line.startswith("data: "):
-                    import json
                     try:
                         yield json.loads(line[6:])
                     except json.JSONDecodeError:

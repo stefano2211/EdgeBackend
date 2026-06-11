@@ -25,8 +25,6 @@ from backend.api.v1.schemas.event import (
     EventIngestPayload,
     ApprovalPayload,
     EventFeedbackPayload,
-    severity_text_to_number,
-    severity_number_to_text,
 )
 from backend.services.event_broadcast import get_event_broadcast
 from backend.services.reactive_orchestrator import ReactiveOrchestrator

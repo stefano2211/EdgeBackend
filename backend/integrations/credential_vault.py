@@ -153,11 +153,11 @@ class CredentialVault(ICredentialVault):
     @staticmethod
     def _decrypt_legacy_fernet(encrypted: bytes) -> str:
         """Backward compatibility: try decrypting Fernet (v1) data."""
-        try:
-            import base64
-            import hashlib
-            from cryptography.fernet import Fernet
+        import base64
+        import hashlib
+        from cryptography.fernet import Fernet
 
+        try:
             passphrase = _get_current_passphrase()
             raw = hashlib.sha256(passphrase.encode()).digest()
             fernet_key = base64.urlsafe_b64encode(raw)
@@ -172,10 +172,6 @@ class CredentialVault(ICredentialVault):
         previous = _get_previous_passphrase()
         if previous:
             try:
-                import base64
-                import hashlib
-                from cryptography.fernet import Fernet
-
                 raw = hashlib.sha256(previous.encode()).digest()
                 fernet_key = base64.urlsafe_b64encode(raw)
                 f = Fernet(fernet_key)

@@ -13,28 +13,20 @@ SOLID:
 
 import asyncio
 import json
-import time
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.v1.schemas.chat import ChatRequest
-from backend.core.config import settings
 from backend.core.logging import logging
 from backend.ia.llm_client import get_llm_client
-from backend.ia.langchain_models import get_chat_model
 from backend.ia.orchestrator_factory import create_reactive_orchestrator
 from backend.ia.prompts.reactive import (
     REACTIVE_S2_TRIAGE_PROMPT,
-    build_reactive_s2_orchestrator_prompt,
 )
 from backend.ia.schemas.reactive import ReactiveAnalysisOutput
 from backend.persistencia.models.event import Event
-from backend.persistencia.repositories.event_repository import EventRepository
 from backend.services.event_broadcast import EventBroadcastManager
 from backend.services.reactive_config_service import ReactiveConfigService
-from backend.services._helpers import commit_and_refresh
-from backend.services.chat_orchestrator import _extract_chunk_payload
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +159,15 @@ class ReactiveOrchestrator:
             event.status = "failed"
             await session.commit()
             await self._refresh_and_broadcast(event, session)
+
+    async def execute(self, event: Event, session: AsyncSession) -> None:
+        """Remediation execution phase. Transitions event from executing to completed."""
+        await self._emit_log(event.id, "Remediation execution started", level="info")
+        event.status = "completed"
+        event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await session.commit()
+        await self._refresh_and_broadcast(event, session)
+        await self._emit_log(event.id, "Execution complete — event resolved", level="info")
 
 
     # ═══════════════════════════════════════════════════════════════════════════

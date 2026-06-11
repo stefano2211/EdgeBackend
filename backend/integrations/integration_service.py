@@ -10,7 +10,7 @@ Responsibilities:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,6 @@ from backend.integrations.schemas import (
     CredentialsSubmit,
     IntegrationInstanceCreate,
     IntegrationInstanceUpdate,
-    SyncResult,
 )
 from backend.integrations.credential_audit import log_credential_event, CredentialAction
 
@@ -43,7 +42,7 @@ class IntegrationService:
         credential_vault: ICredentialVault | None = None,
     ) -> None:
         self._session = session
-        self._catalog_service = CatalogService(session)
+        self._catalog_service = CatalogService()
         self._instance_repo = IntegrationInstanceRepository(session)
         self._vault = credential_vault or CredentialVault()
         self._credential_manager = CredentialManager(self._instance_repo, self._vault)
@@ -165,7 +164,6 @@ class IntegrationService:
         # Handle OAuth2 initial access_token + expiry if present
         expires_at_map: dict[str, Any] | None = None
         if strategy.supports_refresh() and "access_token" in db_keys:
-            from datetime import datetime, timedelta, timezone
             expires_at_map = {
                 "access_token": datetime.now(timezone.utc) + timedelta(seconds=3300)  # 55 min buffer
             }
@@ -267,7 +265,6 @@ class IntegrationService:
         }
 
         # Set expiry for access_token
-        from datetime import datetime, timedelta, timezone
         expires_in = token_data.get("expires_in", 3600)
         expires_at_map = {
             "access_token": datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)

@@ -138,45 +138,7 @@ def get_chat_model(
     raise ValueError(f"Unknown LLM provider: {provider}")
 
 
-def get_chat_model_string(
-    provider: str | None = None,
-    adapter: str | None = None,
-) -> str:
-    """Return a "provider:model" string for DeepAgents simple model selection.
 
-    DeepAgents calls init_chat_model() internally when given a string,
-    which reads env vars for base_url / api_key. Use this when you want
-    DeepAgents to manage model instantiation, or get_chat_model() when
-    you need explicit control over base_url and other parameters.
-
-    Returns:
-        Provider:model string (e.g., "openai:my-model", "ollama:llama3").
-    """
-    provider = (provider or settings.DEFAULT_LLM_PROVIDER).lower()
-
-    if provider == "vllm":
-        model = settings.VLLM_MODEL
-        if adapter:
-            model = f"{model}:{adapter}"
-        # vLLM uses OpenAI-compatible API; expose as openai provider
-        return f"openai:{model}"
-
-    elif provider == "ollama":
-        model = settings.OLLAMA_MODEL
-        return f"ollama:{model}"
-
-    elif provider == "auto":
-        if settings.VLLM_ENABLED:
-            model = settings.VLLM_MODEL
-            if adapter:
-                model = f"{model}:{adapter}"
-            return f"openai:{model}"
-        if settings.OLLAMA_ENABLED:
-            model = settings.OLLAMA_MODEL
-            return f"ollama:{model}"
-        raise RuntimeError("No LLM provider available")
-
-    raise ValueError(f"Unknown LLM provider: {provider}")
 
 
 

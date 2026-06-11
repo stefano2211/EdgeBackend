@@ -20,7 +20,6 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from backend.core.config import settings
 from backend.core.logging import logging
 from backend.services.mcp_schemas import MCPResponse, KeyFigure, KeyValue
 

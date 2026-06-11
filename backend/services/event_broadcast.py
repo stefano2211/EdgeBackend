@@ -6,7 +6,6 @@ to all connected SSE clients across all workers.
 
 import asyncio
 import json
-from typing import AsyncIterator
 
 from backend.core.config import settings
 from backend.core.logging import logging
@@ -45,13 +44,6 @@ class EventBroadcastManager:
         if queue in self._listeners:
             self._listeners.remove(queue)
 
-    def _drop_dead(self) -> None:
-        dead: list[asyncio.Queue] = []
-        for queue in self._listeners:
-            if queue.full():
-                dead.append(queue)
-        for q in dead:
-            self.disconnect(q)
 
     def _put_local(self, data: str) -> None:
         dead: list[asyncio.Queue] = []
@@ -90,6 +82,7 @@ class EventBroadcastManager:
 
     async def start_subscriber(self) -> None:
         """Start background Redis subscriber to feed local queues."""
+        self._subscribe_task = asyncio.current_task()
         redis = self._ensure_redis()
         if not redis:
             logger.warning("Redis not available; SSE is limited to single-worker mode")

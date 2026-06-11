@@ -23,7 +23,6 @@ from backend.api.v1.schemas.webhook import (
     WebhookSourceUpdate,
     WebhookTestResult,
 )
-from backend.core.database import AsyncSessionLocal
 from backend.core.rate_limiter import SlidingWindowRateLimiter
 from backend.persistencia.models.webhook_source import WebhookSource
 from backend.persistencia.repositories.webhook_source_repository import WebhookSourceRepository

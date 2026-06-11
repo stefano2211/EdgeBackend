@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Coroutine
 
 from sqlalchemy import select
@@ -77,7 +77,7 @@ class EventJobTracker:
             job = await self._get_job(session, event_id, job_type)
             if job and job.status in ("queued", "running"):
                 job.status = "cancelled"
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 await session.commit()
                 logger.info("Cancelled job %s for event %s", job_type, event_id)
                 return True
@@ -99,7 +99,7 @@ class EventJobTracker:
     async def recover_on_startup(self) -> None:
         """Re-queue orphaned jobs that were running/queued before a restart."""
         async with AsyncSessionLocal() as session:
-            cutoff = datetime.utcnow() - timedelta(minutes=_RECOVERY_AGE_MINUTES)
+            cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=_RECOVERY_AGE_MINUTES)
             stmt = (
                 select(EventJob)
                 .where(EventJob.status.in_(["running", "queued"]))
@@ -248,7 +248,7 @@ class EventJobTracker:
                 existing.started_at = None
                 existing.completed_at = None
                 existing.error_message = None
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 await session.commit()
                 return existing
 
@@ -283,8 +283,8 @@ class EventJobTracker:
             if job:
                 job.status = "running"
                 job.attempt += 1
-                job.started_at = datetime.utcnow()
-                job.updated_at = datetime.utcnow()
+                job.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 await session.commit()
 
     async def _mark_completed(self, job_id: int) -> None:
@@ -292,8 +292,8 @@ class EventJobTracker:
             job = await session.get(EventJob, job_id)
             if job:
                 job.status = "completed"
-                job.completed_at = datetime.utcnow()
-                job.updated_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 await session.commit()
 
     async def _mark_failed(self, job_id: int, error_message: str) -> None:
@@ -302,8 +302,8 @@ class EventJobTracker:
             if job:
                 job.status = "failed"
                 job.error_message = error_message
-                job.completed_at = datetime.utcnow()
-                job.updated_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 await session.commit()
 
     async def _reset_job(self, job_id: int) -> None:
@@ -315,7 +315,7 @@ class EventJobTracker:
                 job.started_at = None
                 job.completed_at = None
                 job.error_message = None
-                job.updated_at = datetime.utcnow()
+                job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 await session.commit()
 
     async def _get_max_attempts(self, job_id: int) -> int:

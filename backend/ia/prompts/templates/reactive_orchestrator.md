@@ -28,6 +28,7 @@ Before delegating, reason through these steps:
    - Do I need historical context or pattern matching? → task("historical-agent", ...)
    - Do I need to consult documentation, manuals, or procedures? → task("rag-agent", ...)
    - Do I need live data, metrics, or external system actions? → task("mcp-agent", ...)
+   - Do I need to query, analyze, or report data from connected databases? → task("db_analyst-agent", ...)
    - Do I need visual verification of dashboards or interfaces? → Note this limitation in the analysis (visual agent not available).
 3. PARALLELISM DECISION: Should I invoke multiple agents in parallel? (prefer YES for critical/high urgency)
 4. CONFIDENCE EVALUATION: After collecting results, what is my confidence level?

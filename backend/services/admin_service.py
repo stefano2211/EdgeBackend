@@ -8,8 +8,6 @@ from backend.core.exceptions import NotFoundError
 from backend.persistencia.models.user import User
 from backend.persistencia.models.conversation import Conversation
 from backend.persistencia.models.message import Message
-from backend.persistencia.models.knowledge_base import KnowledgeBase
-from backend.persistencia.models.document import Document
 from backend.persistencia.repositories.user_repository import UserRepository
 from backend.services._helpers import commit_and_refresh
 

@@ -5,8 +5,6 @@ Replaces: rag_tool.py + reactive_rag_tool.py
 
 from __future__ import annotations
 
-from typing import Any
-
 from langchain_core.tools import StructuredTool
 
 from backend.core.logging import logging
