@@ -9,10 +9,11 @@ Responsibilities:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from backend.integrations.credential_audit import log_credential_event, CredentialAction
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from backend.integrations.credential_vault import CredentialVault
@@ -34,13 +35,29 @@ class CredentialManager:
     ) -> None:
         self._repo = instance_repo
         self._vault = vault or CredentialVault()
+        # Per-instance locks to prevent concurrent refresh/migration races
+        self._locks: dict[int, asyncio.Lock] = {}
 
     # ------------------------------------------------------------------
     # Retrieval (with auto-refresh)
     # ------------------------------------------------------------------
 
+    def _get_lock(self, instance_id: int) -> asyncio.Lock:
+        """Return a per-instance lock to prevent concurrent refresh/migration."""
+        if instance_id not in self._locks:
+            self._locks[instance_id] = asyncio.Lock()
+        return self._locks[instance_id]
+
     async def get_credentials(self, instance: IntegrationInstance) -> dict[str, str]:
-        """Return decrypted credentials for an instance, refreshing OAuth2 if needed."""
+        """Return decrypted credentials for an instance, refreshing OAuth2 if needed.
+        
+        Uses a per-instance lock to prevent race conditions during concurrent refresh or migration.
+        """
+        async with self._get_lock(instance.id):
+            return await self._get_credentials_unlocked(instance)
+
+    async def _get_credentials_unlocked(self, instance: IntegrationInstance) -> dict[str, str]:
+        """Internal credential retrieval without locking."""
         creds: dict[str, str] = {}
         refresh_token = None
         client_id = None
@@ -108,10 +125,15 @@ class CredentialManager:
         return creds
 
     def _is_expired(self, cred: IntegrationCredential) -> bool:
-        """Check if an access token has expired (with 60s buffer)."""
+        """Check if an access token has expired (with 60s buffer).
+        
+        Both cred.expires_at and now() are stored as naive UTC datetimes.
+        """
         if not cred.expires_at:
             return False
-        return cred.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None)
+        # Compare naive UTC datetimes directly
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        return cred.expires_at <= now_utc
 
     async def _perform_refresh(
         self,
@@ -141,7 +163,6 @@ class CredentialManager:
 
             # Encrypt and update DB
             access_token_cred.encrypted_value = self._vault.encrypt(new_access_token)
-            from datetime import timedelta
             access_token_cred.expires_at = (
                 datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)
             ).replace(tzinfo=None)

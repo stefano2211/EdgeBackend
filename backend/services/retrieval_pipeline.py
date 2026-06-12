@@ -74,7 +74,7 @@ class RetrievalPipeline:
         top_k: int | None = None,
         filter_doc_ids: list[int | str] | None = None,
         prefix: str = "kb_",
-        context: str | None = None,
+        context_tag: str | None = None,
     ) -> RetrievalResult:
         """Execute the full retrieval pipeline.
 
@@ -91,7 +91,7 @@ class RetrievalPipeline:
             top_k: Final number of chunks to return (default from settings).
             filter_doc_ids: Optional filter to specific documents.
             prefix: Qdrant collection name prefix (default "kb_").
-            context: Optional context tag to filter chunks ("chat" or "reactive").
+            context_tag: Optional context tag to filter chunks ("chat" or "reactive").
 
         Returns:
             RetrievalResult with chunks, formatted context, and pipeline metrics.
@@ -136,7 +136,7 @@ class RetrievalPipeline:
                         sparse_query=sparse_q,
                         prefetch_limit=settings.RAG_PREFETCH_LIMIT,
                         prefix=prefix,
-                        context=context,
+                        context=context_tag,
                     )
                 )
 
@@ -168,14 +168,14 @@ class RetrievalPipeline:
         # ── Stage 4: Format Context ──
         with StageTimer("format", metrics) as stage:
             stage.input_count = len(reranked)
-            context = self._format_context(reranked, query)
-            stage.output_count = 1 if context else 0
+            formatted_context = self._format_context(reranked, query)
+            stage.output_count = 1 if formatted_context else 0
 
         metrics.final_chunk_count = len(reranked)
-        metrics.hit = context is not None
+        metrics.hit = formatted_context is not None
         metrics.log_summary()
 
-        return RetrievalResult(chunks=reranked, context=context, metrics=metrics)
+        return RetrievalResult(chunks=reranked, context=formatted_context, metrics=metrics)
 
     @staticmethod
     def _format_context(

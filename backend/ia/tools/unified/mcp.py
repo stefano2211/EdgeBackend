@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 _mcp_service = None
 _mcp_service_lock = asyncio.Lock()
 
+# Simple cache for tool discovery per instance: (instance_id, source) -> list[dict]
+_tool_schema_cache: dict[tuple[int, str], list[dict]] = {}
+_TOOL_SCHEMA_TTL_SECONDS = 60  # Cache tool schemas for 60 seconds
+
 
 async def _get_mcp_service():
     global _mcp_service
@@ -33,6 +37,21 @@ async def _get_mcp_service():
                 from backend.services.mcp_service import MCPService
                 _mcp_service = MCPService()
     return _mcp_service
+
+
+async def _get_discovered_tools(integration_service, instance, cache_key):
+    """Discover tools for an instance, using a short-lived cache to avoid repeated stdio spawns."""
+    import time
+    now = time.time()
+    cached = _tool_schema_cache.get(cache_key)
+    if cached is not None:
+        tools, timestamp = cached
+        if now - timestamp < _TOOL_SCHEMA_TTL_SECONDS:
+            return tools
+    # Cache miss or expired — discover fresh
+    tools = await integration_service._discover_tools(instance)
+    _tool_schema_cache[cache_key] = (tools, now)
+    return tools
 
 
 async def _mcp_execute_impl(
@@ -59,8 +78,9 @@ async def _mcp_execute_impl(
         if thread_id:
             try:
                 if thread_id.startswith("event-"):
+                    # Parse event-N form (event may have additional suffixes)
                     parts = thread_id.split("-")
-                    if len(parts) >= 2:
+                    if len(parts) >= 2 and parts[1].isdigit():
                         event_id = int(parts[1])
                         from backend.persistencia.models.event import Event
                         res = await session.execute(select(Event).where(Event.id == event_id))
@@ -77,8 +97,10 @@ async def _mcp_execute_impl(
                 logger.warning("Error resolving user_id from thread_id=%s: %s", thread_id, e)
 
         if not user_id:
-            # Fallback for health checks or testing when user context is missing
-            user_id = 1
+            raise RuntimeError(
+                f"Could not resolve user_id from thread_id={thread_id}. "
+                "Ensure the conversation or event exists and has a valid user_id."
+            )
 
         # Find which active IntegrationInstance of the user has the tool
         from backend.integrations.models import IntegrationInstance
@@ -103,7 +125,8 @@ async def _mcp_execute_impl(
         integration_service = IntegrationService(session)
 
         for instance in instances:
-            discovered = await integration_service._discover_tools(instance)
+            cache_key = (instance.id, source)
+            discovered = await _get_discovered_tools(integration_service, instance, cache_key)
             matching = next((t for t in discovered if t["name"] == tool_config_name), None)
             if matching:
                 target_instance = instance

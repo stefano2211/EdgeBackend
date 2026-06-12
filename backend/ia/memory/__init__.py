@@ -1,113 +1,69 @@
-"""Production memory layer with resilient fallback chain.
+"""Memory layer for DeepAgents — LangGraph checkpoints and store.
 
-Priority:
-1. langgraph-redis (AsyncRedisSaver + AsyncRedisStore) — requires `pip install langgraph-redis`
-2. langgraph.checkpoint.memory.MemorySaver + langgraph.store.memory.InMemoryStore
+Provides:
+  - init_memory(): initialize Redis checkpointer + Postgres store
+  - get_checkpointer(): return AsyncRedisSaver instance
+  - get_store(): return PostgresStore instance
 
-Initialized once at FastAPI lifespan startup.
+Graceful fallback: if Redis/Postgres unavailable, returns None
+(so DeepAgents uses in-memory defaults).
 """
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
-
-from langchain_core.embeddings import Embeddings
+import logging
 
 from backend.core.config import settings
-from backend.core.logging import logging
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_DIMENSION = 384  # all-MiniLM-L6-v2
-
-
-class SentenceTransformerEmbeddings(Embeddings):
-    """LangChain-compatible wrapper around sentence-transformers."""
-
-    def __init__(self, model_name: str | None = None) -> None:
-        from sentence_transformers import SentenceTransformer
-        name = model_name or settings.EMBEDDINGS_MODEL
-        logger.info("Loading embedding model for store: %s", name)
-        self._model = SentenceTransformer(name)
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        import numpy as np
-        embeddings = self._model.encode(
-            texts, normalize_embeddings=True, show_progress_bar=False
-        )
-        if isinstance(embeddings, np.ndarray):
-            return embeddings.tolist()
-        return embeddings  # type: ignore[return-value]
-
-    def embed_query(self, text: str) -> list[float]:
-        return self.embed_documents([text])[0]
-
-
-# ── Singletons — populated by init_memory() ──
-_checkpointer: Any | None = None
-_store: Any | None = None
+_checkpointer = None
+_store = None
 
 
 async def init_memory() -> None:
-    """Initialize checkpointer and store with fallback chain.
-
-    Call once in FastAPI lifespan startup.
-    """
+    """Initialize Redis checkpointer and Postgres store if available."""
     global _checkpointer, _store
 
-    # ── 1. Checkpointer (Redis → Memory fallback) ──
+    # Try Redis checkpointer
     try:
-        from langgraph_redis.checkpoint import AsyncRedisSaver
-        _checkpointer = AsyncRedisSaver.from_conn_string(settings.REDIS_URL)
-        await _checkpointer.asetup()
-        logger.info("Redis checkpointer ready: %s", settings.REDIS_URL)
-    except Exception:
-        logger.warning(
-            "Redis checkpointer unavailable (langgraph-redis not installed or Redis down). "
-            "Falling back to in-memory MemorySaver."
-        )
-        from langgraph.checkpoint.memory import MemorySaver
-        _checkpointer = MemorySaver()
-        logger.info("In-memory checkpointer ready")
+        from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+        import redis.asyncio as redis
 
-    # ── 2. Store (Redis → InMemory fallback) ──
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        # Quick health check
+        await redis_client.ping()
+        _checkpointer = AsyncRedisSaver(conn=redis_client)
+        logger.info("Redis checkpointer initialized")
+    except Exception as exc:
+        logger.warning("Redis checkpointer not available: %s", exc)
+        _checkpointer = None
+
+    # Try Postgres store
     try:
-        from langgraph_redis.store import AsyncRedisStore
-        embeddings = SentenceTransformerEmbeddings()
+        from langgraph.store.postgres import PostgresStore
+        from psycopg import Connection
+        from psycopg_pool import ConnectionPool
 
-        def _init_redis_store():
-            return AsyncRedisStore.from_conn_string(
-                settings.REDIS_URL,
-                index_config={
-                    "dims": EMBEDDING_DIMENSION,
-                    "embed": embeddings,
-                },
-            )
-
-        loop = asyncio.get_running_loop()
-        _store = await loop.run_in_executor(None, _init_redis_store)
-        logger.info("Redis store ready with semantic search (dims=%d)", EMBEDDING_DIMENSION)
-    except Exception:
-        logger.warning(
-            "Redis store unavailable (langgraph-redis not installed or Redis down). "
-            "Falling back to in-memory InMemoryStore (no persistence)."
-        )
-        from langgraph.store.memory import InMemoryStore
-        _store = InMemoryStore()
-        logger.info("In-memory store ready")
+        # Build connection pool from DATABASE_URL
+        # Note: psycopg requires a sync pool for PostgresStore
+        pool = ConnectionPool(conninfo=settings.DATABASE_URL.replace("+asyncpg", ""))
+        _store = PostgresStore(pool=pool)
+        logger.info("Postgres store initialized")
+    except Exception as exc:
+        logger.warning("Postgres store not available: %s", exc)
+        _store = None
 
 
-def get_checkpointer() -> Any:
+def get_checkpointer():
+    """Return the initialized checkpointer, or raise RuntimeError."""
     if _checkpointer is None:
-        raise RuntimeError("Memory not initialized. Call init_memory() first.")
+        raise RuntimeError("Checkpointer not initialized. Call init_memory() first.")
     return _checkpointer
 
 
-def get_store() -> Any:
+def get_store():
+    """Return the initialized store, or raise RuntimeError."""
     if _store is None:
-        raise RuntimeError("Memory not initialized. Call init_memory() first.")
+        raise RuntimeError("Store not initialized. Call init_memory() first.")
     return _store
-
-
-

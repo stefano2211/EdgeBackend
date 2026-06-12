@@ -22,6 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.integrations.catalog import CATALOG
 from backend.persistencia.models.base import Base
 
 
@@ -61,25 +62,32 @@ class IntegrationInstance(Base):
         back_populates="instance", lazy="selectin", cascade="all, delete-orphan"
     )
 
+    # ------------------------------------------------------------------
+    # Read-only properties (no business logic, only data resolution)
+    # ------------------------------------------------------------------
+
     @property
     def catalog(self):
-        from backend.integrations.catalog import CATALOG
+        """Resolve the static catalog entry for this instance."""
         return CATALOG.get(self.catalog_slug)
 
     @property
     def catalog_id(self) -> int:
+        """Stable catalog ID derived from the catalog entry."""
         if self.catalog:
             return self.catalog.id
         return 0
 
     @property
     def mcp_source_id(self) -> int | None:
+        """Return this instance's ID if it is enabled and active."""
         if self.process_status in ("running", "ready") and self.is_enabled:
             return self.id
         return None
 
     @property
     def reactive_mcp_source_id(self) -> int | None:
+        """Alias for mcp_source_id (reactive context)."""
         return self.mcp_source_id
 
 

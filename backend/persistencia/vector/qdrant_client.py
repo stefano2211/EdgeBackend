@@ -43,6 +43,15 @@ def get_qdrant_client() -> AsyncQdrantClient:
     return _qdrant_client
 
 
+async def close_qdrant_client() -> None:
+    """Close the singleton Qdrant client and release connections."""
+    global _qdrant_client
+    if _qdrant_client is not None:
+        await _qdrant_client.close()
+        _qdrant_client = None
+        logger.info("Qdrant client closed")
+
+
 def collection_name(knowledge_base_id: int | str, prefix: str = "kb_") -> str:
     return f"{prefix}{knowledge_base_id}"
 
@@ -98,6 +107,12 @@ async def ensure_collection(
     await client.create_payload_index(
         collection_name=name,
         field_name="filename",
+        field_schema=KeywordIndexParams(type="keyword"),
+        wait=True,
+    )
+    await client.create_payload_index(
+        collection_name=name,
+        field_name="context",
         field_schema=KeywordIndexParams(type="keyword"),
         wait=True,
     )

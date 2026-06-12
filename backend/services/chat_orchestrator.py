@@ -284,32 +284,55 @@ class ChatOrchestrator:
 
         task = asyncio.create_task(_run_astream())
 
-        while True:
-            item = await q.get()
-            
-            if "chunk" in item:
-                agent_name, text, reasoning, agents_used, events = _extract_chunk_payload(
-                    item["chunk"], current_agent=current_agent, agents_used=agents_used
-                )
-                current_agent = agent_name
-                if text:
-                    full_content += text
-                    yield {"type": "token", "content": text, "agent": agent_name}
-                if reasoning:
-                    reasoning_content += reasoning
-                    yield {"type": "reasoning", "content": reasoning, "agent": agent_name}
-                for ev in events:
-                    yield ev
-                    
+        try:
+            while True:
+                # Use a timeout to detect if the producer task died before sending anything
+                try:
+                    item = await asyncio.wait_for(q.get(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    if task.done():
+                        # Task finished without sending anything — likely an error
+                        exc = task.exception()
+                        if exc:
+                            logger.exception("Orchestrator task failed without sending chunks: %s", exc)
+                            error_msg = f"\n\n[System error during processing: {exc}]"
+                            full_content += error_msg
+                            yield {"type": "token", "content": error_msg}
+                        break
+                    else:
+                        # Task still running but no chunks — keep waiting
+                        continue
 
-            elif "error" in item:
-                logger.exception("Orchestrator streaming failed: %s", item["error"])
-                error_msg = f"\n\n[System error during processing: {item['error']}]"
-                full_content += error_msg
-                yield {"type": "token", "content": error_msg}
-                
-            elif "done" in item:
-                break
+                if "chunk" in item:
+                    agent_name, text, reasoning, agents_used, events = _extract_chunk_payload(
+                        item["chunk"], current_agent=current_agent, agents_used=agents_used
+                    )
+                    current_agent = agent_name
+                    if text:
+                        full_content += text
+                        yield {"type": "token", "content": text, "agent": agent_name}
+                    if reasoning:
+                        reasoning_content += reasoning
+                        yield {"type": "reasoning", "content": reasoning, "agent": agent_name}
+                    for ev in events:
+                        yield ev
+
+                elif "error" in item:
+                    logger.exception("Orchestrator streaming failed: %s", item["error"])
+                    error_msg = f"\n\n[System error during processing: {item['error']}]"
+                    full_content += error_msg
+                    yield {"type": "token", "content": error_msg}
+
+                elif "done" in item:
+                    break
+        finally:
+            # Ensure we don't leave the task hanging
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
         if current_agent:
             yield {"type": "subagent", "name": current_agent, "status": "complete"}

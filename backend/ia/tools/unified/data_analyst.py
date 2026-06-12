@@ -15,6 +15,7 @@ from __future__ import annotations
 from langchain_core.tools import StructuredTool
 
 from backend.core.logging import logging
+from backend.ia.tools.unified._session import get_session
 from backend.services.data_analyst_service import DataAnalystService
 from backend.services.data_analyst_schemas import AnalystQuestion
 from backend.services.schema_embedding_service import SchemaEmbeddingService
@@ -37,8 +38,7 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
 
     async def _list_connections() -> str:
         """List database connections available to the user in this context."""
-        from backend.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
+        async with get_session() as session:
             service = DataAnalystService(session)
             connections = await service._get_available_connections(user_id, context)
             if db_connection_ids:
@@ -65,8 +65,7 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
 
     async def _retrieve_schema(question: str) -> str:
         """Search for schema items (tables/columns) relevant to a question."""
-        from backend.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
+        async with get_session() as session:
             service = DataAnalystService(session)
             connections = await service._get_available_connections(user_id, context)
             if db_connection_ids:
@@ -121,8 +120,7 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
         3. Executes with auto-correction (max 3 retries)
         4. Interprets results and returns insights
         """
-        from backend.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
+        async with get_session() as session:
             service = DataAnalystService(session)
             result = await service.ask(
                 AnalystQuestion(
@@ -192,8 +190,7 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
 
     async def _explain_sql(sql: str, connection_hint: str | None = None) -> str:
         """Explain what a SQL query does in plain Spanish."""
-        from backend.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
+        async with get_session() as session:
             service = DataAnalystService(session)
             # Resolve connection_id from hint
             conn_id = None

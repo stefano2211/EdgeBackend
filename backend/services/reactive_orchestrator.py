@@ -161,13 +161,24 @@ class ReactiveOrchestrator:
             await self._refresh_and_broadcast(event, session)
 
     async def execute(self, event: Event, session: AsyncSession) -> None:
-        """Remediation execution phase. Transitions event from executing to completed."""
-        await self._emit_log(event.id, "Remediation execution started", level="info")
+        """Remediation execution phase.
+
+        TODO: Implement real execution (e.g. call MCP tools with the generated plan).
+        Currently transitions directly to completed as the execution framework is not yet
+        implemented. The analysis phase (analyze) already generates a plan; this phase
+        should execute that plan via the available integrations.
+        """
+        await self._emit_log(event.id, "Remediation execution started (placeholder)", level="warn")
+        logger.warning(
+            "Event %s execution is a placeholder. No actual remediation actions were performed. "
+            "Implement real execution by calling MCP tools with the generated plan.",
+            event.id,
+        )
         event.status = "completed"
         event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
         await self._refresh_and_broadcast(event, session)
-        await self._emit_log(event.id, "Execution complete — event resolved", level="info")
+        await self._emit_log(event.id, "Execution complete — event resolved (no actions executed)", level="warn")
 
 
     # ═══════════════════════════════════════════════════════════════════════════

@@ -37,15 +37,23 @@ class EventCorrelationGroup(Base):
     domain: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_pattern: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    max_severity_number: Mapped[int] = mapped_column(Integer, default=0)
+    max_severity_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
 
     status: Mapped[str] = mapped_column(
-        String(20), default="active", nullable=False
+        String(20), server_default="active", nullable=False
     )  # active | resolved | suppressed
 
-    event_count: Mapped[int] = mapped_column(Integer, default=0)
-    first_event_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    last_event_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    event_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    first_event_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+    last_event_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

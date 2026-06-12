@@ -42,14 +42,14 @@ class Event(Base):
         Index("idx_event_event_type", "event_type"),
         Index("idx_event_source", "source"),
         Index("idx_event_created_at", "created_at"),
-        Index("idx_event_dedup_key", "dedup_key"),
+        Index("idx_event_dedup_key", "dedup_key", unique=True),
         Index("idx_event_correlation_id", "correlation_id"),
     )
 
     # ── CloudEvents Core ──
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_id: Mapped[str] = mapped_column(
-        String(64), unique=True, index=True, nullable=False
+        String(64), unique=True, nullable=False
     )
     event_type: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     source: Mapped[str] = mapped_column(String(255), index=True, nullable=False)

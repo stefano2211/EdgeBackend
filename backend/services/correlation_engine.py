@@ -26,6 +26,7 @@ _DEDUP_WINDOW_MINUTES = 5
 _FLAP_WINDOW_MINUTES = 10
 _FLAP_THRESHOLD = 3
 _GROUP_WINDOW_MINUTES = 15
+_CRITICAL_SEVERITY = 17  # ERROR and above
 
 
 class CorrelationEngine:
@@ -215,7 +216,7 @@ class CorrelationEngine:
         critical_stmt = (
             select(Event.source)
             .where(Event.status.in_(["pending", "analyzing", "awaiting_approval"]))
-            .where(Event.severity_number >= 17)
+            .where(Event.severity_number >= _CRITICAL_SEVERITY)
             .where(Event.suppression_reason.is_(None))
         )
         result = await self.session.execute(critical_stmt)
@@ -228,7 +229,7 @@ class CorrelationEngine:
         critical_ids_stmt = (
             select(Event.id)
             .where(Event.status.in_(["pending", "analyzing", "awaiting_approval"]))
-            .where(Event.severity_number >= 17)
+            .where(Event.severity_number >= _CRITICAL_SEVERITY)
             .where(Event.suppression_reason.is_(None))
         )
 

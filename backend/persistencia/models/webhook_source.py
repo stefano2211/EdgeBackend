@@ -18,6 +18,7 @@ from sqlalchemy import (
     JSON,
     UniqueConstraint,
     func,
+    LargeBinary,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -51,8 +52,8 @@ class WebhookSource(Base):
     # Domain classification (auto-detected from first event, editable by user)
     domain: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
-    # Signature verification (HMAC)
-    signing_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Signature verification (HMAC) — encrypted via CredentialVault
+    signing_secret: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
 
     # Rate limiting
     rate_limit_rpm: Mapped[int] = mapped_column(Integer, nullable=False, default=60)

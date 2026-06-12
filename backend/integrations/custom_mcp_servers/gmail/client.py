@@ -2,10 +2,13 @@
 
 Reads credentials from environment variables (injected by Docker).
 Automatically refreshes access tokens only when expired.
+
+NOTE: The sync GmailClient class is wrapped by AsyncGmailClient for use in async contexts.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import os
@@ -495,3 +498,88 @@ class GmailClient:
                 "error": str(exc),
                 "status_code": exc.resp.status if exc.resp else None,
             }
+
+
+# ---------------------------------------------------------------------------
+# Async wrapper — delegates sync GmailClient calls to asyncio.to_thread()
+# ---------------------------------------------------------------------------
+
+class AsyncGmailClient:
+    """Async wrapper around GmailClient that delegates all I/O to threads.
+    
+    Prevents blocking the asyncio event loop during Google API calls.
+    """
+
+    def __init__(self, sync_client: GmailClient) -> None:
+        self._client = sync_client
+
+    @classmethod
+    def from_env(cls) -> "AsyncGmailClient":
+        """Factory that reads configuration from environment variables."""
+        return cls(GmailClient.from_env())
+
+    # --- Core helpers ---
+
+    async def _call(self, method_name: str, *args, **kwargs):
+        """Delegate a sync method call to a thread."""
+        loop = asyncio.get_running_loop()
+        method = getattr(self._client, method_name)
+        return await loop.run_in_executor(None, method, *args, **kwargs)
+
+    # --- Send ---
+
+    async def send_email(self, to: str, subject: str, body: str, html: bool = False) -> dict:
+        return await self._call("send_email", to, subject, body, html)
+
+    # --- List ---
+
+    async def list_emails(self, query: str = "", max_results: int = 10) -> dict:
+        return await self._call("list_emails", query, max_results)
+
+    # --- Get ---
+
+    async def get_email(self, email_id: str) -> dict:
+        return await self._call("get_email", email_id)
+
+    # --- Delete ---
+
+    async def delete_email(self, email_id: str) -> dict:
+        return await self._call("delete_email", email_id)
+
+    # --- Reply ---
+
+    async def reply_to_email(self, email_id: str, body: str, html: bool = False) -> dict:
+        return await self._call("reply_to_email", email_id, body, html)
+
+    # --- Drafts ---
+
+    async def create_draft(self, to: str, subject: str, body: str, html: bool = False, reply_to: str | None = None) -> dict:
+        return await self._call("create_draft", to, subject, body, html, reply_to)
+
+    async def list_drafts(self, max_results: int = 10) -> dict:
+        return await self._call("list_drafts", max_results)
+
+    async def send_draft(self, draft_id: str) -> dict:
+        return await self._call("send_draft", draft_id)
+
+    # --- Labels ---
+
+    async def list_labels(self) -> dict:
+        return await self._call("list_labels")
+
+    async def modify_labels(self, email_id: str, add_labels: list[str] | None = None, remove_labels: list[str] | None = None) -> dict:
+        return await self._call("modify_labels", email_id, add_labels, remove_labels)
+
+
+# Global singleton for async usage
+_cached_async_client: AsyncGmailClient | None = None
+
+
+async def get_async_client() -> AsyncGmailClient:
+    """Return a cached AsyncGmailClient singleton for the current env vars."""
+    global _cached_async_client
+
+    if _cached_async_client is None:
+        _cached_async_client = AsyncGmailClient.from_env()
+        logger.info("AsyncGmailClient cache: created new instance")
+    return _cached_async_client

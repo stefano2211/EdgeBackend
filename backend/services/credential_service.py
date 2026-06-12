@@ -1,21 +1,17 @@
-"""Credential service — Fernet encryption for reactive agent secrets.
+"""Credential service — AES-256-GCM encryption for reactive agent secrets.
 
-Uses the application SECRET_KEY (padded/hashed to 32 bytes) as the
-symmetric encryption key.  Credentials are stored as Fernet ciphertext
-in the database and only decrypted at the moment a sub-agent requests
-sub-agent automation tools.
+Uses the unified CredentialVault (from integrations layer) for production-grade
+encryption.  Credentials are stored as AES-256-GCM ciphertext in the database
+and only decrypted at the moment a sub-agent requests reactive automation tools.
 """
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import logging
 
-from cryptography.fernet import Fernet
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.config import settings
+from backend.integrations.credential_vault import CredentialVault
 from backend.persistencia.models.reactive_credential import ReactiveCredential
 from backend.persistencia.repositories.reactive_credential_repository import (
     ReactiveCredentialRepository,
@@ -24,21 +20,13 @@ from backend.persistencia.repositories.reactive_credential_repository import (
 logger = logging.getLogger(__name__)
 
 
-def _derive_fernet_key() -> bytes:
-    """Derive a URL-safe 32-byte Fernet key from the app SECRET_KEY."""
-    raw = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-    return base64.urlsafe_b64encode(raw)
-
-
-_fernet = Fernet(_derive_fernet_key())
-
-
 class CredentialService:
-    """CRUD + encrypt/decrypt for reactive credentials."""
+    """CRUD + encrypt/decrypt for reactive credentials using AES-256-GCM."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = ReactiveCredentialRepository(session)
+        self._vault = CredentialVault()
 
     # ── Public API ──
 
@@ -50,7 +38,7 @@ class CredentialService:
         plain_value: str,
         description: str | None = None,
     ) -> ReactiveCredential:
-        encrypted = _fernet.encrypt(plain_value.encode())
+        encrypted = self._vault.encrypt(plain_value)
         cred = ReactiveCredential(
             user_id=user_id,
             name=name,
@@ -82,7 +70,7 @@ class CredentialService:
         if not cred:
             return None
         try:
-            return _fernet.decrypt(cred.encrypted_value).decode()
+            return self._vault.decrypt(cred.encrypted_value)
         except Exception:
             logger.exception("Failed to decrypt credential key=%s", key_identifier)
             return None

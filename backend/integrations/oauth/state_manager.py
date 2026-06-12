@@ -83,6 +83,13 @@ class OAuthStateManager:
         logger.warning("[OAuthState] State not found or expired: %s", state[:8] + "...")
         return None
 
+    async def close(self) -> None:
+        """Gracefully close the Redis connection."""
+        if self._redis is not None:
+            await self._redis.close()
+            self._redis = None
+            logger.info("[OAuthState] Redis connection closed")
+
 
 # Global singleton
 _state_manager: OAuthStateManager | None = None

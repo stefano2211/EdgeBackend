@@ -77,13 +77,6 @@ HAVING MAX(p.fecha) < CURRENT_DATE - INTERVAL '6 months'
 """
 
 _MAX_RETRIES = 3
-_READ_ONLY_HINTS = (
-    "SELECT", "FROM", "WHERE", "JOIN", "LEFT JOIN", "INNER JOIN",
-    "GROUP BY", "ORDER BY", "LIMIT", "HAVING", "COUNT", "SUM", "AVG",
-    "MIN", "MAX", "DISTINCT", "ON", "AS", "AND", "OR", "NOT", "IN",
-    "BETWEEN", "LIKE", "IS NULL", "IS NOT NULL", "CASE", "WHEN", "THEN",
-    "ELSE", "END", "WITH", "CTE", "UNION", "INTERSECT", "EXCEPT",
-)
 
 
 class DataAnalystService:

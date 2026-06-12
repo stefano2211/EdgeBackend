@@ -65,6 +65,18 @@ class VectorRepository:
             prefix: Collection name prefix (default "kb_", use "reactive_kb_" for reactive).
             context: Optional list of context tags (e.g. ["chat"], ["reactive"], ["chat", "reactive"]).
         """
+        if len(chunks) != len(embeddings):
+            raise ValueError(
+                f"chunks ({len(chunks)}) and embeddings ({len(embeddings)}) must be parallel"
+            )
+        if sparse_embeddings is not None and len(chunks) != len(sparse_embeddings):
+            raise ValueError(
+                f"chunks ({len(chunks)}) and sparse_embeddings ({len(sparse_embeddings)}) must be parallel"
+            )
+        if not chunks:
+            logger.info("No chunks to upsert for doc_id=%s", doc_id)
+            return
+
         await ensure_collection(knowledge_base_id, dimension=len(embeddings[0]), prefix=prefix)
         name = collection_name(knowledge_base_id, prefix=prefix)
 

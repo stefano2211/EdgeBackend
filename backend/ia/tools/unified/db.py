@@ -4,13 +4,13 @@ from langchain_core.tools import StructuredTool
 
 from backend.database_connector.service import DatabaseConnectionService
 from backend.database_connector.schemas import QueryResult
+from backend.ia.tools.unified._session import get_session
 
 
 def create_db_query_tool(user_id: int, context: str = "chat") -> StructuredTool:
     async def _db_query(connection_name: str, sql_query: str) -> str:
         """Execute a SQL query against a connected database. Returns results as markdown table."""
-        from backend.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
+        async with get_session() as session:
             service = DatabaseConnectionService(session)
             # Find connection by name for this user
             conns = await service.list_connections(user_id, context)
@@ -60,8 +60,7 @@ def create_db_query_tool(user_id: int, context: str = "chat") -> StructuredTool:
 def create_db_schema_tool(user_id: int, context: str = "chat") -> StructuredTool:
     async def _db_schema(connection_name: str | None = None) -> str:
         """Get the schema of a connected database. If no name provided, returns all schemas."""
-        from backend.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
+        async with get_session() as session:
             service = DatabaseConnectionService(session)
             conns = await service.list_connections(user_id, context)
 

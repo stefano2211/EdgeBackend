@@ -21,6 +21,14 @@ class TokenAuthStrategy(IAuthStrategy):
     def validate(self, credentials: dict[str, str]) -> bool:
         return bool(credentials.get("token"))
 
+    def _validate_required(self, credentials: dict[str, str]) -> bool:
+        """Return True only if every required key is present and non-empty."""
+        missing = self.REQUIRED - set(credentials.keys())
+        if missing:
+            logger.warning("%s missing fields: %s", self.__class__.__name__, missing)
+            return False
+        return all(credentials.get(k) for k in self.REQUIRED)
+
     def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
         """Return flat dict ready for DB."""
         return {"token": credentials["token"]}
@@ -39,7 +47,7 @@ class OAuth2AuthStrategy(IAuthStrategy):
         if missing:
             logger.warning("OAuth2 credentials missing fields: %s", missing)
             return False
-        return True
+        return all(credentials.get(k) for k in self.REQUIRED)
 
     def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
         """Return flat dict ready for DB.
@@ -72,6 +80,14 @@ class BasicAuthStrategy(IAuthStrategy):
     def validate(self, credentials: dict[str, str]) -> bool:
         return bool(credentials.get("username") and credentials.get("password"))
 
+    def _validate_required(self, credentials: dict[str, str]) -> bool:
+        """Return True only if every required key is present and non-empty."""
+        missing = self.REQUIRED - set(credentials.keys())
+        if missing:
+            logger.warning("%s missing fields: %s", self.__class__.__name__, missing)
+            return False
+        return all(credentials.get(k) for k in self.REQUIRED)
+
     def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
         return {
             "username": credentials["username"],
@@ -90,6 +106,14 @@ class ConnectionStringAuthStrategy(IAuthStrategy):
     def validate(self, credentials: dict[str, str]) -> bool:
         return bool(credentials.get("connection_string"))
 
+    def _validate_required(self, credentials: dict[str, str]) -> bool:
+        """Return True only if every required key is present and non-empty."""
+        missing = self.REQUIRED - set(credentials.keys())
+        if missing:
+            logger.warning("%s missing fields: %s", self.__class__.__name__, missing)
+            return False
+        return all(credentials.get(k) for k in self.REQUIRED)
+
     def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
         return {"connection_string": credentials["connection_string"]}
 
@@ -104,6 +128,14 @@ class ApiKeyAuthStrategy(IAuthStrategy):
 
     def validate(self, credentials: dict[str, str]) -> bool:
         return bool(credentials.get("api_key"))
+
+    def _validate_required(self, credentials: dict[str, str]) -> bool:
+        """Return True only if every required key is present and non-empty."""
+        missing = self.REQUIRED - set(credentials.keys())
+        if missing:
+            logger.warning("%s missing fields: %s", self.__class__.__name__, missing)
+            return False
+        return all(credentials.get(k) for k in self.REQUIRED)
 
     def to_db_keys(self, credentials: dict[str, str]) -> dict[str, str]:
         return {"api_key": credentials["api_key"]}
@@ -123,6 +155,10 @@ class NoAuthStrategy(IAuthStrategy):
 
     def supports_refresh(self) -> bool:
         return False
+
+    def _validate_required(self, credentials: dict[str, str]) -> bool:
+        """No-op: no auth required."""
+        return True
 
 
 # ---------------------------------------------------------------------------

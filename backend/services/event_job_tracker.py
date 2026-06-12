@@ -61,13 +61,9 @@ class EventJobTracker:
         job = await self._persist_job(event_id, job_type)
         spec = _JobSpec(job.id, event_id, job_type, coro_factory, attempt=0)
 
-        # Try to acquire semaphore immediately
-        if self._semaphore.locked():
-            logger.info("Job %s for event %s queued (semaphore full)", job_type, event_id)
-            await self._internal_queue.put(spec)
-        else:
-            # Spawn immediately; if semaphore is exhausted the task will block
-            asyncio.create_task(self._run_with_acquisition(spec))
+        # Always queue to avoid race condition between locked() check and spawn.
+        await self._internal_queue.put(spec)
+        logger.info("Job %s for event %s queued", job_type, event_id)
 
         return job
 
@@ -164,12 +160,6 @@ class EventJobTracker:
         async with self._semaphore:
             await self._run_job(spec)
 
-    async def _run_job_and_release(self, spec: _JobSpec) -> None:
-        try:
-            await self._run_job(spec)
-        finally:
-            self._semaphore.release()
-
     async def _run_job(self, spec: _JobSpec) -> None:
         await self._mark_running(spec.job_id)
         logger.info(
@@ -229,7 +219,7 @@ class EventJobTracker:
             # Block until a semaphore slot is available
             await self._semaphore.acquire()
             try:
-                asyncio.create_task(self._run_job_and_release(spec))
+                asyncio.create_task(self._run_with_acquisition(spec))
             except Exception:
                 self._semaphore.release()
                 raise

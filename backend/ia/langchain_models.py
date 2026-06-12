@@ -18,6 +18,9 @@ from backend.core.logging import logging
 
 logger = logging.getLogger(__name__)
 
+# Module-level cache: (provider, adapter, model_name) -> BaseChatModel
+_chat_model_cache: dict[tuple[str, str | None, str], BaseChatModel] = {}
+
 
 def _import_chat_openai() -> type[BaseChatModel]:
     try:
@@ -105,6 +108,8 @@ def get_chat_model(
 ) -> BaseChatModel:
     """Factory: return a LangChain chat model based on settings.
 
+    Caches instances by (provider, adapter, model) to avoid repeated creation.
+
     Args:
         provider: 'vllm', 'ollama', or None (auto from settings).
         adapter: LoRA adapter name (e.g., 'historical', 'vl').
@@ -115,27 +120,49 @@ def get_chat_model(
     """
     provider = (provider or settings.DEFAULT_LLM_PROVIDER).lower()
 
+    # Determine model name for cache key
+    if provider == "vllm":
+        model_name = kwargs.get("model_name") or settings.VLLM_MODEL
+    elif provider == "ollama":
+        model_name = kwargs.get("model_name") or settings.OLLAMA_MODEL
+    else:
+        model_name = "auto"
+
+    cache_key = (provider, adapter, model_name)
+    if cache_key in _chat_model_cache:
+        logger.debug("Cache hit for chat model: %s", cache_key)
+        return _chat_model_cache[cache_key]
+
     if provider == "vllm":
         if not settings.VLLM_ENABLED:
             raise RuntimeError("vLLM is disabled in settings")
-        return create_vllm_chat_model(adapter=adapter, **kwargs)
+        instance = create_vllm_chat_model(adapter=adapter, **kwargs)
 
     elif provider == "ollama":
         if not settings.OLLAMA_ENABLED:
             raise RuntimeError("Ollama is disabled in settings")
-        return create_ollama_chat_model(adapter=adapter, **kwargs)
+        instance = create_ollama_chat_model(adapter=adapter, **kwargs)
 
     elif provider == "auto":
         if settings.VLLM_ENABLED:
             try:
-                return create_vllm_chat_model(adapter=adapter, **kwargs)
+                instance = create_vllm_chat_model(adapter=adapter, **kwargs)
             except Exception:
                 logger.exception("vLLM unreachable, trying Ollama")
-        if settings.OLLAMA_ENABLED:
-            return create_ollama_chat_model(adapter=adapter, **kwargs)
-        raise RuntimeError("No LLM provider available")
+                if settings.OLLAMA_ENABLED:
+                    instance = create_ollama_chat_model(adapter=adapter, **kwargs)
+                else:
+                    raise RuntimeError("No LLM provider available")
+        elif settings.OLLAMA_ENABLED:
+            instance = create_ollama_chat_model(adapter=adapter, **kwargs)
+        else:
+            raise RuntimeError("No LLM provider available")
+    else:
+        raise ValueError(f"Unknown LLM provider: {provider}")
 
-    raise ValueError(f"Unknown LLM provider: {provider}")
+    _chat_model_cache[cache_key] = instance
+    logger.info("Cached chat model: %s", cache_key)
+    return instance
 
 
 

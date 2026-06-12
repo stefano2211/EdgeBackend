@@ -138,12 +138,21 @@ def _build_historical_subagent(
     tools: list,
     **_,
 ) -> dict:
+    # Validate that the 'historical' adapter is available before creating the model
+    try:
+        model = get_chat_model(adapter="historical")
+    except RuntimeError as exc:
+        logger.warning(
+            "Historical adapter not available (%s), falling back to base model", exc
+        )
+        model = get_chat_model()
+
     return {
         "name": "historical-agent",
         "description": HISTORICAL_AGENT_DESCRIPTION,
         "system_prompt": HISTORICAL_AGENT_SYSTEM_PROMPT,
         "tools": [],
-        "model": get_chat_model(adapter="historical"),
+        "model": model,
     }
 
 

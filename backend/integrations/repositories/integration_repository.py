@@ -51,6 +51,7 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
         return obj
 
     async def update(self, obj: IntegrationInstance) -> IntegrationInstance:
+        self._session.add(obj)
         await self._session.commit()
         await self._session.refresh(obj)
         return obj
@@ -72,6 +73,8 @@ class IntegrationInstanceRepository(IIntegrationInstanceRepository):
     async def save_credentials(
         self, instance_id: int, encrypted: dict[str, bytes], expires_at_map: dict[str, Any] | None = None
     ) -> None:
+        # Prevent duplicate credentials by removing any existing ones first
+        await self.delete_credentials(instance_id)
         for key, value in encrypted.items():
             expires_at = expires_at_map.get(key) if expires_at_map else None
             if expires_at is not None and expires_at.tzinfo is not None:

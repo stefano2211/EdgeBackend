@@ -5,7 +5,6 @@ All prompts are domain-agnostic — no hardcoded industry references.
 """
 
 import json
-from typing import List
 
 from backend.core.config import settings
 from backend.ia.prompts.loader import load_prompt
@@ -144,62 +143,13 @@ def build_reactive_s2_orchestrator_prompt(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  LEGACY BACKWARD COMPATIBILITY
-# ═══════════════════════════════════════════════════════════════════════════════
-
-_LEGACY_SUBAGENT_DESCRIPTIONS = {
-    "rag-agent": (
-        "Document search and knowledge retrieval specialist. "
-        "Searches manuals, procedures, regulations, technical specs, and compliance documents. "
-        "Has access to rag_retrieve for RAG knowledge base queries."
-    ),
-    "mcp-agent": (
-        "Live data and API execution specialist. "
-        "Fetches real-time metrics, resource status, and system state. "
-        "Has access to mcp_execute for live API/tool calls."
-    ),
-    "historical-agent": (
-        "Historical data pattern matcher. "
-        "Identifies precedents, recurring failure patterns, and correlations with past incidents. "
-        "Knowledge baked into fine-tuned weights — does NOT use external tools."
-    ),
-
-}
-
-_UNAVAILABLE_MSG = "(NOT AVAILABLE — do not use)"
-
-
-def build_reactive_orchestrator_prompt(available_subagents: List[str]) -> str:
-    """Build the legacy Reactive Orchestrator system prompt.
-
-    DEPRECATED: Use build_reactive_s2_orchestrator_prompt for new reactive pipeline.
-    Kept for backward compatibility with existing tests/calls.
-    """
-    available_set = set(available_subagents)
-    lines = []
-    for name, desc in _LEGACY_SUBAGENT_DESCRIPTIONS.items():
-        if name in available_set:
-            lines.append(f'- subagent_type="{name}" [AVAILABLE] → {desc}')
-        else:
-            lines.append(f'- subagent_type="{name}" {_UNAVAILABLE_MSG}')
-
-    available_subagents_section = "\n".join(lines) if lines else "None registered."
-    return load_prompt(
-        "reactive_synthesis",
-        input_sections=f"<available_subagents>\n{available_subagents_section}\n</available_subagents>\n\n",
-        event_context="Event context provided at runtime.",
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 #  S1 COORDINATOR DESCRIPTION (for subagent registry)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 S1_COORDINATOR_DESCRIPTION = (
     "System-1 Fast Intuition Coordinator. "
     "Delegates in parallel to historical-agent (pattern matching >6 months) "
-
-    "Performs visual verification of dashboards and web interfaces when required. "
+    "and performs visual verification of dashboards and web interfaces when required. "
     "Use ALWAYS when an alarm or problem is detected to get fast patterns and visual confirmation."
 )
 

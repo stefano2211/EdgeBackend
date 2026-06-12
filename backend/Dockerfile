@@ -1,27 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# DEPRECATED: Este Dockerfile unificado ya no se usa.
-# Ahora el backend y frontend se construyen por separado:
-#   - backend/Dockerfile  -> servicio "backend" en docker-compose.yml
-#   - frontend/Dockerfile   -> servicio "frontend" en docker-compose.yml
-# El reverse proxy (nginx) une ambos en un solo dominio.
-# Mantenido por compatibilidad temporal; se eliminará en una release futura.
-
 # ═══════════════════════════════════════════════════════════════════
-# Stage 1: Build Frontend
-# ═══════════════════════════════════════════════════════════════════
-FROM node:20-alpine AS frontend-build
-
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-# Usar caché de BuildKit para descargas de dependencias de NPM
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline --no-audit
-COPY frontend/ ./
-RUN npm run build-only
-
-# ═══════════════════════════════════════════════════════════════════
-# Stage 2: Build Backend Dependencies
+# Stage 1: Build Backend Dependencies
 # ═══════════════════════════════════════════════════════════════════
 FROM python:3.13-slim AS backend-build
 
@@ -43,7 +23,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 
 # ═══════════════════════════════════════════════════════════════════
-# Stage 3: Production Runtime
+# Stage 2: Production Runtime
 # ═══════════════════════════════════════════════════════════════════
 FROM python:3.13-slim AS production
 
@@ -52,7 +32,7 @@ RUN groupadd -r edge && useradd -m -r -g edge edge
 
 # Instalar dependencias necesarias limpiando cachés en la misma capa
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 curl nodejs npm \
+    libpq5 curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copiar ejecutables globales de uv/uvx requeridos para MCP
@@ -61,9 +41,6 @@ COPY --from=backend-build /bin/uv /bin/uvx /bin/
 # Copiar el entorno virtual asilado de Python
 COPY --from=backend-build /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
-
-# Copiar la aplicación frontend compilada de forma estática
-COPY --from=frontend-build /app/frontend/dist /app/backend/static
 
 # Copiar código fuente y entrypoint
 COPY --chown=edge:edge backend/ ./backend/

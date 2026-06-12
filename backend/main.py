@@ -3,13 +3,10 @@
 import asyncio
 import logging as std_logging
 from contextlib import asynccontextmanager
-from pathlib import Path
-
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from backend.core.config import settings
 from backend.core.logging import configure_logging
@@ -82,6 +79,16 @@ async def lifespan(app: FastAPI):
         await get_event_broadcast().stop_subscriber()
     except Exception:
         pass
+    try:
+        from backend.integrations.oauth.state_manager import get_state_manager
+        await get_state_manager().close()
+    except Exception:
+        pass
+    try:
+        from backend.persistencia.vector.qdrant_client import close_qdrant_client
+        await close_qdrant_client()
+    except Exception:
+        pass
 
 
 def create_app() -> FastAPI:
@@ -120,29 +127,6 @@ def create_app() -> FastAPI:
     from backend.api.v1.routers.webhooks import public_router as webhook_public_router
     app.include_router(api_v1_router)
     app.include_router(webhook_public_router)
-
-    # Serve built frontend SPA (Vue Router history mode)
-    static_dir = Path(__file__).parent / "static"
-    if static_dir.exists():
-
-        @app.get("/{full_path:path}")
-        async def serve_spa(full_path: str):
-            """Catch-all route for Vue Router history mode.
-
-            Serves actual static files (CSS, JS, images) if they exist;
-            otherwise returns index.html so the SPA handles client-side routing.
-            """
-            # Security: prevent path traversal outside static_dir
-            requested = (static_dir / full_path).resolve()
-            try:
-                requested.relative_to(static_dir.resolve())
-            except ValueError:
-                return FileResponse(str(static_dir / "index.html"))
-
-            if requested.is_file():
-                return FileResponse(str(requested))
-
-            return FileResponse(str(static_dir / "index.html"))
 
     return app
 

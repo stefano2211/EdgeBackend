@@ -29,8 +29,10 @@ class IntegrationCatalogConfig:
     # Added mock ID to maintain backwards compatibility with Pydantic serialization
     @property
     def id(self) -> int:
-        # Generate a stable positive integer hash of the slug
-        return abs(hash(self.slug)) % 1000000 + 1
+        # Generate a stable positive integer hash of the slug using SHA-256
+        # (Python's built-in hash() is salted per-process and changes between restarts)
+        import hashlib
+        return int(hashlib.sha256(self.slug.encode("utf-8")).hexdigest()[:8], 16)
 
 
 CATALOG: dict[str, IntegrationCatalogConfig] = {

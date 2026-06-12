@@ -7,11 +7,17 @@ Usage:
 
 from __future__ import annotations
 
+import logging
+
 import jinja2
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+
 _env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(Path(__file__).parent / "templates"),
+    loader=jinja2.FileSystemLoader(TEMPLATES_DIR),
     trim_blocks=True,
     lstrip_blocks=True,
 )
@@ -26,6 +32,16 @@ def load_prompt(name: str, **variables) -> str:
 
     Returns:
         Fully rendered prompt string.
+
+    Raises:
+        RuntimeError: If the template file is not found.
     """
-    template = _env.get_template(f"{name}.md")
-    return template.render(**variables)
+    try:
+        template = _env.get_template(f"{name}.md")
+        return template.render(**variables)
+    except jinja2.exceptions.TemplateNotFound:
+        logger.error("Prompt template not found: %s.md", name)
+        raise RuntimeError(
+            f"Prompt template '{name}.md' not found in {TEMPLATES_DIR}. "
+            f"Ensure the template file exists."
+        )

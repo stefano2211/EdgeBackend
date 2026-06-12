@@ -141,6 +141,47 @@ class IntegrationService:
     # Credentials submission
     # ------------------------------------------------------------------
 
+    async def _activate_instance(self, instance: IntegrationInstance, *, 
+                                  audit_action: CredentialAction = CredentialAction.CREATED,
+                                  audit_credential_key: str | None = None,
+                                  audit_details: str | None = None) -> list[dict]:
+        """Common activation logic: update status, discover tools, audit.
+        
+        Returns discovered tools. Marks instance as 'error' if discovery fails.
+        """
+        instance.process_status = "running"
+        instance.process_pid = None
+        await self._instance_repo.update(instance)
+
+        # Discover tools from the MCP server to verify connection health
+        discovered = await self._discover_tools(instance)
+        
+        if not discovered and instance.catalog and instance.catalog.auth_type != "none":
+            logger.warning(
+                "Instance id=%s activation: no tools discovered (catalog=%s, auth=%s)",
+                instance.id,
+                instance.catalog.slug,
+                instance.catalog.auth_type,
+            )
+            # Keep status as running but note that discovery failed
+            # Caller may decide to mark as error
+        
+        # Audit: credential event
+        if audit_details:
+            try:
+                await log_credential_event(
+                    self._session,
+                    audit_action,
+                    user_id=instance.user_id,
+                    instance_id=instance.id,
+                    credential_key=audit_credential_key,
+                    details=audit_details,
+                )
+            except Exception:
+                pass
+
+        return discovered
+
     async def submit_credentials(
         self, instance_id: int, user_id: int, data: CredentialsSubmit
     ) -> IntegrationInstance:
@@ -173,36 +214,19 @@ class IntegrationService:
         # 3. Refresh instance to pick up new credentials
         instance = await self.get_instance(instance_id, user_id)
 
-        # 4. Set status to running
-        instance.process_status = "running"
-        instance.process_pid = None
-        await self._instance_repo.update(instance)
-
-        logger.info(
-            "Credentials submitted and instance set to running for instance id=%s",
-            instance_id,
+        # 4. Activate: discover tools, audit, update status
+        discovered = await self._activate_instance(
+            instance,
+            audit_action=CredentialAction.CREATED,
+            audit_credential_key=",".join(data.credentials.keys()),
+            audit_details=f"Credentials submitted for catalog '{instance.catalog.slug}'",
         )
 
-        # 5. Discover tools from the MCP server to verify connection health
-        discovered = await self._discover_tools(instance)
         logger.info(
             "Instance id=%s verified. Discovered %d tools dynamically.",
             instance_id,
             len(discovered),
         )
-
-        # Audit: credential creation
-        try:
-            await log_credential_event(
-                self._session,
-                CredentialAction.CREATED,
-                user_id=user_id,
-                instance_id=instance_id,
-                credential_key=",".join(data.credentials.keys()),
-                details=f"Credentials submitted for catalog '{instance.catalog.slug}'",
-            )
-        except Exception:
-            pass
 
         return instance
 
@@ -274,36 +298,19 @@ class IntegrationService:
         # Refresh instance
         instance = await self.get_instance(instance_id, user_id)
 
-        # Set status to running
-        instance.process_status = "running"
-        instance.process_pid = None
-        await self._instance_repo.update(instance)
-
-        logger.info(
-            "OAuth completed and instance set to running for instance id=%s",
-            instance_id,
+        # Activate: discover tools, audit, update status
+        discovered = await self._activate_instance(
+            instance,
+            audit_action=CredentialAction.CREATED,
+            audit_credential_key="refresh_token,client_id,client_secret,access_token",
+            audit_details=f"OAuth2 flow completed for catalog '{instance.catalog.slug}'",
         )
 
-        # Discover tools from the MCP server to verify connection health
-        discovered = await self._discover_tools(instance)
         logger.info(
             "OAuth completed. Discovered %d tools dynamically for instance id=%s",
             len(discovered),
             instance_id,
         )
-
-        # Audit: OAuth credential creation
-        try:
-            await log_credential_event(
-                self._session,
-                CredentialAction.CREATED,
-                user_id=user_id,
-                instance_id=instance_id,
-                credential_key="refresh_token,client_id,client_secret,access_token",
-                details=f"OAuth2 flow completed for catalog '{instance.catalog.slug}'",
-            )
-        except Exception:
-            pass
 
         return instance
 
@@ -372,52 +379,39 @@ class IntegrationService:
             return []
 
     async def get_status(self, instance_id: int, user_id: int) -> dict[str, Any]:
-        """Query process status. Checks if the instance is active in the MCPService session cache."""
+        """Query process status. Returns the current runtime state."""
         instance = await self.get_instance(instance_id, user_id)
         
-        status = "stopped"
-        if instance.credentials and instance.process_status != "stopped":
-            status = "ready"
-            
-        from backend.services.mcp_service import MCPService
-        from mcp import StdioServerParameters
-        import os
+        # Determine status from instance state without accessing private caches
+        status = instance.process_status or "stopped"
+        if status not in ("running", "ready", "stopped", "error"):
+            status = "stopped"
         
-        is_active = False
-        try:
-            catalog = instance.catalog
-            if catalog:
-                credentials = await self._credential_manager.get_credentials(instance)
-                env = self._credential_manager.inject_for_stdio(
-                    credentials,
-                    catalog.env_prefix,
-                    auth_env_var_mapping=catalog.auth_env_var_mapping,
-                )
-                stdio_env = {**os.environ, **(env or {})}
-                server_params = StdioServerParameters(
-                    command=catalog.command or "",
-                    args=catalog.args or [],
-                    env=stdio_env,
-                )
-                cache_key = MCPService._stdio_cache_key(server_params)
-                if cache_key in MCPService._stdio_cache:
-                    is_active = True
-                    status = "running"
-        except Exception:
-            pass
+        # If credentials exist but process is not explicitly stopped, mark as ready
+        if status == "stopped" and instance.credentials and instance.catalog and instance.catalog.auth_type != "none":
+            status = "ready"
 
         command_list = []
         if instance.catalog:
             command_list = [instance.catalog.command] + (instance.catalog.args or [])
 
+        # Discover tools only if instance is potentially active
         tools_registered = []
         if status in ("running", "ready"):
-            tools_registered = await self._discover_tools(instance)
+            try:
+                tools_registered = await self._discover_tools(instance)
+                # If we can't discover tools and have credentials, mark as error
+                if not tools_registered and instance.credentials:
+                    status = "error"
+            except Exception as exc:
+                logger.warning("Status check: tool discovery failed for instance %s: %s", instance_id, exc)
+                if instance.credentials:
+                    status = "error"
 
         return {
             "instance": instance,
             "process": {
-                "pid": 0 if is_active else None,
+                "pid": None,  # We don't track actual OS PIDs for stdio processes
                 "status": status,
                 "command": command_list,
             },
@@ -432,12 +426,12 @@ class IntegrationService:
         if catalog and catalog.auth_type != "none" and not instance.credentials:
             raise ValueError("No credentials configured. Please set up authentication for this integration first.")
 
-        instance.process_pid = None
-        instance.process_status = "running"
-        await self._instance_repo.update(instance)
+        # Activate: discover tools, audit, update status
+        discovered = await self._activate_instance(
+            instance,
+            audit_details=f"Synced instance id={instance_id} — verified {len(await self._discover_tools(instance))} tools dynamically (chat={instance.available_in_chat}, reactive={instance.available_in_reactive})",
+        )
 
-        # Discover current tools from the MCP server to verify health
-        discovered = await self._discover_tools(instance)
         logger.info(
             "Synced instance id=%s — verified %d tools dynamically (chat=%s, reactive=%s)",
             instance_id,

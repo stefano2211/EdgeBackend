@@ -70,6 +70,15 @@ class SchemaVectorRepository:
             dense_embeddings: One dense vector per item (parallel).
             sparse_embeddings: One sparse vector per item (parallel), optional.
         """
+        if len(items) != len(dense_embeddings):
+            raise ValueError(
+                f"items ({len(items)}) and dense_embeddings ({len(dense_embeddings)}) must be parallel"
+            )
+        if sparse_embeddings is not None and len(items) != len(sparse_embeddings):
+            raise ValueError(
+                f"items ({len(items)}) and sparse_embeddings ({len(sparse_embeddings)}) must be parallel"
+            )
+
         await ensure_collection(
             _SCHEMA_COLLECTION,
             dimension=_SCHEMA_DIMENSION,
@@ -101,9 +110,10 @@ class SchemaVectorRepository:
                     values=sv.values,
                 )
 
+            point_id = f"{connection_id}:{item['table_name']}:{item.get('column_name') or ''}"
             points.append(
                 PointStruct(
-                    id=str(uuid.uuid4()),
+                    id=point_id,
                     vector=vector,
                     payload=payload,
                 )
