@@ -37,7 +37,11 @@ const navItems: NavItem[] = [
     path: '/resources/knowledge',
     icon: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20'
   },
-
+  {
+    label: 'Webhooks',
+    path: '/config/webhooks',
+    icon: 'M18 16.98h-5.99c-1.1 0-1.95-.94-1.8-2.04a1.88 1.88 0 0 1 1.89-1.65h2.32A4.5 4.5 0 0 0 19 8.79V8c0-1.1-.9-2-2-2h-3a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v.8a2.5 2.5 0 0 1-2.5 2.5H8.7a4.5 4.5 0 0 0-4.49 4.13A1.9 1.9 0 0 1 2.3 22H2'
+  },
   {
     label: 'Admin',
     path: '/admin/users',

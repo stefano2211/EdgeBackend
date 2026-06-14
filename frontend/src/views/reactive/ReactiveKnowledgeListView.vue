@@ -80,7 +80,7 @@
 
           <div class="flex items-start justify-between mb-4 relative z-10">
             <router-link 
-              :to="{ name: 'reactive-knowledge-detail', params: { id: kb.id } }"
+              :to="{ name: 'resources-knowledge-detail', params: { id: kb.id } }"
               class="w-12 h-12 rounded-2xl bg-[#141414] flex items-center justify-center border border-white/[0.05] hover:border-emerald-500/20 hover:text-emerald-400 transition-all duration-300"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[#4a4a4a] group-hover:text-emerald-400 transition-colors"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
@@ -91,7 +91,7 @@
           </div>
           
           <router-link 
-            :to="{ name: 'reactive-knowledge-detail', params: { id: kb.id } }"
+            :to="{ name: 'resources-knowledge-detail', params: { id: kb.id } }"
             class="relative z-10"
           >
             <h3 class="font-bold text-[17px] text-white mb-1 leading-tight truncate tracking-tight group-hover:text-emerald-400 transition-colors">{{ kb.name }}</h3>

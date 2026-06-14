@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     EVENT_INGEST_API_KEY: str = "change-me-event-ingest-key"
 
     # ── OAuth ──
-    OAUTH_REDIRECT_URL: str = "http://localhost:8000/api/v1/integrations/oauth/callback"
+    OAUTH_REDIRECT_URL: str = "http://localhost/api/v1/integrations/oauth/callback"
     GMAIL_CLIENT_ID: str | None = None
     GMAIL_CLIENT_SECRET: str | None = None
 
@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
 
     # ── Contextual Chunking ──
-    CONTEXTUAL_CHUNKING_ENABLED: bool = True
+    CONTEXTUAL_CHUNKING_ENABLED: bool = False
 
     # ── Query Enhancement ──
     QUERY_ENHANCEMENT_ENABLED: bool = True

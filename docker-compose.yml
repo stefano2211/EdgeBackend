@@ -230,6 +230,7 @@ services:
       GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - backend-hf-cache:/app/.cache/huggingface
     networks:
       - edge-network
     deploy:
@@ -279,6 +280,8 @@ volumes:
   redis_data:
     driver: local
   minio_data:
+    driver: local
+  backend-hf-cache:
     driver: local
 
 # ── Red ──────────────────────────────────────────────────────────

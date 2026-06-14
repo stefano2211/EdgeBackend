@@ -88,15 +88,12 @@ function getInitials(name: string): string {
 
 
         <router-link
-          to="/operations"
+          to="/dashboard"
           class="flex items-center gap-2.5 px-2.5 py-2 w-full text-left text-[13px] font-medium text-[#b4b4b4] hover:bg-white/[0.04] hover:text-[#ececec] rounded-lg transition-colors"
           active-class="bg-white/[0.06] !text-white"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-[#7a7a7a]"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          Eventos
-          <span v-if="(pendingEvents ?? 0) > 0" class="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-            {{ pendingEvents }}
-          </span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-[#7a7a7a]"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          Dashboard
         </router-link>
 
         <router-link
