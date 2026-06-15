@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 /**
  * DynamicMetricCard — renders any key-value from event.body dynamically.
  * No hardcoded fields. Adapts to the data type (number, string, boolean, object).
@@ -50,19 +52,33 @@ function formatValue(value: any): string {
 const isNumber = typeof props.value === 'number'
 const unit = isNumber ? inferUnit(props.label) : ''
 const displayValue = formatValue(props.value)
+
+const isObject = computed(() => {
+  return props.value !== null && typeof props.value === 'object' && !Array.isArray(props.value)
+})
+
+const formattedObject = computed(() => {
+  if (!isObject.value) return ''
+  return JSON.stringify(props.value, null, 2)
+})
 </script>
 
 <template>
   <div
-    class="bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 hover:border-white/[0.15] transition-colors"
+    class="bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 hover:border-white/[0.15] transition-colors flex flex-col justify-between"
     :class="isNumber ? 'min-w-[120px]' : ''"
   >
     <div class="text-[10px] text-[#7a7a7a] uppercase tracking-wider font-semibold mb-1 truncate">
       {{ label.replace(/_/g, ' ') }}
     </div>
-    <div class="flex items-baseline gap-1">
+    
+    <div v-if="isObject" class="w-full mt-1">
+      <pre class="text-[11px] font-mono text-[#d8d8d8] bg-black/40 p-2.5 rounded-lg whitespace-pre-wrap break-all leading-normal max-h-56 overflow-y-auto select-all border border-white/5">{{ formattedObject }}</pre>
+    </div>
+    
+    <div v-else class="flex items-baseline gap-1 min-w-0">
       <span
-        class="font-mono font-semibold text-[#ececec]"
+        class="font-mono font-semibold text-[#ececec] break-all whitespace-normal"
         :class="isNumber ? 'text-[18px]' : 'text-[13px]'"
       >
         {{ displayValue }}

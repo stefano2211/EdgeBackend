@@ -113,3 +113,141 @@ class TestPromptSubagentNaming:
         assert "db-agent" not in prompt
         assert "db_analyst-agent" in prompt
 
+
+class TestDBQueryToolExceptionHandling:
+    """Verify that the db_query tool handles database exceptions gracefully."""
+
+    @pytest.mark.asyncio
+    async def test_db_query_exception_returns_error_string(self):
+        from backend.ia.tools.unified.db import create_db_query_tool
+        from unittest.mock import patch
+
+        # Mock DatabaseConnectionService and the get_session contexts
+        mock_conn = MagicMock()
+        mock_conn.name = "test_db"
+        mock_conn.id = "conn_123"
+
+        mock_service = MagicMock()
+        mock_service.list_connections = AsyncMock(return_value=[mock_conn])
+        mock_service.execute_query = AsyncMock(side_effect=Exception("Database error details"))
+
+        # Mock the get_session context manager in backend.ia.tools.unified._session
+        mock_session_context = AsyncMock()
+
+        with patch("backend.ia.tools.unified.db.get_session", return_value=mock_session_context), \
+             patch("backend.ia.tools.unified.db.DatabaseConnectionService", return_value=mock_service):
+            tool = create_db_query_tool(user_id=1, context="chat")
+            result = await tool.ainvoke({"connection_name": "test_db", "sql_query": "SELECT * FROM invalid_table;"})
+
+            assert "Error executing query: Database error details" in result
+
+
+class TestDataAnalystExecuteWithRetry:
+    """Verify that DataAnalystService._execute_with_retry passes the correct user_id."""
+
+    @pytest.mark.asyncio
+    async def test_execute_with_retry_passes_user_id(self):
+        from unittest.mock import patch, AsyncMock
+        from backend.services.data_analyst_service import DataAnalystService
+
+        session = AsyncMock()
+        mock_db_service = MagicMock()
+        mock_db_service.execute_query = AsyncMock()
+
+        service = DataAnalystService(session, db_service=mock_db_service)
+        
+        with patch.object(service, '_is_safe_sql', return_value=True):
+            await service._execute_with_retry(
+                sql="SELECT 1;",
+                connection_id="conn_123",
+                connection_name="test_conn",
+                user_id=42
+            )
+        
+        mock_db_service.execute_query.assert_called_once_with(
+            connection_id="conn_123",
+            user_id=42,
+            sql="SELECT 1;"
+        )
+
+
+class TestSubagentTokenFiltering:
+    """Verify that _extract_chunk_payload filters out subagent tokens and routes them as thoughts."""
+
+    def test_extract_chunk_payload_orchestrator_token(self):
+        from backend.services.chat_orchestrator import _extract_chunk_payload
+        from langchain_core.messages import AIMessageChunk
+
+        token = AIMessageChunk(content="Hello from orchestrator")
+        chunk = {
+            "type": "messages",
+            "data": (token, {"lc_agent_name": "orchestrator"})
+        }
+
+        agent, text, reasoning, agents_used, events = _extract_chunk_payload(
+            chunk, current_agent="orchestrator", agents_used=set()
+        )
+
+        assert agent == "orchestrator"
+        assert text == "Hello from orchestrator"
+        assert not reasoning
+        assert not events
+
+    def test_extract_chunk_payload_subagent_token(self):
+        from backend.services.chat_orchestrator import _extract_chunk_payload
+        from langchain_core.messages import AIMessageChunk
+
+        token = AIMessageChunk(content="Thinking by subagent")
+        chunk = {
+            "type": "messages",
+            "data": (token, {"lc_agent_name": "db_analyst-agent"})
+        }
+
+        agent, text, reasoning, agents_used, events = _extract_chunk_payload(
+            chunk, current_agent="orchestrator", agents_used=set()
+        )
+
+        assert agent == "db_analyst-agent"
+        # Subagent tokens should be hidden from main text/reasoning output
+        assert not text
+        assert not reasoning
+        # Instead, they should be routed as a thought event
+        assert len(events) == 3  # subagent status complete, running, and thought events
+        thought_event = next(e for e in events if e.get("type") == "thought")
+        assert thought_event["agent"] == "db_analyst-agent"
+        assert thought_event["content"] == "Thinking by subagent"
+
+
+class TestRAGToolRetrieval:
+    """Verify that RAG tool retrieve calls use context_tag instead of context parameter."""
+
+    @pytest.mark.asyncio
+    async def test_rag_tool_retrieve_calls_pipeline_retrieve(self):
+        from unittest.mock import patch, AsyncMock
+        from backend.ia.tools.unified.rag import _rag_retrieve_impl
+
+        # Mock the RetrievalPipeline
+        mock_pipeline_instance = MagicMock()
+        mock_pipeline_instance.retrieve = AsyncMock()
+
+        with patch("backend.services.retrieval_pipeline.RetrievalPipeline", return_value=mock_pipeline_instance):
+            await _rag_retrieve_impl(
+                knowledge_base_ids=["kb_1"],
+                query="test query",
+                top_k=5,
+                prefix="kb_",
+                context="chat"
+            )
+
+        mock_pipeline_instance.retrieve.assert_called_once_with(
+            knowledge_base_id="kb_1",
+            query="test query",
+            top_k=5,
+            prefix="kb_",
+            context_tag="chat"
+        )
+
+
+
+
+

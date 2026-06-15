@@ -16,6 +16,8 @@ import asyncio
 import logging
 from typing import AsyncIterator
 
+logger = logging.getLogger(__name__)
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.v1.schemas.chat import ChatRequest
@@ -95,9 +97,24 @@ def _extract_chunk_payload(
     token_type = getattr(token, "type", None)
     
     if token_type in ("ai", "AIMessageChunk"):
-        text = getattr(token, "content", None) or ""
-        # Anthropic / DeepSeek extended-thinking support (optional)
-        reasoning_text = getattr(token, "reasoning_content", None) or ""
+        raw_text = getattr(token, "content", None) or ""
+        raw_reasoning = getattr(token, "reasoning_content", None) or ""
+        if agent_name == "orchestrator":
+            text = raw_text
+            reasoning_text = raw_reasoning
+        else:
+            if raw_text:
+                events.append({
+                    "type": "thought",
+                    "agent": agent_name,
+                    "content": raw_text,
+                })
+            if raw_reasoning:
+                events.append({
+                    "type": "thought",
+                    "agent": agent_name,
+                    "content": raw_reasoning,
+                })
     elif token_type in ("tool", "ToolMessageChunk"):
         # Tool result content — stream as an event rather than raw text
         tool_content = getattr(token, "content", None) or ""

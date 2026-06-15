@@ -31,7 +31,7 @@ export const chatService = {
         const token = localStorage.getItem('token')
         const baseURL = import.meta.env.PROD ? (import.meta.env.VITE_API_URL || '') : ''
 
-        const response = await fetch(`${baseURL}/api/v1/chat/chat/stream`, {
+        const response = await fetch(`${baseURL}/api/v1/chat/stream`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

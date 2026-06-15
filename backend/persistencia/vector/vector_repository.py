@@ -200,49 +200,58 @@ class VectorRepository:
 
         search_params = SearchParams(hnsw_ef=hnsw_ef, exact=False)
 
-        # ── Hybrid search with RRF fusion ──
-        if sparse_query is not None and settings.HYBRID_SEARCH_ENABLED:
-            response = await self.client.query_points(
-                collection_name=name,
-                prefetch=[
-                    models.Prefetch(
-                        query=query_embedding,
-                        using="dense",
-                        limit=prefetch_limit,
-                        filter=query_filter,
-                        params=search_params,
-                    ),
-                    models.Prefetch(
-                        query=models.SparseVector(
-                            indices=sparse_query.indices,
-                            values=sparse_query.values,
+        try:
+            # ── Hybrid search with RRF fusion ──
+            if sparse_query is not None and settings.HYBRID_SEARCH_ENABLED:
+                response = await self.client.query_points(
+                    collection_name=name,
+                    prefetch=[
+                        models.Prefetch(
+                            query=query_embedding,
+                            using="dense",
+                            limit=prefetch_limit,
+                            filter=query_filter,
+                            params=search_params,
                         ),
-                        using="sparse",
-                        limit=prefetch_limit,
-                        filter=query_filter,
-                    ),
-                ],
-                query=models.FusionQuery(fusion=models.Fusion.RRF),
-                limit=top_k,
-                with_payload=True,
-            )
-            logger.debug(
-                "Hybrid RRF search on %s: prefetch=%d, final=%d results",
-                name,
-                prefetch_limit,
-                len(response.points),
-            )
-        else:
-            # ── Dense-only fallback ──
-            response = await self.client.query_points(
-                collection_name=name,
-                query=query_embedding,
-                using="dense",
-                limit=top_k,
-                with_payload=True,
-                query_filter=query_filter,
-                search_params=search_params,
-            )
+                        models.Prefetch(
+                            query=models.SparseVector(
+                                indices=sparse_query.indices,
+                                values=sparse_query.values,
+                            ),
+                            using="sparse",
+                            limit=prefetch_limit,
+                            filter=query_filter,
+                        ),
+                    ],
+                    query=models.FusionQuery(fusion=models.Fusion.RRF),
+                    limit=top_k,
+                    with_payload=True,
+                )
+                logger.debug(
+                    "Hybrid RRF search on %s: prefetch=%d, final=%d results",
+                    name,
+                    prefetch_limit,
+                    len(response.points),
+                )
+            else:
+                # ── Dense-only fallback ──
+                response = await self.client.query_points(
+                    collection_name=name,
+                    query=query_embedding,
+                    using="dense",
+                    limit=top_k,
+                    with_payload=True,
+                    query_filter=query_filter,
+                    search_params=search_params,
+                )
+        except Exception as exc:
+            if "not found" in str(exc).lower() or "404" in str(exc).lower():
+                logger.warning(
+                    "Qdrant collection %s does not exist yet. Returning empty search results.",
+                    name,
+                )
+                return []
+            raise
 
         return [
             {

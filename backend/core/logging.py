@@ -18,3 +18,27 @@ def configure_logging() -> None:
     root.setLevel(level)
     if not root.handlers:
         root.addHandler(handler)
+
+    # Mute noisy third-party loggers
+    noisy_loggers = [
+        "httpcore",
+        "httpx",
+        "urllib3",
+        "openai",
+        "qdrant_client",
+        "hpack",
+        "asyncio",
+        "huggingface_hub",
+        "filelock",
+        "sqlfluff",
+        "sqlfluff.lexer",
+        "sqlfluff.parser",
+        "sqlfluff.linter",
+        "sqlfluff.config",
+        "sqlfluff.plugin",
+        "sqlfluff.templater",
+        "sqlfluff.rules",
+    ]
+    for logger_name in noisy_loggers:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+

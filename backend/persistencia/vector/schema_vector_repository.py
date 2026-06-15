@@ -174,49 +174,58 @@ class SchemaVectorRepository:
         query_filter = Filter(must=must_conditions)
         search_params = SearchParams(hnsw_ef=hnsw_ef, exact=False)
 
-        # ── Hybrid search with RRF ──
-        if sparse_query is not None and settings.HYBRID_SEARCH_ENABLED:
-            response = await self.client.query_points(
-                collection_name=_SCHEMA_COLLECTION,
-                prefetch=[
-                    models.Prefetch(
-                        query=query_embedding,
-                        using="dense",
-                        limit=prefetch_limit,
-                        filter=query_filter,
-                        params=search_params,
-                    ),
-                    models.Prefetch(
-                        query=models.SparseVector(
-                            indices=sparse_query.indices,
-                            values=sparse_query.values,
+        try:
+            # ── Hybrid search with RRF ──
+            if sparse_query is not None and settings.HYBRID_SEARCH_ENABLED:
+                response = await self.client.query_points(
+                    collection_name=_SCHEMA_COLLECTION,
+                    prefetch=[
+                        models.Prefetch(
+                            query=query_embedding,
+                            using="dense",
+                            limit=prefetch_limit,
+                            filter=query_filter,
+                            params=search_params,
                         ),
-                        using="sparse",
-                        limit=prefetch_limit,
-                        filter=query_filter,
-                    ),
-                ],
-                query=models.FusionQuery(fusion=models.Fusion.RRF),
-                limit=top_k,
-                with_payload=True,
-            )
-            logger.debug(
-                "Schema hybrid RRF search: user=%s, top_k=%d, results=%d",
-                user_id,
-                top_k,
-                len(response.points),
-            )
-        else:
-            # ── Dense-only fallback ──
-            response = await self.client.query_points(
-                collection_name=_SCHEMA_COLLECTION,
-                query=query_embedding,
-                using="dense",
-                limit=top_k,
-                with_payload=True,
-                query_filter=query_filter,
-                search_params=search_params,
-            )
+                        models.Prefetch(
+                            query=models.SparseVector(
+                                indices=sparse_query.indices,
+                                values=sparse_query.values,
+                            ),
+                            using="sparse",
+                            limit=prefetch_limit,
+                            filter=query_filter,
+                        ),
+                    ],
+                    query=models.FusionQuery(fusion=models.Fusion.RRF),
+                    limit=top_k,
+                    with_payload=True,
+                )
+                logger.debug(
+                    "Schema hybrid RRF search: user=%s, top_k=%d, results=%d",
+                    user_id,
+                    top_k,
+                    len(response.points),
+                )
+            else:
+                # ── Dense-only fallback ──
+                response = await self.client.query_points(
+                    collection_name=_SCHEMA_COLLECTION,
+                    query=query_embedding,
+                    using="dense",
+                    limit=top_k,
+                    with_payload=True,
+                    query_filter=query_filter,
+                    search_params=search_params,
+                )
+        except Exception as exc:
+            if "not found" in str(exc).lower() or "404" in str(exc).lower():
+                logger.warning(
+                    "Qdrant collection %s does not exist yet. Returning empty schema results.",
+                    _SCHEMA_COLLECTION,
+                )
+                return []
+            raise
 
         return [
             {

@@ -25,6 +25,7 @@ from backend.integrations.credential_vault import CredentialVault
 from backend.services.schema_embedding_service import SchemaEmbeddingService
 from backend.core.exceptions import NotFoundError, SecurityError
 
+logger = logging.getLogger(__name__)
 _vault = CredentialVault()
 
 # Layer 3: Regex backup
@@ -247,7 +248,6 @@ class DatabaseConnectionService:
             )
             tables = [SchemaIntelligence.to_schema_table(et) for et in enriched_tables]
         except Exception as exc:
-            logger = logging.getLogger(__name__)
             logger.warning("Schema enrichment failed, using basic schema: %s", exc)
 
         # Merge with existing descriptions (user overrides auto-generated)

@@ -32,7 +32,7 @@ async def _rag_retrieve_impl(
                 query=query,
                 top_k=top_k,
                 prefix=prefix,
-                context=context,
+                context_tag=context,
             )
             if result.chunks:
                 all_chunks.extend(result.chunks)

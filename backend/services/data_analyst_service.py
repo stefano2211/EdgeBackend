@@ -166,6 +166,7 @@ class DataAnalystService:
                 sql=generated.sql,
                 connection_id=generated.connection_id,
                 connection_name=generated.connection_name,
+                user_id=user_id,
             )
 
             elapsed = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
@@ -347,6 +348,7 @@ class DataAnalystService:
         sql: str,
         connection_id: str,
         connection_name: str,
+        user_id: int,
     ) -> SQLExecutionResult:
         """Execute SQL with automatic retry on transient/fatal errors."""
         start = datetime.now(timezone.utc)
@@ -370,7 +372,7 @@ class DataAnalystService:
                 # Execute via DatabaseConnectionService
                 result: QueryResult = await self._db_service.execute_query(
                     connection_id=connection_id,
-                    user_id=0,  # user_id validated upstream
+                    user_id=user_id,
                     sql=current_sql,
                 )
 

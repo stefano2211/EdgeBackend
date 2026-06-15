@@ -62,6 +62,37 @@ const activeFilters = ref<Record<string, string>>({
   source: '',
 })
 
+const openFilterDropdown = ref<string | null>(null)
+
+function toggleFilterDropdown(key: string) {
+  if (openFilterDropdown.value === key) {
+    openFilterDropdown.value = null
+  } else {
+    openFilterDropdown.value = key
+  }
+}
+
+function selectFilterOption(key: string, value: string) {
+  activeFilters.value[key] = value
+  openFilterDropdown.value = null
+}
+
+const hasActiveFilters = computed(() => {
+  return Object.values(activeFilters.value).some(v => v !== '')
+})
+
+function resetFilters() {
+  for (const key in activeFilters.value) {
+    activeFilters.value[key] = ''
+  }
+}
+
+const closeAllFilterDropdowns = (e: MouseEvent) => {
+  if (!(e.target as Element).closest('.filter-dropdown-container')) {
+    openFilterDropdown.value = null
+  }
+}
+
 // Modals
 const showCreateModal = ref(false)
 
@@ -410,6 +441,7 @@ onMounted(() => {
   loadEvents()
   connectSSE()
   checkReactiveConfig()
+  window.addEventListener('click', closeAllFilterDropdowns)
 })
 
 watch(showCreateModal, (val) => {
@@ -420,6 +452,7 @@ watch(showCreateModal, (val) => {
 
 onUnmounted(() => {
   sseSource?.close()
+  window.removeEventListener('click', closeAllFilterDropdowns)
 })
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -524,18 +557,75 @@ function formatTime(d: string) {
       </div>
 
       <!-- Filters -->
-      <div class="px-3 py-2 border-b border-white/[0.06] flex gap-2 flex-wrap">
-        <select
-          v-for="def in filterDefinitions"
-          :key="def.key"
-          v-model="activeFilters[def.key]"
-          class="text-[12px] bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[#ececec] focus:outline-none focus:border-white/20"
+      <div class="px-4 py-2 border-b border-white/[0.06] flex gap-2 flex-wrap items-center">
+        <div 
+          v-for="def in filterDefinitions" 
+          :key="def.key" 
+          class="relative filter-dropdown-container"
         >
-          <option value="">{{ def.label }}</option>
-          <option v-for="opt in filterOptions[def.key]?.options" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
+          <button
+            @click.stop="toggleFilterDropdown(def.key)"
+            class="flex items-center gap-2 text-[12px] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[#ececec] hover:bg-white/10 hover:border-white/20 transition-all font-medium focus:outline-none focus:border-white/20"
+            :class="{ '!border-white/20 bg-white/10': openFilterDropdown === def.key }"
+          >
+            <span>
+              {{ activeFilters[def.key] ? (def.labelMap?.[activeFilters[def.key]] ?? activeFilters[def.key]) : def.label }}
+            </span>
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="12" 
+              height="12" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2.5" 
+              stroke-linecap="round" 
+              stroke-linejoin="round" 
+              class="text-[#7a7a7a] transition-transform duration-200"
+              :class="{ 'rotate-180 text-white': openFilterDropdown === def.key }"
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <Transition name="fade-popover">
+            <div
+              v-if="openFilterDropdown === def.key"
+              class="absolute left-0 mt-1.5 w-48 bg-[#161616] border border-white/[0.08] rounded-xl shadow-2xl py-1.5 z-[99] backdrop-blur-md overflow-hidden"
+            >
+              <button
+                @click="selectFilterOption(def.key, '')"
+                class="w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between"
+                :class="!activeFilters[def.key] ? 'text-violet-400 bg-violet-500/10 font-semibold' : 'text-[#7a7a7a] hover:bg-white/5 hover:text-white'"
+              >
+                <span>Todo ({{ def.label }})</span>
+                <svg v-if="!activeFilters[def.key]" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-violet-400"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+              
+              <div class="border-t border-white/[0.04] my-1"></div>
+
+              <button
+                v-for="opt in filterOptions[def.key]?.options"
+                :key="opt.value"
+                @click="selectFilterOption(def.key, opt.value)"
+                class="w-full text-left px-3.5 py-2 text-[12px] transition-colors flex items-center justify-between"
+                :class="activeFilters[def.key] === opt.value ? 'text-violet-400 bg-violet-500/10 font-semibold' : 'text-[#b4b4b4] hover:bg-white/5 hover:text-white'"
+              >
+                <span>{{ opt.label }}</span>
+                <svg v-if="activeFilters[def.key] === opt.value" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-violet-400"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+            </div>
+          </Transition>
+        </div>
+
+        <button
+          v-if="hasActiveFilters"
+          @click="resetFilters"
+          class="text-[11px] font-semibold text-red-400 hover:text-red-300 transition-colors ml-2 px-2 py-1 rounded-lg hover:bg-red-500/10 flex items-center gap-1"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          Limpiar
+        </button>
       </div>
 
       <!-- List -->
@@ -729,6 +819,7 @@ function formatTime(d: string) {
                     :key="key"
                     :label="String(key)"
                     :value="value"
+                    :class="typeof value === 'object' && value !== null && !Array.isArray(value) ? 'col-span-full' : ''"
                   />
                 </div>
               </div>
@@ -958,3 +1049,15 @@ function formatTime(d: string) {
     <AdminModal v-if="route.query.admin" />
   </div>
 </template>
+
+<style scoped>
+.fade-popover-enter-active,
+.fade-popover-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.fade-popover-enter-from,
+.fade-popover-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+}
+</style>

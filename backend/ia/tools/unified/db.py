@@ -18,9 +18,12 @@ def create_db_query_tool(user_id: int, context: str = "chat") -> StructuredTool:
             if not conn:
                 return f"Error: No connection named '{connection_name}' found."
 
-            result: QueryResult = await service.execute_query(
-                conn.id, user_id, sql_query
-            )
+            try:
+                result: QueryResult = await service.execute_query(
+                    conn.id, user_id, sql_query
+                )
+            except Exception as exc:
+                return f"Error executing query: {exc}"
 
             if result.row_count == 0:
                 return "Query executed successfully. No rows returned."
