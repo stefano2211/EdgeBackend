@@ -107,15 +107,15 @@ class ReactiveOrchestrator:
                 await self._emit("planner_result", event.id, {"plan": output.plan})
                 await self._emit_log(event.id, "Remediation plan generated", level="info")
 
+            # ── Send email automatically via MCP ──
+            await self._send_analysis_email(event, session)
+
             # Transition to completed
             event.status = "completed"
             event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
             await session.commit()
             await self._refresh_and_broadcast(event, session)
             await self._emit_log(event.id, "Analysis complete — event resolved", level="info")
-
-            # ── Send email automatically via MCP ──
-            await self._send_analysis_email(event, session)
 
         except Exception as exc:
             logger.exception("Analysis pipeline failed for event %s", event.id)
@@ -127,14 +127,14 @@ class ReactiveOrchestrator:
     async def execute(self, event: Event, session: AsyncSession) -> None:
         """Remediation execution phase — no longer used in automatic flow.
 
-        Kept for backward compatibility with legacy endpoints.
+        Raises NotImplementedError because the reactive pipeline completes
+        in a single phase (analysis). The two-phase approach has been removed.
         """
-        await self._emit_log(event.id, "Execution phase skipped (automatic flow)", level="info")
-        logger.info("Event %s execute() called but automatic flow already completed.", event.id)
-        event.status = "completed"
-        event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        await session.commit()
-        await self._refresh_and_broadcast(event, session)
+        raise NotImplementedError(
+            "The reactive pipeline no longer has a separate execution phase. "
+            "The analysis phase produces analysis, diagnosis, and remediation plan "
+            "in a single step. Event execution must be handled externally."
+        )
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  ORCHESTRATOR PHASE
@@ -150,6 +150,8 @@ class ReactiveOrchestrator:
         tool_schemas: list[dict] | None = None,
     ) -> ReactiveAnalysisOutput | None:
         """Run the DeepAgents orchestrator and parse the final message as structured JSON."""
+        db_connection_ids = await self._resolve_db_connection_ids(session, event.triggered_by_user_id)
+
         orchestrator = create_reactive_orchestrator(
             knowledge_base_ids=enabled_kb_ids or None,
             enable_knowledge=bool(enabled_kb_ids),
@@ -159,6 +161,7 @@ class ReactiveOrchestrator:
             tool_schemas=tool_schemas,
             kb_names=enabled_kb_names,
             user_id=event.triggered_by_user_id,
+            db_connection_ids=db_connection_ids,
         )
 
         user_message = (
@@ -243,7 +246,13 @@ class ReactiveOrchestrator:
                 base_model = get_chat_model()
                 structured_model = base_model.with_structured_output(ReactiveAnalysisOutput)
                 
-                output = await structured_model.ainvoke(list(msgs) + [synthesis_msg])
+                # Build synthesis context: filter to human + AI messages only,
+                # excluding large tool outputs to save tokens.
+                synthesis_msgs = [
+                    msg for msg in msgs
+                    if getattr(msg, "type", "") in ("human", "ai")
+                ]
+                output = await structured_model.ainvoke(synthesis_msgs + [synthesis_msg])
                 return output
             except Exception as e:
                 logger.exception("Failed structured output synthesis, falling back to text parsing: %s", e)
@@ -410,6 +419,9 @@ Aura AI Operations Center
         payload_str = ""
         if event.body:
             payload_str = json.dumps(event.body, indent=2)
+            MAX_PAYLOAD_CHARS = 8000
+            if len(payload_str) > MAX_PAYLOAD_CHARS:
+                payload_str = payload_str[:MAX_PAYLOAD_CHARS] + "\n... [truncated]"
 
         return (
             f"Event ID: {event.id}\n"
@@ -450,6 +462,22 @@ Aura AI Operations Center
             return all_tools
         except Exception as e:
             logger.warning("Failed to resolve reactive tool schemas dynamically: %s", e)
+            return []
+
+    async def _resolve_db_connection_ids(
+        self, session: AsyncSession, user_id: int | None
+    ) -> list[str]:
+        """Resolve active database connection IDs for the user in reactive context."""
+        if user_id is None:
+            return []
+        try:
+            from backend.database_connector.repository import DatabaseConnectionRepository
+
+            repo = DatabaseConnectionRepository(session)
+            connections = await repo.list_by_user(user_id, context="reactive")
+            return [c.id for c in connections]
+        except Exception as e:
+            logger.warning("Failed to resolve DB connection IDs: %s", e)
             return []
 
     async def _emit(self, event_type: str, event_id: int, data: dict) -> None:

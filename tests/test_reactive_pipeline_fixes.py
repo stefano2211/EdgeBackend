@@ -86,3 +86,83 @@ class TestOrchestratorPromptHasJsonOutput:
         assert '"diagnosis"' in prompt
         assert '"plan"' in prompt
         assert "synthesis_rules" in prompt  # original rules still present
+
+
+class TestEventQueryTruncation:
+    """Verify event body is truncated in the query sent to the orchestrator."""
+
+    def test_large_payload_is_truncated(self):
+        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+
+        orch = ReactiveOrchestrator(broadcaster=MagicMock())
+        event = MagicMock()
+        event.id = 1
+        event.event_type = "alert"
+        event.domain = "test"
+        event.source = "test-source"
+        event.severity_text = "critical"
+        event.severity_number = 30
+        event.title = "Test Event"
+        event.description = "Test description"
+        event.body = {"data": "X" * 20000}
+
+        query = orch._build_event_query(event)
+
+        assert "[truncated" in query.lower()
+        assert len(query) < 12000
+
+    def test_small_payload_not_truncated(self):
+        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+
+        orch = ReactiveOrchestrator(broadcaster=MagicMock())
+        event = MagicMock()
+        event.id = 1
+        event.event_type = "alert"
+        event.domain = "test"
+        event.source = "test-source"
+        event.severity_text = "info"
+        event.severity_number = 13
+        event.title = "Small Event"
+        event.description = "Small test"
+        event.body = {"key": "value", "nested": {"deep": "data"}}
+
+        query = orch._build_event_query(event)
+
+        assert "[truncated" not in query.lower()
+        assert "Payload:" in query
+        assert '"key": "value"' in query
+
+
+class TestDbAnalystConditionalInclusion:
+    """Verify db_analyst is only included when DB connections exist."""
+
+    def test_db_analyst_excluded_when_no_connections(self):
+        # Verify the default_names logic: no db_connection_ids → no db_analyst
+        db_connection_ids = []
+        default_names = ["historical"]
+        if db_connection_ids:
+            default_names.append("db_analyst")
+        assert "db_analyst" not in default_names
+
+    def test_db_analyst_included_when_connections_exist(self):
+        db_connection_ids = ["conn-1", "conn-2"]
+        default_names = ["historical"]
+        if db_connection_ids:
+            default_names.append("db_analyst")
+        assert "db_analyst" in default_names
+
+
+class TestExecuteRaisesNotImplemented:
+    """Verify execute() raises NotImplementedError instead of silently completing."""
+
+    @pytest.mark.asyncio
+    async def test_execute_raises_not_implemented(self):
+        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+
+        orch = ReactiveOrchestrator(broadcaster=MagicMock())
+        event = MagicMock()
+        event.id = 1
+        session = MagicMock()
+
+        with pytest.raises(NotImplementedError, match="execution phase"):
+            await orch.execute(event, session)

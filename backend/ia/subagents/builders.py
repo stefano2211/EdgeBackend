@@ -59,7 +59,6 @@ def _build_mcp_subagent(
 ) -> dict:
     # Build dynamic tool catalog for the prompt
     tool_catalog = ""
-    has_rest_tools = False
     if tool_schemas:
         lines = ["Available tools (call via mcp_execute):\n"]
         for i, t in enumerate(tool_schemas, 1):
@@ -69,10 +68,8 @@ def _build_mcp_subagent(
             config = t.get("config") or {}
             transport = config.get("transport", "stdio")
 
-            # Detect REST auto-discovered tools
+            # Detect REST auto-discovered tools for response field display
             is_rest = transport == "rest" or bool(schema.get("filterable_schema"))
-            if is_rest:
-                has_rest_tools = True
 
             line = f"{i}. {name} — {desc}"
             line += f"\n   Transport: {transport.upper()}"
@@ -127,7 +124,7 @@ def _build_mcp_subagent(
     return {
         "name": "mcp-agent",
         "description": MCP_AGENT_DESCRIPTION,
-        "system_prompt": build_mcp_system_prompt(tool_catalog=tool_catalog, has_rest_tools=has_rest_tools),
+        "system_prompt": build_mcp_system_prompt(tool_catalog=tool_catalog),
         "tools": tools,
         "model": get_chat_model(),
     }

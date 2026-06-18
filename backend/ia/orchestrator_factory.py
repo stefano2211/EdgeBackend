@@ -90,7 +90,9 @@ def create_orchestrator(
     # Resolve KB IDs uniformly
     if context == "reactive":
         kb_ids = knowledge_base_ids if enable_knowledge else None
-        default_names = ["historical", "db_analyst"]
+        default_names = ["historical"]
+        if db_connection_ids:
+            default_names.append("db_analyst")
         if has_rag:
             default_names.insert(0, "rag")
         if has_mcp:
@@ -153,11 +155,14 @@ def create_orchestrator(
 
     checkpointer, store = _resolve_memory()
 
+    from backend.ia.middleware.prevent_loop import PreventSubagentLoopMiddleware
+
     kwargs: dict = {
         "model": get_chat_model(),
         "system_prompt": prompt,
         "subagents": subagents,
         "tools": [],  # orchestrator has no direct tools
+        "middleware": [PreventSubagentLoopMiddleware()],
     }
     if checkpointer is not None:
         kwargs["checkpointer"] = checkpointer

@@ -29,19 +29,19 @@ RAG_AGENT_SYSTEM_PROMPT = build_rag_system_prompt()
 # ── MCP Agent ──
 MCP_AGENT_DESCRIPTION = (
     "External integration and live data execution specialist. "
-    "Use when the user query requires: (1) executing actions via registered integrations "
-    "(e.g., sending messages, reading data, managing resources, calling APIs, interacting with external services), "
-    "or (2) real-time readings, live KPIs, or current system state. "
+    "Use when the query requires: (1) executing actions via registered integrations "
+    "(sending messages, reading data, calling APIs, interacting with external services), "
+    "or (2) real-time readings, live KPIs, or current system state from connected tools. "
     "Has access to: mcp_execute (live API/tool execution via registered integrations). "
-    "ALWAYS delegate here for any action on a connected integration or live data retrieval. "
+    "ALWAYS delegate here for live data retrieval or any action on a connected integration. "
     "Do NOT use for: document search (use rag-agent), historical trends (use historical-agent), "
-
+    "or database SQL queries (use db_analyst-agent)."
 )
 
 
-def build_mcp_system_prompt(tool_catalog: str = "", has_rest_tools: bool = False) -> str:
+def build_mcp_system_prompt(tool_catalog: str = "") -> str:
     """Build MCP agent system prompt with dynamic tool catalog."""
-    return load_prompt("subagent_mcp", tool_catalog=tool_catalog, has_rest_tools=has_rest_tools)
+    return load_prompt("subagent_mcp", tool_catalog=tool_catalog)
 
 
 MCP_AGENT_SYSTEM_PROMPT = build_mcp_system_prompt()
@@ -49,14 +49,14 @@ MCP_AGENT_SYSTEM_PROMPT = build_mcp_system_prompt()
 
 # ── Historical Agent ──
 HISTORICAL_AGENT_DESCRIPTION = (
-    "Historical data analysis specialist. "
-    "Use ONLY when the user asks about trends, patterns, time-series comparisons, "
-    "quarter-over-quarter or year-over-year analysis, past failure patterns, "
-    "or historical performance KPIs from more than 6 months ago. "
-    "This agent reasons purely from fine-tuned training weights — it has NO external tools. "
+    "Industrial failure pattern and root cause analysis specialist. "
+    "Use when the event requires: identifying known failure patterns, recurring anomaly types, "
+    "common root causes for the event domain, or cross-referencing the event against typical "
+    "industrial/IT incident patterns from general engineering knowledge. "
+    "This agent has NO external tools — it reasons from general domain knowledge. "
     "Do NOT use for: real-time data retrieval (use mcp-agent), document lookups (use rag-agent), "
-
-    "Do NOT use if the question is about current/live values — use mcp-agent for that."
+    "or database queries (use db_analyst-agent). "
+    "Do NOT use if the question is purely about current/live values — use mcp-agent for that."
 )
 
 HISTORICAL_AGENT_SYSTEM_PROMPT = load_prompt("subagent_historical")
