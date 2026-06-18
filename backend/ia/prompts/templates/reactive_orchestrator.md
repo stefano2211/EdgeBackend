@@ -61,7 +61,7 @@ these EXACT fields (all in Spanish):
 ```
 
 Wrap this JSON in ```json ... ``` code fences so it can be parsed.
-Do NOT include any text after the JSON block.
+Do NOT include any text before or after the JSON block.
 </output_format>
 
 <false_positive_detection>

@@ -1,28 +1,21 @@
-"""Reactive event pipeline — Aura AI.
+"""Reactive event pipeline — simplified single-phase analysis.
 
-Architecture (2-phase):
-  Phase 1 — S2-Triage:      routing decision (fast LLM call, JSON)
-  Phase 2 — S2-Autonomous:  autonomous orchestrator delegates to rag-agent, mcp-agent
-                             and historical-agent via task() (flat hierarchy)
-
-SOLID:
-  - SRP: Each phase is a private method.
-  - OCP: New specialists can be added without changing the pipeline.
-  - DIP: Depends on ChatOrchestrator and EventBroadcastManager abstractions.
+Architecture:
+  1. Event arrives → status "analyzing"
+  2. DeepAgents orchestrator delegates to sub-agents (rag, mcp, historical, db_analyst)
+  3. Orchestrator's final message is parsed as ReactiveAnalysisOutput JSON
+  4. Fields saved to event → status "completed"
+  5. Email sent automatically via MCP (send_email) with the 3 outputs
 """
 
-import asyncio
 import json
+import os
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.logging import logging
-from backend.ia.llm_client import get_llm_client
 from backend.ia.orchestrator_factory import create_reactive_orchestrator
-from backend.ia.prompts.reactive import (
-    REACTIVE_S2_TRIAGE_PROMPT,
-)
 from backend.ia.schemas.reactive import ReactiveAnalysisOutput
 from backend.persistencia.models.event import Event
 from backend.services.event_broadcast import EventBroadcastManager
@@ -32,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class ReactiveOrchestrator:
-    """Orchestrates reactive event analysis and execution via 3-phase pipeline."""
+    """Orchestrates reactive event analysis via single-phase DeepAgents pipeline."""
 
     def __init__(
         self,
@@ -45,14 +38,7 @@ class ReactiveOrchestrator:
     # ═══════════════════════════════════════════════════════════════════════════
 
     async def analyze(self, event: Event, session: AsyncSession) -> None:
-        """Run the 2-phase reactive analysis pipeline.
-
-        Phase 1 — S2 Triage: fast LLM call producing routing hints (JSON).
-            Phase 2 — S2 Autonomous: DeepAgents orchestrator with rag-agent, mcp-agent
-                  and historical-agent as direct sub-agents. S2 decides which
-                  to invoke via task() and synthesizes the results into structured JSON.
-        """
-        # Transition to analyzing immediately so correlation engine can filter it
+        """Run the simplified reactive analysis pipeline."""
         event.status = "analyzing"
         await session.commit()
         await self._refresh_and_broadcast(event, session)
@@ -80,7 +66,7 @@ class ReactiveOrchestrator:
                 level="warn",
             )
 
-        await self._emit_log(event.id, "Phase 0: Pipeline started", level="info")
+        await self._emit_log(event.id, "Analysis started", level="info")
         await self._emit_log(
             event.id,
             f"Config: {len(enabled_tool_ids)} tools, {len(enabled_kb_ids)} KBs enabled, "
@@ -89,27 +75,10 @@ class ReactiveOrchestrator:
         )
 
         try:
-            # ── Phase 1: S2-Triage (fast routing hints) ──
-            await self._emit_log(event.id, "Phase 1: S2-Triage starting", level="info")
-            triage = await self._run_s2_triage(event_query)
-            await self._emit("triage_result", event.id, {"triage": triage})
-            await self._emit_log(
-                event.id,
-                f"Phase 1: Triage → urgency={triage.get('urgency')} "
-                f"needs_historical={triage.get('needs_historical')} "
-                f"needs_realtime={triage.get('needs_realtime_data')}",
-                level="info",
-            )
-
-            # ── Phase 2: S2 Autonomous Orchestrator ──
-            # S2 receives event + triage hints and autonomously decides which
-            # sub-agents to invoke via task(), then synthesizes all results
-            # into a structured ReactiveAnalysisOutput JSON object.
-            await self._emit_log(event.id, "Phase 2: S2 Autonomous Orchestrator starting", level="info")
-            output = await self._run_s2_autonomous(
+            # ── Single Phase: DeepAgents Orchestrator ──
+            output = await self._run_orchestrator(
                 event=event,
                 event_query=event_query,
-                triage=triage,
                 enabled_kb_ids=[str(k) for k in enabled_kb_ids],
                 enabled_kb_names=enabled_kb_names,
                 enabled_tool_names=enabled_tool_names,
@@ -117,41 +86,36 @@ class ReactiveOrchestrator:
             )
 
             if output is None:
-                raise RuntimeError("El orquestador no pudo generar un plan (posible fallo interno del agente o timeout).")
+                raise RuntimeError(
+                    "The orchestrator could not generate a structured output "
+                    "(possible internal agent failure or timeout)."
+                )
 
-            # Store structured fields separately
+            # Store structured fields
             if output.analysis:
                 event.agent_analysis = output.analysis
-                await self._emit("system2_result", event.id, {"result": output.analysis})
-                await self._emit_log(event.id, "Phase 2: S2 analysis completed", level="info")
+                await self._emit("analysis_result", event.id, {"result": output.analysis})
+                await self._emit_log(event.id, "Analysis generated", level="info")
 
             if output.diagnosis:
                 event.agent_diagnosis = output.diagnosis
                 await self._emit("diagnosis_result", event.id, {"diagnosis": output.diagnosis})
-                await self._emit_log(event.id, "Phase 2: Diagnosis generated", level="info")
+                await self._emit_log(event.id, "Diagnosis generated", level="info")
 
             if output.plan:
                 event.agent_plan = output.plan
                 await self._emit("planner_result", event.id, {"plan": output.plan})
-                await self._emit_log(event.id, "Phase 2: Remediation plan generated", level="info")
+                await self._emit_log(event.id, "Remediation plan generated", level="info")
 
-
-            # Transition directly to completed (no execution phase)
+            # Transition to completed
             event.status = "completed"
             event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
             await session.commit()
             await self._refresh_and_broadcast(event, session)
             await self._emit_log(event.id, "Analysis complete — event resolved", level="info")
 
-            # ── Mandatory notification: analysis complete ──
-            from backend.services.notification_service import NotificationService
-            ns = NotificationService(session)
-            try:
-                await ns.notify_analysis_complete(event)
-                await self._emit_log(event.id, "Notification sent: analysis complete", level="info")
-            except Exception as notify_exc:
-                logger.warning("Failed to send analysis notification: %s", notify_exc)
-                await self._emit_log(event.id, f"Notification failed: {notify_exc}", level="warn")
+            # ── Send email automatically via MCP ──
+            await self._send_analysis_email(event, session)
 
         except Exception as exc:
             logger.exception("Analysis pipeline failed for event %s", event.id)
@@ -161,92 +125,31 @@ class ReactiveOrchestrator:
             await self._refresh_and_broadcast(event, session)
 
     async def execute(self, event: Event, session: AsyncSession) -> None:
-        """Remediation execution phase.
+        """Remediation execution phase — no longer used in automatic flow.
 
-        TODO: Implement real execution (e.g. call MCP tools with the generated plan).
-        Currently transitions directly to completed as the execution framework is not yet
-        implemented. The analysis phase (analyze) already generates a plan; this phase
-        should execute that plan via the available integrations.
+        Kept for backward compatibility with legacy endpoints.
         """
-        await self._emit_log(event.id, "Remediation execution started (placeholder)", level="warn")
-        logger.warning(
-            "Event %s execution is a placeholder. No actual remediation actions were performed. "
-            "Implement real execution by calling MCP tools with the generated plan.",
-            event.id,
-        )
+        await self._emit_log(event.id, "Execution phase skipped (automatic flow)", level="info")
+        logger.info("Event %s execute() called but automatic flow already completed.", event.id)
         event.status = "completed"
         event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
         await self._refresh_and_broadcast(event, session)
-        await self._emit_log(event.id, "Execution complete — event resolved (no actions executed)", level="warn")
-
 
     # ═══════════════════════════════════════════════════════════════════════════
-    #  PHASE 1 — S2 TRIAGE
+    #  ORCHESTRATOR PHASE
     # ═══════════════════════════════════════════════════════════════════════════
 
-    async def _run_s2_triage(self, event_query: str) -> dict:
-        """Phase 1: fast routing decision via direct LLM call."""
-        client = get_llm_client()
-        prompt = REACTIVE_S2_TRIAGE_PROMPT + f"\n\n{event_query}"
-
-        response = await client.chat_completion(
-            messages=[
-                {"role": "system", "content": "You are the Triage Director. Output only JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            max_tokens=300,
-            stream=False,
-        )
-
-        raw = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-        # Extract JSON from possible markdown fences
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1]
-        if cleaned.endswith("```"):
-            cleaned = cleaned.rsplit("\n", 1)[0]
-        cleaned = cleaned.strip()
-
-        try:
-            triage = json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Triage JSON parse failed, using defaults. Raw: %s", raw[:200])
-            triage = {
-                "event_type": "general",
-                "urgency": "medium",
-                "needs_historical": True,
-                "needs_realtime_data": True,
-                "needs_visual_verification": False,
-                "justification": "Parse error — defaulting to full analysis.",
-            }
-
-        # Ensure defaults
-        triage.setdefault("needs_historical", True)
-        triage.setdefault("needs_realtime_data", True)
-        triage.setdefault("needs_visual_verification", False)
-        return triage
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    #  PHASE 2 — S2 AUTONOMOUS ORCHESTRATOR
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    async def _run_s2_autonomous(
+    async def _run_orchestrator(
         self,
         event: Event,
         event_query: str,
-        triage: dict,
         enabled_kb_ids: list[str],
         enabled_kb_names: list[str],
         enabled_tool_names: list[str],
         tool_schemas: list[dict] | None = None,
     ) -> ReactiveAnalysisOutput | None:
-        """Phase 2: S2 autonomous orchestrator.
-
-        Returns a parsed ReactiveAnalysisOutput with structured analysis,
-        diagnosis, plan and optional execute_instruction.
-        """
+        """Run the DeepAgents orchestrator and parse the final message as structured JSON."""
         orchestrator = create_reactive_orchestrator(
             knowledge_base_ids=enabled_kb_ids or None,
             enable_knowledge=bool(enabled_kb_ids),
@@ -258,25 +161,19 @@ class ReactiveOrchestrator:
             user_id=event.triggered_by_user_id,
         )
 
-
-        # Pass triage hints + event as the user message so S2 can make
-        # an informed delegation decision without being hardcoded to follow it.
-        triage_str = json.dumps(triage, ensure_ascii=False, indent=2)
         user_message = (
-            f"<triage_hints>\n{triage_str}\n</triage_hints>\n\n"
             f"<event>\n{event_query}\n</event>\n\n"
-            "Analiza este evento industrial. "
-            "Delega a los sub-agentes necesarios via task() — máximo 2 rondas de delegación en total. "
-            "Cada sub-agente debe hacer UNA sola llamada a su herramienta con los parámetros más amplios posibles "
-            "(no llames la misma herramienta varias veces variando un solo parámetro). "
-            "Cuando hayas recopilado los resultados, sintetiza INMEDIATAMENTE en el JSON requerido. "
-            "NO agregues texto fuera del JSON."
+            "Analyze this event following the decision tree in your system prompt. "
+            "Call ALL necessary sub-agents in PARALLEL in a single turn using task(). "
+            "Do NOT call the same sub-agent more than once. "
+            "When all results are collected, write a comprehensive report in Spanish covering "
+            "analysis, diagnosis, and remediation plan."
         )
 
         thread_id = f"event-{event.id}-s2"
         config = {
             "configurable": {"thread_id": thread_id},
-            "recursion_limit": 40,  # hard cap: prevents infinite tool-call loops
+            "recursion_limit": 40,
         }
         messages = [{"role": "user", "content": user_message}]
 
@@ -291,14 +188,15 @@ class ReactiveOrchestrator:
             for i, msg in enumerate(msgs):
                 if getattr(msg, "type", "") == "tool":
                     agent_name = msg.name
-                    # If DeepAgents uses a unified 'task' tool, find the actual agent name from the AIMessage
                     if msg.name == "task":
                         for prev_msg in reversed(msgs[:i]):
-                            if getattr(prev_msg, "type", "") == "ai" and hasattr(prev_msg, "tool_calls"):
+                            if (
+                                getattr(prev_msg, "type", "") == "ai"
+                                and hasattr(prev_msg, "tool_calls")
+                            ):
                                 for tc in prev_msg.tool_calls:
                                     if tc.get("id") == msg.tool_call_id:
                                         tc_args = tc.get("args", {})
-                                        # Handle string args (JSON) from some providers
                                         if isinstance(tc_args, str):
                                             try:
                                                 tc_args = json.loads(tc_args)
@@ -318,47 +216,191 @@ class ReactiveOrchestrator:
                     elif agent_name == "historical-agent":
                         await self._emit("historical_result", event.id, {"result": str(msg.content)})
                         await self._emit_log(event.id, "Historical analysis received", level="info")
-                        # Note: historical-agent result is internal; we no longer overwrite
-                        # the orchestrator's final analysis with it.
+                    elif agent_name == "db_analyst-agent":
+                        await self._emit("db_analyst_result", event.id, {"result": str(msg.content)})
+                        await self._emit_log(event.id, "DB analysis received", level="info")
 
-            # Parse the final message as structured JSON output
             if not msgs:
-                logger.warning("S2 autonomous orchestrator returned no messages")
+                logger.warning("Orchestrator returned no messages")
                 return None
 
-            last_content = msgs[-1].content
-            if not last_content:
-                logger.warning("S2 autonomous orchestrator returned empty final message")
-                return None
-
-            # The content may be a string containing JSON, or already parsed (LangChain structured output)
-            raw_text = str(last_content).strip()
-
-            # Remove markdown fences if present
-            if raw_text.startswith("```"):
-                # Strip opening fence line
-                lines = raw_text.splitlines()
-                if lines[0].strip().startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].strip() == "```":
-                    lines = lines[:-1]
-                raw_text = "\n".join(lines).strip()
-
+            # ── Phase 2: Synthesis into Structured Output ──
+            await self._emit_log(event.id, "Synthesizing structured analysis...", level="info")
             try:
-                output = ReactiveAnalysisOutput.model_validate_json(raw_text)
-            except Exception as parse_exc:
-                logger.error(
-                    "Failed to parse S2 structured output: %s. Raw (first 500 chars): %s",
-                    parse_exc,
-                    raw_text[:500],
+                from langchain_core.messages import HumanMessage
+                synthesis_msg = HumanMessage(
+                    content=(
+                        "You are the Aura AI Synthesis Layer. Read the above conversation history "
+                        "which contains an analysis of a system/industrial event along with sub-agent findings. "
+                        "Synthesize this information into a structured response containing: "
+                        "1. analysis: A detailed root cause analysis in Spanish. "
+                        "2. diagnosis: A bulleted diagnosis in Spanish including identified root cause, evidence, confidence level (Alto/Medio/Bajo), false positive detection and immediate risk. "
+                        "3. plan: A step-by-step numbered remediation plan in Spanish with priorities and assigned roles. "
+                        "Ensure all fields are fully filled out in Spanish and accurately reflect the conversation."
+                    )
                 )
-                return None
+                from backend.ia.langchain_models import get_chat_model
+                base_model = get_chat_model()
+                structured_model = base_model.with_structured_output(ReactiveAnalysisOutput)
+                
+                output = await structured_model.ainvoke(list(msgs) + [synthesis_msg])
+                return output
+            except Exception as e:
+                logger.exception("Failed structured output synthesis, falling back to text parsing: %s", e)
+                # Find the LAST AI/assistant message (not a tool message)
+                raw_content = ""
+                for msg in reversed(msgs):
+                    msg_type = getattr(msg, "type", type(msg).__name__)
+                    if msg_type in ("ai", "assistant"):
+                        raw_content = getattr(msg, "content", "") or ""
+                        break
 
-            return output
+                if not raw_content:
+                    logger.warning("No AI message found in orchestrator response")
+                    return None
+
+                return self._parse_reactive_output(raw_content)
 
         except Exception as exc:
-            logger.warning("S2 autonomous orchestrator failed: %s", exc)
+            logger.warning("Orchestrator failed: %s", exc)
             return None
+
+    def _parse_reactive_output(self, raw: str) -> ReactiveAnalysisOutput | None:
+        """Extract and validate ReactiveAnalysisOutput from raw text."""
+        import re
+        cleaned = raw.strip()
+
+        # Try to extract JSON from markdown fences (anywhere in text)
+        fence_match = re.search(
+            r'```(?:json)?\s*\n(.*?)\n\s*```', cleaned, re.DOTALL
+        )
+        if fence_match:
+            cleaned = fence_match.group(1).strip()
+        elif cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            if lines[0].strip().startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+
+        try:
+            return ReactiveAnalysisOutput.model_validate_json(cleaned)
+        except Exception as exc:
+            logger.warning("Failed to parse orchestrator output as ReactiveAnalysisOutput: %s. Raw: %s", exc, raw[:500])
+            return None
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    #  EMAIL NOTIFICATION (via MCP)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def _send_analysis_email(self, event: Event, session: AsyncSession) -> None:
+        """Send the analysis results via Gmail MCP integration."""
+        if not event.triggered_by_user_id:
+            await self._emit_log(event.id, "No user_id for event; skipping email", level="warn")
+            return
+
+        try:
+            from backend.integrations.models import IntegrationInstance
+            from backend.integrations.integration_service import IntegrationService
+            from backend.services.mcp_service import MCPService
+            from sqlalchemy import select
+
+            # Find user's Gmail integration
+            stmt = select(IntegrationInstance).where(
+                IntegrationInstance.user_id == event.triggered_by_user_id,
+                IntegrationInstance.is_enabled.is_(True),
+                IntegrationInstance.available_in_reactive.is_(True),
+                IntegrationInstance.catalog_slug.in_(["gmail", "google", "google-mail"]),
+            )
+            result = await session.execute(stmt)
+            instance = result.scalar_one_or_none()
+
+            if not instance:
+                await self._emit_log(event.id, "No Gmail integration found; skipping email", level="warn")
+                return
+
+            integration_service = IntegrationService(session)
+            discovered = await integration_service._discover_tools(instance)
+            send_email_tool = next(
+                (t for t in discovered if t.get("name") == "send_email"), None
+            )
+
+            if not send_email_tool:
+                await self._emit_log(event.id, "send_email tool not found in Gmail integration", level="warn")
+                return
+
+            # Build email body with the 3 outputs
+            body = self._format_email_body(event)
+
+            # Resolve recipient
+            from backend.persistencia.models.user import User
+            user = await session.get(User, event.triggered_by_user_id)
+            recipient = user.notification_email if user and user.notification_email else user.email if user else None
+            if not recipient:
+                from backend.core.config import settings
+                recipient = settings.REACTIVE_NOTIFICATION_EMAIL
+
+            # Resolve OAuth credentials for stdio environment
+            from backend.integrations.credentials import CredentialManager
+            from backend.integrations.repositories.integration_repository import IntegrationInstanceRepository
+            cred_manager = CredentialManager(IntegrationInstanceRepository(session))
+            credentials = await cred_manager.get_credentials(instance)
+            stdio_env = cred_manager.inject_for_stdio(
+                credentials,
+                instance.catalog.env_prefix if instance.catalog else "",
+                base_env=dict(os.environ),
+                auth_env_var_mapping=instance.catalog.auth_env_var_mapping if instance.catalog else None,
+            )
+
+            mcp_service = MCPService()
+            response = await mcp_service.execute_tool(
+                base_url=send_email_tool.get("config", {}).get("url", ""),
+                tool_name="send_email",
+                arguments={
+                    "to": recipient,
+                    "subject": f"[Aura AI] Event Analysis — {event.title}",
+                    "body": body,
+                },
+                is_stdio=True,
+                stdio_command=instance.catalog.command if instance.catalog else None,
+                stdio_args=instance.catalog.args if instance.catalog else None,
+                stdio_env=stdio_env,
+                transport_type="stdio",
+            )
+
+            if response.error:
+                await self._emit_log(event.id, f"Email send failed: {response.error}", level="error")
+                logger.error("Email send failed for event %s: %s", event.id, response.error)
+            else:
+                await self._emit_log(event.id, f"Analysis email sent to {recipient}", level="info")
+                logger.info("Analysis email sent for event %s to %s", event.id, recipient)
+
+        except Exception as exc:
+            logger.warning("Failed to send analysis email for event %s: %s", event.id, exc)
+            await self._emit_log(event.id, f"Email send error: {exc}", level="warn")
+
+    def _format_email_body(self, event: Event) -> str:
+        """Format the analysis results into a plain-text email body."""
+        return f"""Aura AI — Event Analysis Complete
+=====================================
+
+Event: {event.title}
+Domain: {event.domain or 'generic'}
+Severity: {event.severity_text}
+
+── ANALYSIS ──
+{event.agent_analysis or 'No analysis available.'}
+
+── DIAGNOSIS ──
+{event.agent_diagnosis or 'No diagnosis available.'}
+
+── REMEDIATION PLAN ──
+{event.agent_plan or 'No plan available.'}
+
+---
+Aura AI Operations Center
+"""
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  PRIVATE HELPERS

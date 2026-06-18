@@ -52,6 +52,25 @@ class TestSynthesisFallback:
         result = orch._parse_reactive_output(raw)
         assert result is None
 
+    def test_parse_json_with_preamble_before_fence(self):
+        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+
+        raw = (
+            "Here is my analysis:\n\n"
+            '```json\n'
+            '{"analysis": "Preamble test analysis.",'
+            '"diagnosis": "Preamble test diagnosis.",'
+            '"plan": "Preamble test plan."}\n'
+            '```\n'
+            "Some trailing text."
+        )
+        orch = ReactiveOrchestrator(broadcaster=MagicMock())
+        result = orch._parse_reactive_output(raw)
+        assert result is not None
+        assert "Preamble test analysis" in result.analysis
+        assert "Preamble test diagnosis" in result.diagnosis
+        assert "Preamble test plan" in result.plan
+
 
 class TestOrchestratorPromptHasJsonOutput:
     """Verify the reactive orchestrator prompt instructs JSON output."""
@@ -62,7 +81,7 @@ class TestOrchestratorPromptHasJsonOutput:
         prompt = build_reactive_s2_orchestrator_prompt(
             has_rag=True, has_mcp=True, domain="test", tool_schemas=[]
         )
-        assert "output_format" in prompt.lower()
+        assert "<output_format>" in prompt
         assert '"analysis"' in prompt
         assert '"diagnosis"' in prompt
         assert '"plan"' in prompt
