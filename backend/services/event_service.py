@@ -12,7 +12,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import AsyncSessionLocal
@@ -188,35 +187,6 @@ class EventService:
 
     async def _persist_and_start(self, event: Event) -> None:
         """Persist event, broadcast creation, and start analysis pipeline."""
-        # Synchronous dedup check before expensive analysis.
-        # Use ``with_for_update()`` to narrow the race-condition window
-        # when two identical webhooks arrive concurrently.
-        from datetime import timedelta
-
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)
-        stmt = (
-            select(Event)
-            .where(Event.dedup_key == event.dedup_key)
-            .where(Event.created_at >= cutoff)
-            .where(Event.suppression_reason.is_(None))
-            .with_for_update()
-        )
-        result = await self.session.execute(stmt)
-        existing = result.scalar_one_or_none()
-
-        if existing:
-            event.status = "suppressed"
-            event.suppression_reason = "duplicate"
-            await self.repo.create(event)
-            await commit_and_refresh(self.session, event)
-            await self._broadcast_event_update(event)
-            logger.info(
-                "Event deduplicated immediately | dedup_key=%s existing_event=%s",
-                event.dedup_key,
-                existing.id,
-            )
-            return
-
         await self.repo.create(event)
         await commit_and_refresh(self.session, event)
         await self._broadcast_event_update(event)

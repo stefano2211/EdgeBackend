@@ -183,6 +183,7 @@ def create_reactive_orchestrator(
     domain: str = "generic",
     tool_schemas: list[dict] | None = None,
     kb_names: list[str] | None = None,
+    db_connection_ids: list[str] | None = None,
     user_id: int | None = None,
 ):
     """Backward-compatible wrapper for reactive orchestrator creation."""
@@ -196,5 +197,6 @@ def create_reactive_orchestrator(
         domain=domain,
         tool_schemas=tool_schemas,
         kb_names=kb_names,
+        db_connection_ids=db_connection_ids,
         user_id=user_id,
     )

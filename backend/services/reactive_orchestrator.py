@@ -78,6 +78,7 @@ class ReactiveOrchestrator:
             # ── Single Phase: DeepAgents Orchestrator ──
             output = await self._run_orchestrator(
                 event=event,
+                session=session,
                 event_query=event_query,
                 enabled_kb_ids=[str(k) for k in enabled_kb_ids],
                 enabled_kb_names=enabled_kb_names,
@@ -143,6 +144,7 @@ class ReactiveOrchestrator:
     async def _run_orchestrator(
         self,
         event: Event,
+        session: AsyncSession,
         event_query: str,
         enabled_kb_ids: list[str],
         enabled_kb_names: list[str],

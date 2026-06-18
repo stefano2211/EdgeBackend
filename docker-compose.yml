@@ -60,10 +60,11 @@ services:
 
   # ── Redis ──────────────────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:latest
     container_name: edge-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    environment:
+      - REDIS_ARGS=--appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     ports:

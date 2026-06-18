@@ -43,16 +43,15 @@ dependencies = [
     "mcp>=1.0.0",
     "minio>=7.2.0",
     "fastembed>=0.4.0",
-
     "cryptography>=47.0.0",
     "docker>=7.0.0",
     "jsonpath-ng>=1.6.0",
     "google-auth>=2.36.0",
     "google-auth-oauthlib>=1.2.0",
     "google-api-python-client>=2.196.0",
-
     "aiomysql>=0.2.0",
     "sqlfluff>=3.0.0",
+    "psycopg[binary]>=3.3.4",
 ]
 
 [tool.setuptools.packages.find]

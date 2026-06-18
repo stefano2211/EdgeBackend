@@ -42,7 +42,7 @@ class Event(Base):
         Index("idx_event_event_type", "event_type"),
         Index("idx_event_source", "source"),
         Index("idx_event_created_at", "created_at"),
-        Index("idx_event_dedup_key", "dedup_key", unique=True),
+        Index("idx_event_dedup_key", "dedup_key"),
         Index("idx_event_correlation_id", "correlation_id"),
     )
 
