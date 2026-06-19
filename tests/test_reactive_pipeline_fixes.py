@@ -85,6 +85,42 @@ class TestOrchestratorPromptHasJsonOutput:
         assert '"analysis"' in prompt
         assert '"diagnosis"' in prompt
         assert '"plan"' in prompt
+        assert "sequential_pipeline" in prompt
+
+
+class TestReactiveOrchestratorTemplate:
+    """Verify the reactive_orchestrator.md template has the sequential pipeline."""
+
+    def test_template_contains_sequential_phases(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=True, has_mcp=True)
+        assert "PHASE 1" in prompt
+        assert "PHASE 2" in prompt
+        assert "PHASE 3" in prompt
+        assert "PHASE 4" in prompt
+
+    def test_template_has_sequential_pipeline_tag(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=True, has_mcp=True)
+        assert "sequential_pipeline" in prompt
+
+    def test_template_no_parallel_instruction(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=True, has_mcp=True)
+        assert "PARALLEL in a single turn" not in prompt
+
+    def test_template_db_first_instruction(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=True, has_mcp=True)
+        assert "ALWAYS call task" in prompt
+        assert "db_analyst-agent" in prompt
+
+    def test_template_severity_time_windows(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=True, has_mcp=True)
+        assert "1 hour" in prompt
+        assert "6 hours" in prompt
+        assert "24 hours" in prompt
 
 
 class TestReactivePromptBuilder:
