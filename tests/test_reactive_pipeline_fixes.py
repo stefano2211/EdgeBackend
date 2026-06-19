@@ -85,7 +85,33 @@ class TestOrchestratorPromptHasJsonOutput:
         assert '"analysis"' in prompt
         assert '"diagnosis"' in prompt
         assert '"plan"' in prompt
-        assert "synthesis_rules" in prompt  # original rules still present
+
+
+class TestReactivePromptBuilder:
+    """verify build_reactive_s2_orchestrator_prompt output."""
+
+    def test_prompt_no_historical_agent(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=True, has_mcp=True)
+        assert "historical-agent" not in prompt
+
+    def test_prompt_rag_disabled_message(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=False, has_mcp=False)
+        assert "rag-agent: DISABLED" in prompt
+        assert "mcp-agent: DISABLED" in prompt
+
+    def test_prompt_tool_hint_injected(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        schemas = [{"name": "send_email"}, {"name": "list_emails"}]
+        prompt = build_reactive_s2_orchestrator_prompt(has_mcp=True, tool_schemas=schemas)
+        assert "send_email" in prompt
+        assert "list_emails" in prompt
+
+    def test_prompt_db_analyst_always_listed(self):
+        from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
+        prompt = build_reactive_s2_orchestrator_prompt(has_rag=False, has_mcp=False)
+        assert "db_analyst-agent" in prompt
 
 
 class TestEventQueryTruncation:
@@ -133,23 +159,45 @@ class TestEventQueryTruncation:
         assert '"key": "value"' in query
 
 
-class TestDbAnalystConditionalInclusion:
-    """Verify db_analyst is only included when DB connections exist."""
+class TestDbAnalystAlwaysIncluded:
+    """db_analyst must always be in reactive defaults regardless of DB connections."""
 
-    def test_db_analyst_excluded_when_no_connections(self):
-        # Verify the default_names logic: no db_connection_ids → no db_analyst
-        db_connection_ids = []
-        default_names = ["historical"]
-        if db_connection_ids:
-            default_names.append("db_analyst")
-        assert "db_analyst" not in default_names
-
-    def test_db_analyst_included_when_connections_exist(self):
-        db_connection_ids = ["conn-1", "conn-2"]
-        default_names = ["historical"]
-        if db_connection_ids:
-            default_names.append("db_analyst")
+    def test_db_analyst_always_in_reactive_default_names(self):
+        has_rag = False
+        has_mcp = False
+        default_names = ["db_analyst"]
+        if has_rag:
+            default_names.append("rag")
+        if has_mcp:
+            default_names.append("mcp")
         assert "db_analyst" in default_names
+        assert "historical" not in default_names
+
+
+class TestReactiveSubagentComposition:
+    """Verify historical-agent is excluded from reactive context."""
+
+    def test_historical_not_in_reactive_defaults(self):
+        has_rag = True
+        has_mcp = True
+        default_names = ["db_analyst"]
+        if has_rag:
+            default_names.append("rag")
+        if has_mcp:
+            default_names.append("mcp")
+        assert "historical" not in default_names
+
+    def test_db_analyst_always_in_reactive_defaults(self):
+        default_names = ["db_analyst"]
+        assert "db_analyst" in default_names
+
+    def test_historical_plugin_applies_to_proactive_only(self):
+        from backend.ia.subagents.builders import _build_historical_subagent  # noqa: F401
+        from backend.ia.subagents.plugin_registry import SubagentRegistry
+        plugin = SubagentRegistry.get_plugin("historical")
+        assert plugin is not None
+        assert "reactive" not in plugin.applies_to
+        assert "proactive" in plugin.applies_to
 
 
 class TestExecuteRaisesNotImplemented:

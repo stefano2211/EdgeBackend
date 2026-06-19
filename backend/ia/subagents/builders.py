@@ -203,7 +203,7 @@ SubagentRegistry.register(SubagentPlugin(
     name="historical",
     description=HISTORICAL_AGENT_DESCRIPTION,
     builder=_build_historical_subagent,
-    applies_to={"proactive", "reactive"},
+    applies_to={"proactive"},   # reactive removed — db_analyst provides real historical data
     requires_rag=False,
     requires_mcp=False,
 ))
