@@ -166,3 +166,14 @@ class TestExecuteRaisesNotImplemented:
 
         with pytest.raises(NotImplementedError, match="execution phase"):
             await orch.execute(event, session)
+
+
+class TestRagThreshold:
+    """RAG threshold must be low enough for reranker scores in 0.001-0.05 range."""
+
+    def test_rag_min_relevance_score_is_low(self):
+        from backend.core.config import settings
+        assert settings.RAG_MIN_RELEVANCE_SCORE <= 0.01, (
+            f"RAG_MIN_RELEVANCE_SCORE is {settings.RAG_MIN_RELEVANCE_SCORE}; "
+            "must be <= 0.01 to match reranker output range"
+        )

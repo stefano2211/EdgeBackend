@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     HYBRID_SEARCH_ENABLED: bool = True
     RAG_PREFETCH_LIMIT: int = 50
     RAG_RERANK_TOP_K: int = 5
-    RAG_MIN_RELEVANCE_SCORE: float = 0.35
+    RAG_MIN_RELEVANCE_SCORE: float = 0.01
 
     # ── Reranker ──
     RERANKER_ENABLED: bool = True
