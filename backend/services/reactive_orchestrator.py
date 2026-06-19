@@ -1,15 +1,17 @@
-"""Reactive event pipeline — simplified single-phase analysis.
+"""Reactive event pipeline — sequential 4-phase analysis.
 
 Architecture:
   1. Event arrives → status "analyzing"
-  2. DeepAgents orchestrator delegates to sub-agents (rag, mcp, historical, db_analyst)
-  3. Orchestrator's final message is parsed as ReactiveAnalysisOutput JSON
+  2. DeepAgents orchestrator executes phases in sequence:
+     Phase 1: db_analyst-agent queries last N hours of machine data
+     Phase 2: rag-agent searches docs using event + DB context
+     Phase 3: mcp-agent sends notifications (email/slack) if available
+     Phase 4: orchestrator produces final JSON report
+  3. Synthesis layer extracts structured ReactiveAnalysisOutput from conversation
   4. Fields saved to event → status "completed"
-  5. Email sent automatically via MCP (send_email) with the 3 outputs
 """
 
 import json
-import os
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,9 +110,6 @@ class ReactiveOrchestrator:
                 await self._emit("planner_result", event.id, {"plan": output.plan})
                 await self._emit_log(event.id, "Remediation plan generated", level="info")
 
-            # ── Send email automatically via MCP ──
-            await self._send_analysis_email(event, session)
-
             # Transition to completed
             event.status = "completed"
             event.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -124,18 +123,6 @@ class ReactiveOrchestrator:
             event.status = "failed"
             await session.commit()
             await self._refresh_and_broadcast(event, session)
-
-    async def execute(self, event: Event, session: AsyncSession) -> None:
-        """Remediation execution phase — no longer used in automatic flow.
-
-        Raises NotImplementedError because the reactive pipeline completes
-        in a single phase (analysis). The two-phase approach has been removed.
-        """
-        raise NotImplementedError(
-            "The reactive pipeline no longer has a separate execution phase. "
-            "The analysis phase produces analysis, diagnosis, and remediation plan "
-            "in a single step. Event execution must be handled externally."
-        )
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  ORCHESTRATOR PHASE
@@ -168,11 +155,11 @@ class ReactiveOrchestrator:
 
         user_message = (
             f"<event>\n{event_query}\n</event>\n\n"
-            "Analyze this event following the decision tree in your system prompt. "
-            "Call ALL necessary sub-agents in PARALLEL in a single turn using task(). "
-            "Do NOT call the same sub-agent more than once. "
-            "When all results are collected, write a comprehensive report in Spanish covering "
-            "analysis, diagnosis, and remediation plan."
+            "Analyze this event following the sequential pipeline in your system prompt. "
+            "Start with Phase 1 (database query), then Phase 2 (document search), "
+            "then Phase 3 (external actions if tools are available), "
+            "then produce the final JSON report as Phase 4. "
+            "Execute each phase in strict order — do NOT call multiple agents at the same time."
         )
 
         thread_id = f"event-{event.id}-s2"
@@ -218,9 +205,6 @@ class ReactiveOrchestrator:
                         await self._emit("rag_result", event.id, {"result": str(msg.content)})
                     elif agent_name == "mcp-agent":
                         await self._emit("mcp_result", event.id, {"result": str(msg.content)})
-                    elif agent_name == "historical-agent":
-                        await self._emit("historical_result", event.id, {"result": str(msg.content)})
-                        await self._emit_log(event.id, "Historical analysis received", level="info")
                     elif agent_name == "db_analyst-agent":
                         await self._emit("db_analyst_result", event.id, {"result": str(msg.content)})
                         await self._emit_log(event.id, "DB analysis received", level="info")
@@ -300,118 +284,6 @@ class ReactiveOrchestrator:
         except Exception as exc:
             logger.warning("Failed to parse orchestrator output as ReactiveAnalysisOutput: %s. Raw: %s", exc, raw[:500])
             return None
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    #  EMAIL NOTIFICATION (via MCP)
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    async def _send_analysis_email(self, event: Event, session: AsyncSession) -> None:
-        """Send the analysis results via Gmail MCP integration."""
-        if not event.triggered_by_user_id:
-            await self._emit_log(event.id, "No user_id for event; skipping email", level="warn")
-            return
-
-        try:
-            from backend.integrations.models import IntegrationInstance
-            from backend.integrations.integration_service import IntegrationService
-            from backend.services.mcp_service import MCPService
-            from sqlalchemy import select
-
-            # Find user's Gmail integration
-            stmt = select(IntegrationInstance).where(
-                IntegrationInstance.user_id == event.triggered_by_user_id,
-                IntegrationInstance.is_enabled.is_(True),
-                IntegrationInstance.available_in_reactive.is_(True),
-                IntegrationInstance.catalog_slug.in_(["gmail", "google", "google-mail"]),
-            )
-            result = await session.execute(stmt)
-            instance = result.scalar_one_or_none()
-
-            if not instance:
-                await self._emit_log(event.id, "No Gmail integration found; skipping email", level="warn")
-                return
-
-            integration_service = IntegrationService(session)
-            discovered = await integration_service._discover_tools(instance)
-            send_email_tool = next(
-                (t for t in discovered if t.get("name") == "send_email"), None
-            )
-
-            if not send_email_tool:
-                await self._emit_log(event.id, "send_email tool not found in Gmail integration", level="warn")
-                return
-
-            # Build email body with the 3 outputs
-            body = self._format_email_body(event)
-
-            # Resolve recipient
-            from backend.persistencia.models.user import User
-            user = await session.get(User, event.triggered_by_user_id)
-            recipient = user.notification_email if user and user.notification_email else user.email if user else None
-            if not recipient:
-                from backend.core.config import settings
-                recipient = settings.REACTIVE_NOTIFICATION_EMAIL
-
-            # Resolve OAuth credentials for stdio environment
-            from backend.integrations.credentials import CredentialManager
-            from backend.integrations.repositories.integration_repository import IntegrationInstanceRepository
-            cred_manager = CredentialManager(IntegrationInstanceRepository(session))
-            credentials = await cred_manager.get_credentials(instance)
-            stdio_env = cred_manager.inject_for_stdio(
-                credentials,
-                instance.catalog.env_prefix if instance.catalog else "",
-                base_env=dict(os.environ),
-                auth_env_var_mapping=instance.catalog.auth_env_var_mapping if instance.catalog else None,
-            )
-
-            mcp_service = MCPService()
-            response = await mcp_service.execute_tool(
-                base_url=send_email_tool.get("config", {}).get("url", ""),
-                tool_name="send_email",
-                arguments={
-                    "to": recipient,
-                    "subject": f"[Aura AI] Event Analysis — {event.title}",
-                    "body": body,
-                },
-                is_stdio=True,
-                stdio_command=instance.catalog.command if instance.catalog else None,
-                stdio_args=instance.catalog.args if instance.catalog else None,
-                stdio_env=stdio_env,
-                transport_type="stdio",
-            )
-
-            if response.error:
-                await self._emit_log(event.id, f"Email send failed: {response.error}", level="error")
-                logger.error("Email send failed for event %s: %s", event.id, response.error)
-            else:
-                await self._emit_log(event.id, f"Analysis email sent to {recipient}", level="info")
-                logger.info("Analysis email sent for event %s to %s", event.id, recipient)
-
-        except Exception as exc:
-            logger.warning("Failed to send analysis email for event %s: %s", event.id, exc)
-            await self._emit_log(event.id, f"Email send error: {exc}", level="warn")
-
-    def _format_email_body(self, event: Event) -> str:
-        """Format the analysis results into a plain-text email body."""
-        return f"""Aura AI — Event Analysis Complete
-=====================================
-
-Event: {event.title}
-Domain: {event.domain or 'generic'}
-Severity: {event.severity_text}
-
-── ANALYSIS ──
-{event.agent_analysis or 'No analysis available.'}
-
-── DIAGNOSIS ──
-{event.agent_diagnosis or 'No diagnosis available.'}
-
-── REMEDIATION PLAN ──
-{event.agent_plan or 'No plan available.'}
-
----
-Aura AI Operations Center
-"""
 
     # ═══════════════════════════════════════════════════════════════════════════
     #  PRIVATE HELPERS

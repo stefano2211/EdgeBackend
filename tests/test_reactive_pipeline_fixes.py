@@ -236,20 +236,27 @@ class TestReactiveSubagentComposition:
         assert "proactive" in plugin.applies_to
 
 
-class TestExecuteRaisesNotImplemented:
-    """Verify execute() raises NotImplementedError instead of silently completing."""
+class TestDeadCodeRemoved:
+    """Verify dead methods were removed from ReactiveOrchestrator."""
 
-    @pytest.mark.asyncio
-    async def test_execute_raises_not_implemented(self):
+    def test_execute_method_does_not_exist(self):
         from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        assert not hasattr(ReactiveOrchestrator, "execute"), (
+            "ReactiveOrchestrator.execute() should have been removed."
+        )
 
-        orch = ReactiveOrchestrator(broadcaster=MagicMock())
-        event = MagicMock()
-        event.id = 1
-        session = MagicMock()
+    def test_send_analysis_email_does_not_exist(self):
+        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        assert not hasattr(ReactiveOrchestrator, "_send_analysis_email"), (
+            "_send_analysis_email() should have been removed. "
+            "Email is now handled by the orchestrator via mcp-agent in Phase 3."
+        )
 
-        with pytest.raises(NotImplementedError, match="execution phase"):
-            await orch.execute(event, session)
+    def test_format_email_body_does_not_exist(self):
+        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        assert not hasattr(ReactiveOrchestrator, "_format_email_body"), (
+            "_format_email_body() should have been removed."
+        )
 
 
 class TestRagThreshold:
