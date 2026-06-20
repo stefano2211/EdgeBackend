@@ -112,15 +112,15 @@ class TestReactiveOrchestratorTemplate:
     def test_template_db_first_instruction(self):
         from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
         prompt = build_reactive_s2_orchestrator_prompt(has_rag=True, has_mcp=True)
-        assert "ALWAYS call task" in prompt
-        assert "db_analyst-agent" in prompt
+        assert "task(\"db_analyst-agent\")" in prompt
+        assert "Call task" in prompt
 
     def test_template_severity_time_windows(self):
         from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
         prompt = build_reactive_s2_orchestrator_prompt(has_rag=True, has_mcp=True)
-        assert "1 hour" in prompt
-        assert "6 hours" in prompt
-        assert "24 hours" in prompt
+        assert "1h" in prompt
+        assert "6h" in prompt
+        assert "24h" in prompt
 
 
 class TestReactivePromptBuilder:

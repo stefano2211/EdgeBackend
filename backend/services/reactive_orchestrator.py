@@ -165,7 +165,7 @@ class ReactiveOrchestrator:
         thread_id = f"event-{event.id}-s2"
         config = {
             "configurable": {"thread_id": thread_id},
-            "recursion_limit": 40,
+            "recursion_limit": 15,  # 3 sub-agents + synthesis: well within limit
         }
         messages = [{"role": "user", "content": user_message}]
 

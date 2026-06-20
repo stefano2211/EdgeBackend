@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     OLLAMA_MODEL: str = "qwen3.5:9b"
     OLLAMA_MAX_TOKENS: int = 8192
-    OLLAMA_NUM_CTX: int = 32000
+    OLLAMA_NUM_CTX: int = 65536
 
     # ── LLM Provider Selection ──
     # "auto" = detect which backend is available (vllm first, then ollama)
@@ -88,14 +88,14 @@ class Settings(BaseSettings):
     RAG_MIN_RELEVANCE_SCORE: float = 0.01
 
     # ── Reranker ──
-    RERANKER_ENABLED: bool = True
+    RERANKER_ENABLED: bool = False
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
 
     # ── Contextual Chunking ──
     CONTEXTUAL_CHUNKING_ENABLED: bool = False
 
     # ── Query Enhancement ──
-    QUERY_ENHANCEMENT_ENABLED: bool = True
+    QUERY_ENHANCEMENT_ENABLED: bool = False
 
     # ── Reactive Pipeline ──
     REACTIVE_NOTIFICATION_EMAIL: str = "stefano.andres2004@gmail.com"
