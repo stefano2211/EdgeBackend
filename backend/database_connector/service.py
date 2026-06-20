@@ -122,6 +122,7 @@ class DatabaseConnectionService:
         if conn.status == "connected":
             try:
                 await self.discover_schema(connection_id, user_id)
+                await self._session.refresh(conn)
                 logger.info("Schema auto-discovered for connection %s after successful test", connection_id)
             except Exception as exc:
                 logger.warning(

@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 _SCHEMA_COLLECTION = "schema_embeddings"
 _SCHEMA_DIMENSION = 384  # all-MiniLM-L6-v2
 
+# UUID v5 namespace for deterministic point IDs from composite keys
+_SCHEMA_UUID_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # DNS namespace
+
 
 class SchemaVectorRepository:
     """Repository for upserting/searching schema items (tables/columns) in Qdrant.
@@ -110,7 +113,7 @@ class SchemaVectorRepository:
                     values=sv.values,
                 )
 
-            point_id = f"{connection_id}:{item['table_name']}:{item.get('column_name') or ''}"
+            point_id = str(uuid.uuid5(_SCHEMA_UUID_NAMESPACE, f"{connection_id}:{item['table_name']}:{item.get('column_name') or ''}"))
             points.append(
                 PointStruct(
                     id=point_id,
