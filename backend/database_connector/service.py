@@ -117,6 +117,17 @@ class DatabaseConnectionService:
 
         await self._session.commit()
         await self._session.refresh(conn)
+
+        # Auto-discover schema on successful connection
+        if conn.status == "connected":
+            try:
+                await self.discover_schema(connection_id, user_id)
+                logger.info("Schema auto-discovered for connection %s after successful test", connection_id)
+            except Exception as exc:
+                logger.warning(
+                    "Schema auto-discovery failed for connection %s: %s", connection_id, exc
+                )
+
         return conn
 
     async def discover_schema(

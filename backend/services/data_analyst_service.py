@@ -250,6 +250,21 @@ class DataAnalystService:
     ) -> list[ConnectionSummary]:
         """Fetch user's DB connections that are available in the given context."""
         conns = await self._db_service.list_connections(user_id, context)
+
+        # Auto-discover schema on first use for connected DBs missing schema
+        for c in conns:
+            if c.status == "connected" and not c.discovered_schema:
+                try:
+                    await self._db_service.discover_schema(c.id, user_id)
+                    logger.info(
+                        "Schema auto-discovered on first use for connection '%s' (%s)",
+                        c.id, c.name,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Schema discovery on first use failed for '%s': %s", c.id, exc
+                    )
+
         return [
             ConnectionSummary(
                 id=c.id,
