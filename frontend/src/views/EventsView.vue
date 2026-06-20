@@ -114,7 +114,7 @@ const triggeringPresetId = ref<string | null>(null)
 const presets = DEMO_PRESETS
 
 // Tabs
-const activeTab = ref<'overview' | 'evidence' | 'pipeline' | 'actions'>('overview')
+const activeTab = ref<'overview' | 'evidence' | 'pipeline'>('overview')
 
 // Feedback
 const feedbackSubmitted = ref(false)
@@ -134,16 +134,6 @@ const filteredEvents = computed(() => {
 const eventLogs = computed(() => {
   if (!selectedEvent.value) return []
   return store.getEventLogs(selectedEvent.value.id)
-})
-
-const triageResult = computed(() => {
-  if (!selectedEvent.value) return null
-  return store.getTriageResult(selectedEvent.value.id)
-})
-
-const historicalAnalysis = computed(() => {
-  if (!selectedEvent.value) return null
-  return store.getHistoricalAnalysis(selectedEvent.value.id)
 })
 
 // ── Dynamic filter options (agnostic) ─────────────────────────────────────────
@@ -236,17 +226,7 @@ function handleSSE(payload: SSEPayload) {
       loadEvents()
       return
 
-    case 'triage_result':
-      store.setTriageResult(eventId, data.triage)
-      break
-
-    case 'historical_result':
-      store.setHistoricalAnalysis(eventId, data.result)
-      break
-
-
-
-    case 'system2_result':
+    case 'analysis_result':
       store.updateEvent({
         id: eventId,
         agent_analysis: data.result,
@@ -266,16 +246,6 @@ function handleSSE(payload: SSEPayload) {
         agent_plan: data.plan,
       })
       break
-
-    case 'action_executed': {
-      const ev = state.events.find(e => e.id === eventId)
-      if (ev) {
-        const actions = ev.actions_taken || []
-        actions.push(data.action)
-        store.updateEvent({ id: eventId, actions_taken: actions })
-      }
-      break
-    }
 
     case 'log_line':
       store.appendLog(eventId, {
@@ -730,7 +700,6 @@ function formatTime(d: string) {
                 { key: 'overview', label: 'Overview', icon: 'M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5' },
                 { key: 'evidence', label: 'Evidence', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8' },
                 { key: 'pipeline', label: 'Pipeline Log', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
-                { key: 'actions', label: 'Actions', icon: 'M13 2 3 14h9l-1 8 10-12h-9l1-8z' },
               ]"
               :key="tab.key"
               @click="activeTab = tab.key as any"
@@ -747,30 +716,6 @@ function formatTime(d: string) {
 
             <!-- ── TAB: Overview ── -->
             <template v-if="activeTab === 'overview'">
-
-              <!-- Triage Summary -->
-              <div v-if="triageResult" class="bg-[#111] rounded-xl border border-blue-500/20 overflow-hidden">
-                <div class="px-4 py-2.5 bg-gradient-to-r from-blue-500/10 to-transparent border-b border-blue-500/15 flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-blue-400"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/></svg>
-                  <span class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">Triage Decision</span>
-                  <span class="ml-auto px-2 py-0.5 rounded text-[10px] font-bold uppercase" :class="{'bg-red-500/10 text-red-400 border border-red-500/20': triageResult.urgency === 'critical', 'bg-orange-500/10 text-orange-400 border border-orange-500/20': triageResult.urgency === 'high', 'bg-amber-500/10 text-amber-400 border border-amber-500/20': triageResult.urgency === 'medium', 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20': triageResult.urgency === 'low'}">{{ triageResult.urgency }}</span>
-                </div>
-                <div class="px-4 py-3 flex flex-wrap gap-2">
-                  <span class="px-2 py-1 rounded text-[10px] border flex items-center gap-1" :class="triageResult.needs_historical ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-[#555] border-white/10'">
-                    <svg v-if="triageResult.needs_historical" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
-                    Historical
-                  </span>
-                  <span class="px-2 py-1 rounded text-[10px] border flex items-center gap-1" :class="triageResult.needs_realtime_data ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-[#555] border-white/10'">
-                    <svg v-if="triageResult.needs_realtime_data" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
-                    Realtime Data
-                  </span>
-                  <span class="px-2 py-1 rounded text-[10px] border flex items-center gap-1 bg-white/5 text-[#555] border-white/10">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
-                    Visual Verify
-                  </span>
-                  <span v-if="triageResult.justification" class="text-[11px] text-[#7a7a7a] ml-2">{{ triageResult.justification }}</span>
-                </div>
-              </div>
 
               <!-- Analysis -->
               <div v-if="selectedEvent?.agent_analysis" class="bg-[#111] rounded-xl border border-blue-500/20 overflow-hidden">
@@ -873,43 +818,11 @@ function formatTime(d: string) {
                   </div>
                 </div>
               </div>
-
-              <!-- Raw Triage (debug) -->
-              <div v-if="triageResult" class="bg-[#111] rounded-xl border border-white/[0.06] overflow-hidden">
-                <div class="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.06] flex items-center justify-between">
-                  <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Triage Raw</span>
-                  <span class="text-[10px] text-[#555]">Debug</span>
-                </div>
-                <pre class="px-4 py-3 text-[11px] text-[#888] font-mono overflow-x-auto">{{ JSON.stringify(triageResult, null, 2) }}</pre>
-              </div>
-            </template>
-
-            <!-- ── TAB: Actions ── -->
-            <template v-if="activeTab === 'actions'">
-
-              <!-- Actions Taken -->
-              <div v-if="selectedEvent.actions_taken?.length" class="space-y-3">
-                <div class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Executed Actions</div>
-                <div v-for="(action, idx) in selectedEvent.actions_taken" :key="idx" class="bg-[#111] rounded-xl border border-white/[0.08] p-4">
-                  <div class="flex items-center gap-2 mb-1.5">
-                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border" :class="{'bg-purple-500/10 text-purple-400 border-purple-500/20': action.type === 'mcp_call', 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20': action.type === 'vl_navigate', 'bg-blue-500/10 text-blue-400 border-blue-500/20': action.type === 'notification', 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20': action.type === 'webhook', 'bg-white/5 text-[#a0a0a0] border-white/10': true}">{{ action.type || 'action' }}</span>
-                    <span v-if="action.timestamp" class="text-[#555] text-[10px]">{{ formatDate(action.timestamp) }}</span>
-                  </div>
-                  <p v-if="action.args" class="text-[12px] text-[#c0c0c0] leading-relaxed">{{ action.args }}</p>
-                  <p v-else-if="action.result" class="text-[12px] text-[#c0c0c0] leading-relaxed">{{ action.result }}</p>
-                </div>
-              </div>
-
-              <div v-if="!selectedEvent.actions_taken?.length" class="text-center py-8 text-[#555]">
-                <p class="text-[13px]">No actions recorded yet</p>
-              </div>
             </template>
 
           </div>
 
-
-
-          <!-- Feedback -->
+            <!-- Feedback -->
           <div v-if="selectedEvent.status === 'completed' || selectedEvent.status === 'failed'" class="shrink-0 px-6 py-4 border-t border-white/[0.06]">
             <div v-if="!feedbackSubmitted" class="flex items-center gap-3">
               <span class="text-[12px] text-[#7a7a7a]">Was this analysis correct?</span>

@@ -30,9 +30,6 @@ const state = reactive<EventState>({
 // Ephemeral per-event state (not persisted in DB, received via SSE)
 const ephemeralState = reactive<Record<number, {
   logs: LogLine[]
-  triageResult: Record<string, any> | null
-  historicalAnalysis: string | null
-  analysisResult: string | null
 }>>({})
 
 export const useEventStore = () => {
@@ -50,28 +47,10 @@ export const useEventStore = () => {
     return es ? es.logs : []
   }
 
-  function getTriageResult(eventId: number): Record<string, any> | null {
-    const es = ephemeralState[eventId]
-    return es ? es.triageResult : null
-  }
-
-  function getHistoricalAnalysis(eventId: number): string | null {
-    const es = ephemeralState[eventId]
-    return es ? es.historicalAnalysis : null
-  }
-
-  function getAnalysisResult(eventId: number): string | null {
-    const es = ephemeralState[eventId]
-    return es ? es.analysisResult : null
-  }
-
   function ensureEphemeral(eventId: number) {
     if (!ephemeralState[eventId]) {
       ephemeralState[eventId] = {
         logs: [],
-        triageResult: null,
-        historicalAnalysis: null,
-        analysisResult: null,
 
       }
     }
@@ -80,21 +59,6 @@ export const useEventStore = () => {
   function appendLog(eventId: number, log: LogLine) {
     ensureEphemeral(eventId)
     ephemeralState[eventId].logs.push(log)
-  }
-
-  function setTriageResult(eventId: number, result: Record<string, any>) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].triageResult = result
-  }
-
-  function setHistoricalAnalysis(eventId: number, text: string) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].historicalAnalysis = text
-  }
-
-  function setAnalysisResult(eventId: number, text: string) {
-    ensureEphemeral(eventId)
-    ephemeralState[eventId].analysisResult = text
   }
 
   // ── Store methods used by EventsView.vue ──
@@ -119,14 +83,8 @@ export const useEventStore = () => {
     selectedEvent,
     pendingApprovalCount,
     getEventLogs,
-    getTriageResult,
-    getHistoricalAnalysis,
-    getAnalysisResult,
     ensureEphemeral,
     appendLog,
-    setTriageResult,
-    setHistoricalAnalysis,
-    setAnalysisResult,
 
     setEvents,
     selectEvent,
