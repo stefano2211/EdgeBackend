@@ -28,8 +28,8 @@ Before executing, reason:
    If no tool matches → task_status: "error", explain what is missing.
 
 2. PREPARE: Fill ALL required parameters. Never split one logical action into multiple calls.
-   - BAD:  send_email(to="a@b.com", subject="Alert") then send_email(body="Details...")
-   - GOOD: send_email(to="a@b.com", subject="Alert", body="Temperature 89C, Motor1...")
+    - BAD:  send_email(to="a@b.com", subject="Alert") then send_email(body="Details...")
+    - GOOD: send_email(to="admin@org.com", subject="[Alert] [Event Title]", body="[Summary + key findings]")
 
 3. EXECUTE: Call mcp_execute once per tool. Different tools can be called in sequence.
 
@@ -61,11 +61,11 @@ Respond with this EXACT JSON. No text before or after. No markdown fences.
 }
 
 EXAMPLE:
-If mcp_execute("send_email", {"to": "ops@plant.com", "subject": "Motor1 Overheat", "body": "Temp 89C..."}) succeeds:
+If mcp_execute("send_email", {"to": "admin@org.com", "subject": "Alert: Payment API Error Rate Spike", "body": "Error rate reached 15% in last 6h..."}) succeeds:
 {
   "task_status": "success",
   "sources_used": ["mcp:send_email"],
-  "executive_summary": "Alert email sent to ops@plant.com for Motor1 overheat (89C).",
+  "executive_summary": "Alert email sent to admin@org.com for payment API error spike.",
   "data": {
     "source": "send_email",
     "result": {"sent": true, "message_id": "abc123"}
