@@ -57,7 +57,6 @@ def main():
     sub = extract_string_assignments(SRC / "subagents.py")
     for key, tmpl_name in [
         ("INDUSTRIAL_AGENT_SYSTEM_PROMPT", "subagent_industrial"),
-        ("HISTORICAL_AGENT_SYSTEM_PROMPT", "subagent_historical"),
         ("VL_AGENT_SYSTEM_PROMPT", "subagent_vl"),
     ]:
         if key in sub:

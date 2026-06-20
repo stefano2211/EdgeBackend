@@ -227,15 +227,6 @@ class TestReactiveSubagentComposition:
         default_names = ["db_analyst"]
         assert "db_analyst" in default_names
 
-    def test_historical_plugin_applies_to_proactive_only(self):
-        from backend.ia.subagents.builders import _build_historical_subagent  # noqa: F401
-        from backend.ia.subagents.plugin_registry import SubagentRegistry
-        plugin = SubagentRegistry.get_plugin("historical")
-        assert plugin is not None
-        assert "reactive" not in plugin.applies_to
-        assert "proactive" in plugin.applies_to
-
-
 class TestDeadCodeRemoved:
     """Verify dead methods were removed from ReactiveOrchestrator."""
 
@@ -268,3 +259,24 @@ class TestRagThreshold:
             f"RAG_MIN_RELEVANCE_SCORE is {settings.RAG_MIN_RELEVANCE_SCORE}; "
             "must be <= 0.01 to match reranker output range"
         )
+
+
+class TestHistoricalAgentRemoved:
+    """Verify historical-agent is completely removed."""
+
+    def test_historical_template_deleted(self):
+        import os
+        assert not os.path.exists("backend/ia/prompts/templates/subagent_historical.md")
+
+    def test_historical_plugin_not_registered(self):
+        from backend.ia.subagents.plugin_registry import SubagentRegistry
+        assert SubagentRegistry.get_plugin("historical") is None
+
+    def test_historical_not_in_proactive_defaults(self):
+        default_names = ["rag", "mcp", "db_analyst"]
+        assert "historical" not in default_names
+
+    def test_historical_constants_removed(self):
+        import backend.ia.prompts.subagents as sa
+        assert not hasattr(sa, "HISTORICAL_AGENT_DESCRIPTION")
+        assert not hasattr(sa, "HISTORICAL_AGENT_SYSTEM_PROMPT")

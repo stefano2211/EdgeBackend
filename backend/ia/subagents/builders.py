@@ -13,8 +13,6 @@ from backend.ia.prompts.subagents import (
     build_rag_system_prompt,
     MCP_AGENT_DESCRIPTION,
     build_mcp_system_prompt,
-    HISTORICAL_AGENT_DESCRIPTION,
-    HISTORICAL_AGENT_SYSTEM_PROMPT,
     DB_ANALYST_AGENT_DESCRIPTION,
     build_db_analyst_system_prompt,
 )
@@ -130,29 +128,6 @@ def _build_mcp_subagent(
     }
 
 
-def _build_historical_subagent(
-    context: str,
-    tools: list,
-    **_,
-) -> dict:
-    # Validate that the 'historical' adapter is available before creating the model
-    try:
-        model = get_chat_model(adapter="historical")
-    except RuntimeError as exc:
-        logger.warning(
-            "Historical adapter not available (%s), falling back to base model", exc
-        )
-        model = get_chat_model()
-
-    return {
-        "name": "historical-agent",
-        "description": HISTORICAL_AGENT_DESCRIPTION,
-        "system_prompt": HISTORICAL_AGENT_SYSTEM_PROMPT,
-        "tools": [],
-        "model": model,
-    }
-
-
 def _build_db_analyst_subagent(
     context: str,
     tools: list,
@@ -197,15 +172,6 @@ SubagentRegistry.register(SubagentPlugin(
     applies_to={"proactive", "reactive"},
     requires_rag=False,
     requires_mcp=True,
-))
-
-SubagentRegistry.register(SubagentPlugin(
-    name="historical",
-    description=HISTORICAL_AGENT_DESCRIPTION,
-    builder=_build_historical_subagent,
-    applies_to={"proactive"},   # reactive removed — db_analyst provides real historical data
-    requires_rag=False,
-    requires_mcp=False,
 ))
 
 SubagentRegistry.register(SubagentPlugin(
