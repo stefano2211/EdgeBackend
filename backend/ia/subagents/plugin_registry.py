@@ -75,7 +75,7 @@ class SubagentRegistry:
             if plugin.requires_mcp and enable_mcp:
                 from backend.ia.tools.unified.mcp import create_mcp_tool
                 mcp_source = "chat" if context == "proactive" else context
-                tools.append(create_mcp_tool(source=mcp_source))
+                tools.append(create_mcp_tool(source=mcp_source, user_id=user_id or 1))
             if plugin.requires_rag and enable_knowledge and kb_ids:
                 from backend.ia.tools.unified.rag import create_rag_tool
                 rag_context = "reactive" if context == "reactive" else "chat"

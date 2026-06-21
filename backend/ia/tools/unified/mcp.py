@@ -11,7 +11,6 @@ import os
 from typing import Literal
 
 from langchain_core.tools import StructuredTool
-from langchain_core.runnables import RunnableConfig
 from sqlalchemy import select
 
 from backend.core.database import AsyncSessionLocal
@@ -58,7 +57,7 @@ async def _mcp_execute_impl(
     tool_config_name: str,
     parameters: dict | None,
     source: Literal["chat", "reactive"],
-    config: RunnableConfig | None = None,
+    user_id: int,
 ) -> str:
     """Execute MCP tool from the specified context dynamically."""
     if parameters is None:
@@ -71,36 +70,8 @@ async def _mcp_execute_impl(
     )
 
     async with AsyncSessionLocal() as session:
-        # Resolve user_id from thread_id in config
-        configurable = config.get("configurable", {}) if config else {}
-        thread_id = configurable.get("thread_id")
-        user_id = None
-        if thread_id:
-            try:
-                if thread_id.startswith("event-"):
-                    # Parse event-N form (event may have additional suffixes)
-                    parts = thread_id.split("-")
-                    if len(parts) >= 2 and parts[1].isdigit():
-                        event_id = int(parts[1])
-                        from backend.persistencia.models.event import Event
-                        res = await session.execute(select(Event).where(Event.id == event_id))
-                        evt = res.scalar_one_or_none()
-                        if evt:
-                            user_id = evt.triggered_by_user_id
-                else:
-                    from backend.persistencia.models.conversation import Conversation
-                    res = await session.execute(select(Conversation).where(Conversation.thread_id == thread_id))
-                    conv = res.scalar_one_or_none()
-                    if conv:
-                        user_id = conv.user_id
-            except Exception as e:
-                logger.warning("Error resolving user_id from thread_id=%s: %s", thread_id, e)
-
         if not user_id:
-            raise RuntimeError(
-                f"Could not resolve user_id from thread_id={thread_id}. "
-                "Ensure the conversation or event exists and has a valid user_id."
-            )
+            raise RuntimeError("user_id is required for MCP execution")
 
         # Find which active IntegrationInstance of the user has the tool
         from backend.integrations.models import IntegrationInstance
@@ -213,16 +184,21 @@ async def _mcp_execute_impl(
         return json.dumps(result, ensure_ascii=False)
 
 
-def create_mcp_tool(source: Literal["chat", "reactive"]) -> StructuredTool:
-    """Create a LangChain tool wrapper for MCP execution."""
+def create_mcp_tool(source: Literal["chat", "reactive"], user_id: int) -> StructuredTool:
+    """Create a LangChain tool wrapper for MCP execution.
+    
+    Args:
+        source: 'chat' or 'reactive' — filters which integrations are available.
+        user_id: The authenticated user whose integrations will be queried.
+                Bound at creation time to avoid runtime config resolution issues.
+    """
     
     async def _bound_mcp_execute(
         tool_config_name: str,
         parameters: dict | None = None,
-        config: RunnableConfig | None = None,
     ) -> str:
         return await _mcp_execute_impl(
-            tool_config_name, parameters, source=source, config=config
+            tool_config_name, parameters, source=source, user_id=user_id
         )
 
     return StructuredTool.from_function(
