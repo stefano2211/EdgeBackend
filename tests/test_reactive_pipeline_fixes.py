@@ -302,3 +302,30 @@ class TestQueryResourceData:
     def test_safe_ident_quotes_identifier(self):
         from backend.ia.tools.unified.data_analyst import _safe_ident
         assert _safe_ident("measurements") == '"measurements"'
+        assert _safe_ident("measurements", "postgresql") == '"measurements"'
+        assert _safe_ident("measurements", "mysql") == "`measurements`"
+
+    def test_time_interval_sql_by_dialect(self):
+        from backend.ia.tools.unified.data_analyst import _time_interval_sql
+        pg = _time_interval_sql(6, "ts", "postgresql")
+        assert "INTERVAL '6 hours'" in pg
+        my = _time_interval_sql(6, "ts", "mysql")
+        assert "INTERVAL 6 HOUR" in my
+        sl = _time_interval_sql(6, "ts", "sqlite")
+        assert "datetime(" in sl
+
+    def test_is_time_column_name(self):
+        from backend.ia.tools.unified.data_analyst import _is_time_column_name
+        assert _is_time_column_name("created_at")
+        assert _is_time_column_name("timestamp")
+        assert _is_time_column_name("logged_date")
+        assert not _is_time_column_name("value")
+        assert not _is_time_column_name("status")
+
+    def test_is_entity_column_name(self):
+        from backend.ia.tools.unified.data_analyst import _is_entity_column_name
+        assert _is_entity_column_name("equipment")
+        assert _is_entity_column_name("service_name")
+        assert _is_entity_column_name("host")
+        assert not _is_entity_column_name("count")
+        assert not _is_entity_column_name("amount")

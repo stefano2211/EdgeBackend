@@ -28,9 +28,41 @@ def _safe_str(s: str) -> str:
     return s.replace("'", "''")
 
 
-def _safe_ident(s: str) -> str:
-    """Quote SQL identifiers with double quotes (PostgreSQL standard)."""
+def _safe_ident(s: str, dialect: str = "postgresql") -> str:
+    """Quote SQL identifiers for the target dialect."""
+    if dialect == "mysql":
+        return f"`{s}`"
     return f'"{s}"'
+
+
+def _time_interval_sql(hours: int, time_col: str, dialect: str = "postgresql") -> str:
+    """Generate the time interval WHERE clause for the target dialect."""
+    if dialect == "mysql":
+        return f"{_safe_ident(time_col, dialect)} >= NOW() - INTERVAL {hours} HOUR"
+    elif dialect == "sqlite":
+        return f"{_safe_ident(time_col, dialect)} >= datetime('now', '-{hours} hours')"
+    return f"{_safe_ident(time_col, dialect)} >= NOW() - INTERVAL '{hours} hours'"
+
+
+def _is_time_column_name(col_name: str) -> bool:
+    """Heuristic: does this column name suggest it holds time data?"""
+    n = col_name.lower()
+    time_patterns = ("date", "time", "timestamp", "day", "month", "year",
+                     "created", "updated", "dt", "logged", "occurred")
+    if any(p in n for p in time_patterns):
+        return True
+    # Check suffix patterns (avoid false positives like "status" matching "at")
+    if n.endswith("_at") or n.endswith("_on"):
+        return True
+    return False
+
+
+def _is_entity_column_name(col_name: str) -> bool:
+    """Heuristic: does this column name suggest it holds entity/resource names?"""
+    n = col_name.lower()
+    entity_patterns = ("name", "type", "status", "label", "title", "category",
+                       "equipment", "device", "host", "service", "resource", "tag")
+    return any(p in n for p in entity_patterns)
 
 
 def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection_ids: list[str] | None = None) -> list[StructuredTool]:
@@ -88,7 +120,7 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
                     "Usa execute_data_query como fallback."
                 )
 
-            # Classify columns by data type — domain-agnostic
+            # Classify columns by data type + name heuristics — domain-agnostic
             time_cols: list[tuple[str, str]] = []
             value_cols: list[tuple[str, str]] = []
             entity_cols: list[tuple[str, str]] = []
@@ -104,12 +136,30 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
                     tables_seen.add(item.table_name)
                     tables.append(item.table_name)
 
+                # Signal 1: SQL data type
+                typed = False
                 if any(t in dt for t in ("timestamp", "date", "time")):
                     time_cols.append((item.table_name, col_name))
+                    typed = True
                 elif any(t in dt for t in ("int", "numeric", "float", "decimal", "double", "real")):
                     value_cols.append((item.table_name, col_name))
-                elif any(t in dt for t in ("varchar", "text", "char")):
+                    typed = True
+                elif any(t in dt for t in ("varchar", "text", "char", "string")):
                     entity_cols.append((item.table_name, col_name))
+                    typed = True
+
+                # Signal 2: Column name heuristics (fallback for ambiguous types like SQLite TEXT)
+                if not typed and _is_time_column_name(col_name):
+                    time_cols.append((item.table_name, col_name))
+                elif not typed and _is_entity_column_name(col_name):
+                    entity_cols.append((item.table_name, col_name))
+
+            # Name-based fallback: if no time cols found by type, try name heuristics on ALL columns
+            if not time_cols:
+                for item in schema_items:
+                    col_name = item.column_name
+                    if col_name and _is_time_column_name(col_name):
+                        time_cols.append((item.table_name, col_name))
 
             if not time_cols:
                 return (
@@ -125,24 +175,26 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
             table = tables[0]
             time_col = time_cols[0][1]
             entity_names = [c[1] for c in entity_cols]
+            dialect = getattr(conn, "db_type", "postgresql") or "postgresql"
 
             # Build generic WHERE clauses from entity columns
-            where_parts = [f"{_safe_ident(ecol)} LIKE '%{_safe_str(resource)}%'"
+            where_parts = [f"{_safe_ident(ecol, dialect)} LIKE '%{_safe_str(resource)}%'"
                            for ecol in entity_names[:2]]
             if metric:
                 for ecol in entity_names:
                     if where_parts and ecol not in where_parts[0]:
                         where_parts.append(
-                            f"{_safe_ident(ecol)} LIKE '%{_safe_str(metric)}%'"
+                            f"{_safe_ident(ecol, dialect)} LIKE '%{_safe_str(metric)}%'"
                         )
                         break
 
             where_clause = " OR ".join(where_parts[:3])
+            time_filter = _time_interval_sql(min(hours, 168), time_col, dialect)
             sql = (
-                f"SELECT * FROM {_safe_ident(table)} "
+                f"SELECT * FROM {_safe_ident(table, dialect)} "
                 f"WHERE ({where_clause}) "
-                f"AND {_safe_ident(time_col)} >= NOW() - INTERVAL '{min(hours, 168)} hours' "
-                f"ORDER BY {_safe_ident(time_col)} DESC "
+                f"AND {time_filter} "
+                f"ORDER BY {_safe_ident(time_col, dialect)} DESC "
                 f"LIMIT 500"
             )
 
