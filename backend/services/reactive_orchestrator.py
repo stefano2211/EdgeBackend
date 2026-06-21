@@ -1,17 +1,17 @@
-"""Reactive event pipeline — sequential 4-phase analysis.
+"""Reactive event pipeline — sequential 4-phase analysis with Director-Analyst split.
 
 Architecture:
   1. Event arrives → status "analyzing"
-  2. DeepAgents orchestrator executes phases in sequence:
-     Phase 1: db_analyst-agent queries last N hours of machine data
+  2. Director (DeepAgent) collects data from sub-agents in sequence:
+     Phase 1: db_analyst-agent queries last N hours of data
      Phase 2: rag-agent searches docs using event + DB context
-     Phase 3: mcp-agent sends notifications (email/slack) if available
-     Phase 4: orchestrator produces final JSON report
-  3. Synthesis layer extracts structured ReactiveAnalysisOutput from conversation
-  4. Fields saved to event → status "completed"
+     Phase 3: mcp-agent sends quick alerts and collects integration data
+  3. Analyst (separate LLM call) cross-checks findings → structured JSON
+  4. Fields saved to event → email sent with real analysis → status "completed"
 """
 
 import json
+import os
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,6 +109,9 @@ class ReactiveOrchestrator:
                 event.agent_plan = output.plan
                 await self._emit("planner_result", event.id, {"plan": output.plan})
                 await self._emit_log(event.id, "Remediation plan generated", level="info")
+
+            # ── Send analysis email with the REAL Analyst output ──
+            await self._send_analysis_result(event, output, session)
 
             # Transition to completed
             event.status = "completed"
@@ -466,6 +469,111 @@ class ReactiveOrchestrator:
         except Exception as e:
             logger.warning("Failed to resolve DB connection IDs: %s", e)
             return []
+
+    async def _send_analysis_result(
+        self, event: Event, output: ReactiveAnalysisOutput, session: AsyncSession
+    ) -> None:
+        """Send the Analyst's real analysis/diagnosis/plan via email — same content as frontend."""
+        if not event.triggered_by_user_id:
+            return
+
+        try:
+            from sqlalchemy import select
+            from backend.integrations.models import IntegrationInstance
+            from backend.integrations.integration_service import IntegrationService
+            from backend.services.mcp_service import MCPService
+            from backend.integrations.credentials import CredentialManager
+            from backend.integrations.repositories.integration_repository import IntegrationInstanceRepository
+
+            stmt = select(IntegrationInstance).where(
+                IntegrationInstance.user_id == event.triggered_by_user_id,
+                IntegrationInstance.is_enabled.is_(True),
+            )
+            result = await session.execute(stmt)
+            instances = result.scalars().all()
+
+            integration_service = IntegrationService(session)
+            gmail_instance = None
+            send_email_tool = None
+
+            for instance in instances:
+                if instance.catalog and instance.catalog.slug in ("gmail", "google", "google-mail"):
+                    discovered = await integration_service._discover_tools(instance)
+                    send_email_tool = next(
+                        (t for t in discovered if t.get("name") == "send_email"), None
+                    )
+                    if send_email_tool:
+                        gmail_instance = instance
+                        break
+
+            if not gmail_instance or not send_email_tool:
+                logger.info("No Gmail integration with send_email tool found — skipping email")
+                return
+
+            body = (
+                f"Aura AI — Event Analysis Complete\n"
+                f"=====================================\n\n"
+                f"Event: {event.title}\n"
+                f"Severity: {event.severity_text}\n"
+                f"Domain: {event.domain or 'generic'}\n\n"
+                f"── ANALYSIS ──\n"
+                f"{output.analysis}\n\n"
+                f"── DIAGNOSIS ──\n"
+                f"{output.diagnosis}\n\n"
+                f"── REMEDIATION PLAN ──\n"
+                f"{output.plan}\n\n"
+                f"---\n"
+                f"Aura AI Operations Center"
+            )
+
+            from backend.persistencia.models.user import User
+            user = await session.get(User, event.triggered_by_user_id)
+            recipient = (
+                user.notification_email if user and user.notification_email
+                else user.email if user
+                else None
+            )
+            if not recipient:
+                logger.warning("No recipient found for event %s", event.id)
+                return
+
+            cred_manager = CredentialManager(IntegrationInstanceRepository(session))
+            credentials = await cred_manager.get_credentials(gmail_instance)
+            stdio_env = cred_manager.inject_for_stdio(
+                credentials,
+                gmail_instance.catalog.env_prefix if gmail_instance.catalog else "",
+                base_env=dict(os.environ),
+                auth_env_var_mapping=(
+                    gmail_instance.catalog.auth_env_var_mapping
+                    if gmail_instance.catalog else None
+                ),
+            )
+
+            mcp_service = MCPService()
+            response = await mcp_service.execute_tool(
+                base_url=send_email_tool.get("config", {}).get("url", ""),
+                tool_name="send_email",
+                arguments={
+                    "to": recipient,
+                    "subject": f"[Aura AI] {event.title}",
+                    "body": body,
+                },
+                is_stdio=True,
+                stdio_command=gmail_instance.catalog.command if gmail_instance.catalog else None,
+                stdio_args=gmail_instance.catalog.args if gmail_instance.catalog else None,
+                stdio_env=stdio_env,
+                transport_type="stdio",
+            )
+
+            if response.error:
+                logger.warning("Email send failed for event %s: %s", event.id, response.error)
+                await self._emit_log(event.id, f"Email send failed: {response.error}", level="warn")
+            else:
+                logger.info("Analysis email sent for event %s to %s", event.id, recipient)
+                await self._emit_log(event.id, f"Analysis email sent to {recipient}", level="info")
+
+        except Exception as exc:
+            logger.warning("Failed to send analysis email for event %s: %s", event.id, exc)
 
     async def _emit(self, event_type: str, event_id: int, data: dict) -> None:
         payload = {
