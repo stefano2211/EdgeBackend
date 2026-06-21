@@ -276,18 +276,97 @@ class ReactiveOrchestrator:
             return self._parse_reactive_output(raw_content)
 
     def _extract_subagent_findings(self, messages: list) -> str:
-        """Extract a plain-text summary of what each sub-agent returned."""
+        """Extract a comprehensive summary of what each sub-agent returned.
+
+        Includes: Director's final summary + structured data from each sub-agent.
+        Preserves full data content — no arbitrary character truncation.
+        """
         parts: list[str] = []
 
+        # 1. Director's final summary (last AI message — has interpreted context)
+        for msg in reversed(messages):
+            msg_type = getattr(msg, "type", "")
+            if msg_type in ("ai", "assistant"):
+                content = str(getattr(msg, "content", "")).strip()
+                if content:
+                    parts.insert(0, f"=== DIRECTOR SUMMARY ===\n{content}")
+                    break
+
+        # 2. Tool outputs from sub-agents — extract structured data
         for msg in messages:
             msg_type = getattr(msg, "type", "")
-            if msg_type == "tool":
-                agent_name = getattr(msg, "name", "") or "unknown"
-                content = getattr(msg, "content", "") or ""
-                if content:
-                    # Truncate very long tool outputs
-                    truncated = str(content)[:2000]
-                    parts.append(f"--- {agent_name} ---\n{truncated}")
+            if msg_type != "tool":
+                continue
+
+            agent_name = getattr(msg, "name", "") or "unknown"
+            content = str(getattr(msg, "content", "") or "")
+            if not content.strip():
+                continue
+
+            header = f"=== {agent_name} ==="
+
+            # Try to parse JSON and extract key structured fields
+            try:
+                import json as _json
+                data = _json.loads(content)
+                if isinstance(data, dict):
+                    summary = data.get("executive_summary", "")
+                    status = data.get("task_status", "")
+                    header = f"=== {agent_name} (status: {status}) ==="
+
+                    # For RAG agent: extract citations with extracted_text
+                    if "rag_data" in data:
+                        rag_parts = [header]
+                        if summary:
+                            rag_parts.append(f"Summary: {summary}")
+                        citations = data.get("rag_data", [])
+                        for c in citations[:5]:  # max 5 queries
+                            query = c.get("query", "")
+                            rag_parts.append(f"\nQuery: {query}")
+                            for cit in c.get("citations", [])[:5]:
+                                src = cit.get("source", "?")
+                                relevance = cit.get("relevance", "?")
+                                text = cit.get("extracted_text", "")[:500]
+                                rag_parts.append(
+                                    f"  [{src} relevance={relevance}]\n  {text}"
+                                )
+                        parts.append("\n".join(rag_parts))
+
+                    # For MCP agent: extract action results
+                    elif "data" in data and isinstance(data["data"], dict):
+                        inner = data["data"]
+                        result = inner.get("result", {})
+                        parts.append(
+                            f"{header}\n"
+                            f"Action: {inner.get('source', '?')}\n"
+                            f"Result: {_json.dumps(result, ensure_ascii=False)[:1000]}\n"
+                            f"Summary: {summary}"
+                        )
+
+                    # For DB analyst or plain JSON
+                    else:
+                        inner_data = data.get("data", {})
+                        if isinstance(inner_data, dict):
+                            results = inner_data.get("results", {})
+                            sql = inner_data.get("sql", "")
+                            insights = inner_data.get("insights", "")
+                            row_count = results.get("row_count", 0) if isinstance(results, dict) else 0
+                            parts.append(
+                                f"{header}\n"
+                                f"Summary: {summary}\n"
+                                f"SQL: {sql}\n"
+                                f"Rows: {row_count}\n"
+                                f"Insights: {insights}"
+                            )
+                        else:
+                            parts.append(f"{header}\n{_json.dumps(data, ensure_ascii=False)[:3000]}")
+                else:
+                    parts.append(f"{header}\n{content[:3000]}")
+
+            except (ValueError, TypeError):
+                # Not JSON — keep as plain text (e.g., markdown tables from query_resource_data)
+                # No truncation: the Analyst needs the full data
+                parts.append(f"{header}\n{content}")
 
         if not parts:
             return "No sub-agent data was collected."
