@@ -76,16 +76,20 @@ class TestOrchestratorPromptHasJsonOutput:
     """Verify the reactive orchestrator prompt instructs JSON output."""
 
     def test_prompt_contains_json_output_instruction(self):
+        # Director prompt no longer has JSON — that's the Analyst's job
         from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt
-
         prompt = build_reactive_s2_orchestrator_prompt(
             has_rag=True, has_mcp=True, domain="test", tool_schemas=[]
         )
-        assert "<output_format>" in prompt
-        assert '"analysis"' in prompt
-        assert '"diagnosis"' in prompt
-        assert '"plan"' in prompt
         assert "sequential_pipeline" in prompt
+        assert "Director" in prompt or "Data Collector" in prompt
+        # JSON output moved to Analyst — verify it exists there
+        from backend.ia.prompts.reactive import build_synthesis_analyst_prompt
+        analyst = build_synthesis_analyst_prompt("test event", "test findings")
+        assert '<output_format>' in analyst
+        assert '"analysis"' in analyst
+        assert '"diagnosis"' in analyst
+        assert '"plan"' in analyst
 
 
 class TestReactiveOrchestratorTemplate:
@@ -97,7 +101,6 @@ class TestReactiveOrchestratorTemplate:
         assert "PHASE 1" in prompt
         assert "PHASE 2" in prompt
         assert "PHASE 3" in prompt
-        assert "PHASE 4" in prompt
 
     def test_template_has_sequential_pipeline_tag(self):
         from backend.ia.prompts.reactive import build_reactive_s2_orchestrator_prompt

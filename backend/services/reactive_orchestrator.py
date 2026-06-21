@@ -155,10 +155,10 @@ class ReactiveOrchestrator:
 
         user_message = (
             f"<event>\n{event_query}\n</event>\n\n"
-            "Analyze this event following the sequential pipeline in your system prompt. "
+            "Execute the sequential pipeline in your system prompt. "
             "Start with Phase 1 (database query), then Phase 2 (document search), "
-            "then Phase 3 (external actions if tools are available), "
-            "then produce the final JSON report as Phase 4. "
+            "then Phase 3 (external actions if tools are available). "
+            "After all phases, report what data was collected from each phase. "
             "Execute each phase in strict order — do NOT call multiple agents at the same time."
         )
 
@@ -213,52 +213,86 @@ class ReactiveOrchestrator:
                 logger.warning("Orchestrator returned no messages")
                 return None
 
-            # ── Phase 2: Synthesis into Structured Output ──
-            await self._emit_log(event.id, "Synthesizing structured analysis...", level="info")
-            try:
-                from langchain_core.messages import HumanMessage
-                synthesis_msg = HumanMessage(
-                    content=(
-                        "You are the Aura AI Synthesis Layer. Read the above conversation history "
-                        "which contains an analysis of a system/industrial event along with sub-agent findings. "
-                        "Synthesize this information into a structured response containing: "
-                        "1. analysis: A detailed root cause analysis in Spanish. "
-                        "2. diagnosis: A bulleted diagnosis in Spanish including identified root cause, evidence, confidence level (Alto/Medio/Bajo), false positive detection and immediate risk. "
-                        "3. plan: A step-by-step numbered remediation plan in Spanish with priorities and assigned roles. "
-                        "Ensure all fields are fully filled out in Spanish and accurately reflect the conversation."
-                    )
-                )
-                from backend.ia.langchain_models import get_chat_model
-                base_model = get_chat_model()
-                structured_model = base_model.with_structured_output(ReactiveAnalysisOutput)
-                
-                # Build synthesis context: filter to human + AI messages only,
-                # excluding large tool outputs to save tokens.
-                synthesis_msgs = [
-                    msg for msg in msgs
-                    if getattr(msg, "type", "") in ("human", "ai")
-                ]
-                output = await structured_model.ainvoke(synthesis_msgs + [synthesis_msg])
-                return output
-            except Exception as e:
-                logger.exception("Failed structured output synthesis, falling back to text parsing: %s", e)
-                # Find the LAST AI/assistant message (not a tool message)
-                raw_content = ""
-                for msg in reversed(msgs):
-                    msg_type = getattr(msg, "type", type(msg).__name__)
-                    if msg_type in ("ai", "assistant"):
-                        raw_content = getattr(msg, "content", "") or ""
-                        break
-
-                if not raw_content:
-                    logger.warning("No AI message found in orchestrator response")
-                    return None
-
-                return self._parse_reactive_output(raw_content)
+            # ── Stage 2: Synthesis Analyst (cross-check + structured JSON) ──
+            await self._emit_log(event.id, "Director complete — running Synthesis Analyst...", level="info")
+            return await self._run_analyst(event, event_query, msgs)
 
         except Exception as exc:
             logger.warning("Orchestrator failed: %s", exc)
             return None
+
+    async def _run_analyst(
+        self,
+        event: Event,
+        event_query: str,
+        director_messages: list,
+    ) -> ReactiveAnalysisOutput | None:
+        """Run the Synthesis Analyst to cross-check findings and produce structured JSON."""
+        try:
+            from langchain_core.messages import SystemMessage, HumanMessage
+            from backend.ia.langchain_models import get_chat_model
+            from backend.ia.prompts.reactive import build_synthesis_analyst_prompt
+
+            # Extract sub-agent findings from Director conversation
+            subagent_findings = self._extract_subagent_findings(director_messages)
+
+            # Build the Analyst system prompt with cross-check rules
+            analyst_system = build_synthesis_analyst_prompt(
+                event_context=event_query,
+                subagent_findings=subagent_findings,
+            )
+
+            base_model = get_chat_model()
+            structured_model = base_model.with_structured_output(ReactiveAnalysisOutput)
+
+            # Filter to human + AI messages for context (exclude large tool outputs)
+            context_msgs = [
+                msg for msg in director_messages
+                if getattr(msg, "type", "") in ("human", "ai")
+            ]
+
+            analyst_messages = [
+                SystemMessage(content=analyst_system),
+                HumanMessage(content=(
+                    "Cross-check the event claims against sub-agent findings below. "
+                    "Produce the structured JSON using your cross-check rules."
+                )),
+            ]
+
+            output = await structured_model.ainvoke(context_msgs + analyst_messages)
+            return output
+
+        except Exception as e:
+            logger.exception("Synthesis Analyst failed: %s", e)
+            # Fallback: try parsing from Director's final message
+            raw_content = ""
+            for msg in reversed(director_messages):
+                msg_type = getattr(msg, "type", type(msg).__name__)
+                if msg_type in ("ai", "assistant"):
+                    raw_content = getattr(msg, "content", "") or ""
+                    break
+            if not raw_content:
+                return None
+            return self._parse_reactive_output(raw_content)
+
+    def _extract_subagent_findings(self, messages: list) -> str:
+        """Extract a plain-text summary of what each sub-agent returned."""
+        parts: list[str] = []
+
+        for msg in messages:
+            msg_type = getattr(msg, "type", "")
+            if msg_type == "tool":
+                agent_name = getattr(msg, "name", "") or "unknown"
+                content = getattr(msg, "content", "") or ""
+                if content:
+                    # Truncate very long tool outputs
+                    truncated = str(content)[:2000]
+                    parts.append(f"--- {agent_name} ---\n{truncated}")
+
+        if not parts:
+            return "No sub-agent data was collected."
+
+        return "\n\n".join(parts)
 
     def _parse_reactive_output(self, raw: str) -> ReactiveAnalysisOutput | None:
         """Extract and validate ReactiveAnalysisOutput from raw text."""

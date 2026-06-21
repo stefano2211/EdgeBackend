@@ -4,7 +4,7 @@ from backend.ia.prompts.loader import load_prompt
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  S2 AUTONOMOUS ORCHESTRATOR PROMPT (unified entry point)
+#  DIRECTOR PROMPT — dispatches to sub-agents, collects raw data only
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def build_reactive_s2_orchestrator_prompt(
@@ -13,32 +13,25 @@ def build_reactive_s2_orchestrator_prompt(
     domain: str = "generic",
     tool_schemas: list[dict] | None = None,
 ) -> str:
-    """Build the S2 autonomous orchestrator prompt for reactive event analysis.
+    """Build the Director agent prompt — collects data from sub-agents only.
 
-    Describes available sub-agents for the sequential 4-phase pipeline.
-    Phase order (DB → RAG → MCP → synthesis) is encoded in the template.
-
-    Args:
-        has_rag: Whether a RAG knowledge base is enabled.
-        has_mcp: Whether MCP integration tools are enabled.
-        domain: Domain hint (kept for context, not used in routing logic).
-        tool_schemas: Optional list of {name, description} dicts for MCP tool docs.
+    The Director dispatches to db_analyst, rag, and mcp agents in sequence.
+    It does NOT synthesize or produce JSON — a separate Analyst agent handles that.
     """
     subagent_lines: list[str] = []
 
-    # db_analyst is always first — it is Phase 1 of the sequential pipeline
     subagent_lines.append(
         '- task("db_analyst-agent", ...) → Database query specialist. '
-        "Queries connected databases for recent machine/equipment records. "
+        "Queries connected databases for recent records. "
         "Always call this FIRST (Phase 1). "
-        "Tools: list_db_connections, retrieve_relevant_schema, execute_data_query."
+        "Tools: query_resource_data, execute_data_query."
     )
 
     if has_rag:
         subagent_lines.append(
             '- task("rag-agent", ...) → Document search specialist. '
             "Searches manuals, procedures, and technical documentation. "
-            "Call after Phase 1 (Phase 2), enriching the query with DB findings."
+            "Call after Phase 1 (Phase 2)."
         )
     else:
         subagent_lines.append(
@@ -50,11 +43,10 @@ def build_reactive_s2_orchestrator_prompt(
         if tool_schemas:
             tool_names = [t.get("name", "?") for t in tool_schemas]
             tool_hint = f" Available tools: {', '.join(tool_names)}."
-
         subagent_lines.append(
             '- task("mcp-agent", ...) → Integration and action specialist. '
-            "Sends emails, Slack messages, and executes registered integrations. "
-            f"Call after Phase 2 (Phase 3) for external notifications.{tool_hint}"
+            "Sends emails, messages, executes integrations. "
+            f"Call after Phase 2 (Phase 3).{tool_hint}"
         )
     else:
         subagent_lines.append(
@@ -66,6 +58,27 @@ def build_reactive_s2_orchestrator_prompt(
     return load_prompt(
         "reactive_orchestrator",
         subagents_section=subagents_section,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ANALYST PROMPT — cross-checks sub-agent findings against event claims
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def build_synthesis_analyst_prompt(
+    event_context: str,
+    subagent_findings: str,
+) -> str:
+    """Build the Synthesis Analyst prompt — cross-checks and produces structured JSON.
+
+    This is called AFTER the Director has collected all sub-agent data.
+    The Analyst receives the event context and raw sub-agent findings,
+    applies strict cross-check rules, and produces ReactiveAnalysisOutput JSON.
+    """
+    return load_prompt(
+        "synthesis_analyst",
+        event_context=event_context,
+        subagent_findings=subagent_findings,
     )
 
 
