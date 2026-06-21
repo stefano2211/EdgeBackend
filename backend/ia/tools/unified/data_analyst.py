@@ -23,6 +23,16 @@ from backend.services.schema_embedding_service import SchemaEmbeddingService
 logger = logging.getLogger(__name__)
 
 
+def _safe_str(s: str) -> str:
+    """Escape single quotes for SQL string literals."""
+    return s.replace("'", "''")
+
+
+def _safe_ident(s: str) -> str:
+    """Quote SQL identifiers with double quotes (PostgreSQL standard)."""
+    return f'"{s}"'
+
+
 def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection_ids: list[str] | None = None) -> list[StructuredTool]:
     """Create all data-analyst tools bound to a specific user and context.
 
@@ -33,6 +43,152 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
     Returns:
         List of StructuredTool instances ready for DeepAgents registration.
     """
+
+    # ── Tool 0: FAST PATH — Direct parameterized query (zero LLM) ─────
+
+    async def _query_resource_data(
+        resource: str,
+        hours: int = 24,
+        metric: str | None = None,
+        connection_hint: str | None = None,
+    ) -> str:
+        """Query any database for recent resource data filtered by time window.
+
+        Domain-agnostic: classifies columns by data type (timestamp/numeric/varchar),
+        not by hardcoded names. Zero LLM calls — sub-second response.
+        Use this FIRST for reactive events like 'last X hours of resource Y'.
+        """
+        async with get_session() as session:
+            service = DataAnalystService(session)
+            connections = await service._get_available_connections(user_id, context)
+            if db_connection_ids:
+                connections = [c for c in connections if c.id in db_connection_ids]
+            if not connections:
+                return "Error: No hay bases de datos disponibles."
+
+            conn = connections[0]
+            if connection_hint:
+                match = next(
+                    (c for c in connections if connection_hint.lower() in c.name.lower()),
+                    None,
+                )
+                if match:
+                    conn = match
+
+            conn_ids = [c.id for c in connections if c.id == conn.id]
+            schema_items = await service._retrieve_relevant_schema(
+                user_id=user_id,
+                question=f"{resource} {metric or ''}",
+                connection_ids=conn_ids,
+                top_k=20,
+            )
+            if not schema_items:
+                return (
+                    "No se encontraron tablas/columnas relevantes. "
+                    "Usa execute_data_query como fallback."
+                )
+
+            # Classify columns by data type — domain-agnostic
+            time_cols: list[tuple[str, str]] = []
+            value_cols: list[tuple[str, str]] = []
+            entity_cols: list[tuple[str, str]] = []
+            tables_seen: set[str] = set()
+            tables: list[str] = []
+
+            for item in schema_items:
+                dt = (item.data_type or "").lower()
+                col_name = item.column_name
+                if col_name is None:
+                    continue
+                if item.table_name not in tables_seen:
+                    tables_seen.add(item.table_name)
+                    tables.append(item.table_name)
+
+                if any(t in dt for t in ("timestamp", "date", "time")):
+                    time_cols.append((item.table_name, col_name))
+                elif any(t in dt for t in ("int", "numeric", "float", "decimal", "double", "real")):
+                    value_cols.append((item.table_name, col_name))
+                elif any(t in dt for t in ("varchar", "text", "char")):
+                    entity_cols.append((item.table_name, col_name))
+
+            if not time_cols:
+                return (
+                    "Schema no tiene columnas de tipo fecha/hora. "
+                    "Usa execute_data_query como fallback."
+                )
+            if not entity_cols:
+                return (
+                    "Schema no tiene columnas de texto/varchar para filtrar. "
+                    "Usa execute_data_query como fallback."
+                )
+
+            table = tables[0]
+            time_col = time_cols[0][1]
+            entity_names = [c[1] for c in entity_cols]
+
+            # Build generic WHERE clauses from entity columns
+            where_parts = [f"{_safe_ident(ecol)} LIKE '%{_safe_str(resource)}%'"
+                           for ecol in entity_names[:2]]
+            if metric:
+                for ecol in entity_names:
+                    if where_parts and ecol not in where_parts[0]:
+                        where_parts.append(
+                            f"{_safe_ident(ecol)} LIKE '%{_safe_str(metric)}%'"
+                        )
+                        break
+
+            where_clause = " OR ".join(where_parts[:3])
+            sql = (
+                f"SELECT * FROM {_safe_ident(table)} "
+                f"WHERE ({where_clause}) "
+                f"AND {_safe_ident(time_col)} >= NOW() - INTERVAL '{min(hours, 168)} hours' "
+                f"ORDER BY {_safe_ident(time_col)} DESC "
+                f"LIMIT 500"
+            )
+
+            from backend.database_connector.service import DatabaseConnectionService
+            db_svc = DatabaseConnectionService(session)
+            try:
+                result = await db_svc.execute_query(conn.id, user_id, sql)
+            except Exception as exc:
+                return (
+                    f"Error ejecutando query rápida: {exc}. "
+                    "Usa execute_data_query como fallback."
+                )
+
+            if result.row_count == 0:
+                return (
+                    f"Sin datos para resource='{resource}'"
+                    + (f", metric='{metric}'" if metric else "")
+                    + f" en últimas {hours}h.\n"
+                    + f"Tabla: {table}, SQL: {sql}"
+                )
+
+            lines = [
+                f"## Datos para: {resource}" + (f" / {metric}" if metric else ""),
+                f"Ventana: {hours}h | Tabla: {table} | Filas: {result.row_count}",
+                "",
+                "| " + " | ".join(result.columns) + " |",
+                "| " + " | ".join(["---"] * len(result.columns)) + " |",
+            ]
+            for row in result.rows[:20]:
+                lines.append("| " + " | ".join(str(c) for c in row) + " |")
+            if result.row_count > 20:
+                lines.append(f"\n*... y {result.row_count - 20} filas más*")
+            return "\n".join(lines)
+
+    tool_query_resource_data = StructuredTool.from_function(
+        coroutine=_query_resource_data,
+        name="query_resource_data",
+        description=(
+            "RÁPIDO: Consulta directa parametrizada. CERO LLM — respuesta inmediata. "
+            "Busca datos recientes de un recurso/entidad en cualquier base de datos. "
+            "Clasifica columnas automáticamente por tipo de dato (fecha, numérico, texto). "
+            "Usa esto SIEMPRE PRIMERO para consultas tipo 'últimas X horas del recurso Y'. "
+            "Parámetros: resource (nombre de la entidad), hours (ventana en horas), "
+            "metric (opcional, tipo de métrica a filtrar), connection_hint (opcional)."
+        ),
+    )
 
     # ── Tool 1: List available DB connections ─────────────────────────
 
@@ -217,6 +373,7 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
     )
 
     return [
+        tool_query_resource_data,   # FAST PATH — zero LLM, <1 second
         tool_list_connections,
         tool_retrieve_schema,
         tool_execute_query,

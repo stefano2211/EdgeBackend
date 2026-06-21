@@ -280,3 +280,25 @@ class TestHistoricalAgentRemoved:
         import backend.ia.prompts.subagents as sa
         assert not hasattr(sa, "HISTORICAL_AGENT_DESCRIPTION")
         assert not hasattr(sa, "HISTORICAL_AGENT_SYSTEM_PROMPT")
+
+
+class TestQueryResourceData:
+    """Verify the fast path tool is registered and helpers work correctly."""
+
+    def test_query_resource_data_tool_registered(self):
+        from backend.ia.tools.unified.data_analyst import create_data_analyst_tools
+        tools = create_data_analyst_tools(user_id=1, context="reactive")
+        tool_names = [t.name for t in tools]
+        assert "query_resource_data" in tool_names
+        assert tool_names[0] == "query_resource_data", (
+            "query_resource_data must be FIRST tool for db_analyst-agent"
+        )
+
+    def test_safe_str_escapes_quotes(self):
+        from backend.ia.tools.unified.data_analyst import _safe_str
+        assert _safe_str("test'value") == "test''value"
+        assert _safe_str("normal") == "normal"
+
+    def test_safe_ident_quotes_identifier(self):
+        from backend.ia.tools.unified.data_analyst import _safe_ident
+        assert _safe_ident("measurements") == '"measurements"'

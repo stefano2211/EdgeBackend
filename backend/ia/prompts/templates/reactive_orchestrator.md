@@ -26,7 +26,7 @@ Call task("db_analyst-agent") ONCE. After it returns, do NOT call it again.
 
 1. Identify affected resource from the event (hostname, device ID, service, account...)
 2. Time window by severity: info→1h, warning→6h, error/critical→24h
-3. Task message: "Consulta las bases de datos. Ultimas [X]h de [RECURSO]. Usa list_db_connections, retrieve_relevant_schema, execute_data_query."
+3. Task message: "Usa query_resource_data con resource='[RECURSO]', hours=[X]. Si el evento menciona una métrica específica, pásala como metric='[METRICA]'."
 
 SKIP if no DB available. Accept results and go to Phase 2.
 
