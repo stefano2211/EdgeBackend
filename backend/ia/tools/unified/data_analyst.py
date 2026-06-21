@@ -424,10 +424,15 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
         ),
     )
 
-    return [
+    tools = [
         tool_query_resource_data,   # FAST PATH — zero LLM, <1 second
         tool_list_connections,
         tool_retrieve_schema,
-        tool_execute_query,
         tool_explain_sql,
     ]
+    # execute_data_query is NL2SQL (slow) — only available in proactive (chat) context
+    # In reactive context, query_resource_data is the ONLY query tool
+    if context == "chat":
+        tools.insert(3, tool_execute_query)
+
+    return tools
