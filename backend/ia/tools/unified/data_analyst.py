@@ -208,12 +208,26 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
                     "Usa execute_data_query como fallback."
                 )
 
+            # If time-filtered query returns nothing, retry without time filter
+            # to get ALL historical data for this resource
+            if result.row_count == 0:
+                sql_all = (
+                    f"SELECT * FROM {_safe_ident(table, dialect)} "
+                    f"WHERE ({where_clause}) "
+                    f"ORDER BY {_safe_ident(time_col, dialect)} DESC "
+                    f"LIMIT 500"
+                )
+                try:
+                    result = await db_svc.execute_query(conn.id, user_id, sql_all)
+                except Exception:
+                    pass
+
             if result.row_count == 0:
                 return (
                     f"Sin datos para resource='{resource}'"
                     + (f", metric='{metric}'" if metric else "")
-                    + f" en últimas {hours}h.\n"
-                    + f"Tabla: {table}, SQL: {sql}"
+                    + f" en últimas {hours}h ni en el histórico completo.\n"
+                    + f"Tabla: {table}, SQL intentada: {sql}"
                 )
 
             lines = [
