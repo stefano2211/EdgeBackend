@@ -15,10 +15,10 @@ from __future__ import annotations
 from langchain_core.tools import StructuredTool
 
 from backend.core.logging import logging
-from backend.ia.tools.unified._session import get_session
-from backend.services.data_analyst_service import DataAnalystService
-from backend.services.data_analyst_schemas import AnalystQuestion
-from backend.services.schema_embedding_service import SchemaEmbeddingService
+from backend.ia.tools._session import get_session
+from backend.application.data_analysis.service import DataAnalystService
+from backend.application.data_analysis.schemas import AnalystQuestion
+from backend.infrastructure.embeddings.schema_embeddings import SchemaEmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +198,7 @@ def create_data_analyst_tools(user_id: int, context: str = "chat", db_connection
                 f"LIMIT 500"
             )
 
-            from backend.database_connector.service import DatabaseConnectionService
+            from backend.application.data_analysis.connector import DatabaseConnectionService
             db_svc = DatabaseConnectionService(session)
             try:
                 result = await db_svc.execute_query(conn.id, user_id, sql)

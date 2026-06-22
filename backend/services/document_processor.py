@@ -16,13 +16,13 @@ from __future__ import annotations
 from backend.core.config import settings
 from backend.core.logging import logging
 from backend.core.database import AsyncSessionLocal
-from backend.services.document_parser import parse_document_bytes, ParsedDocument
-from backend.services.chunking_service import chunk_documents, contextualize_chunks, Chunk
-from backend.services.embedding_service import embed_texts
+from backend.application.knowledge.parser import parse_document_bytes, ParsedDocument
+from backend.application.knowledge.chunking import chunk_documents, contextualize_chunks, Chunk
+from backend.infrastructure.embeddings.dense import embed_texts
 from backend.persistencia.vector import VectorRepository
-from backend.persistencia.vector.vector_store_port import VectorStorePort, SparseVector
-from backend.persistencia.repositories.document_repository import DocumentRepository
-from backend.persistencia.storage.storage_port import StoragePort
+from backend.infrastructure.vector.vector_store_port import VectorStorePort, SparseVector
+from backend.infrastructure.persistence.document_repository import DocumentRepository
+from backend.infrastructure.storage.storage_port import StoragePort
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class DocumentProcessor:
             return None
 
         try:
-            from backend.services.sparse_embedding_service import embed_sparse_texts
+            from backend.infrastructure.embeddings.sparse import embed_sparse_texts
 
             texts = [c.text for c in chunks]
             return await embed_sparse_texts(texts)
@@ -167,7 +167,7 @@ class DocumentProcessor:
                 await session.commit()
 
                 # Determine which contexts this KB serves
-                from backend.persistencia.repositories.knowledge_repository import KnowledgeRepository
+                from backend.infrastructure.persistence.knowledge_repository import KnowledgeRepository
                 kb_repo = KnowledgeRepository(session)
                 kb = await kb_repo.get_by_id(knowledge_base_id)
                 contexts = []

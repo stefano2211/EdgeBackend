@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.database import AsyncSessionLocal
 from backend.core.security import decode_access_token
 from backend.core.exceptions import AuthenticationError, PermissionDenied
-from backend.persistencia.repositories.user_repository import UserRepository
-from backend.persistencia.models.user import User
+from backend.infrastructure.persistence.user_repository import UserRepository
+from backend.domain.models.user import User
 from backend.core.config import settings
 
 security = HTTPBearer(auto_error=False)
@@ -24,7 +24,7 @@ def get_storage():
     Can be swapped for a mock in tests by overriding this dependency.
     Lazy import prevents startup failure when minio is not installed.
     """
-    from backend.persistencia.storage import MinioStorageRepository
+    from backend.infrastructure.storage import MinioStorageRepository
     return MinioStorageRepository()
 
 

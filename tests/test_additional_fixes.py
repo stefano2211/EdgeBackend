@@ -12,7 +12,7 @@ import pytest
 # Ensure project root is on path for backend.* imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.services.data_analyst_service import DataAnalystService
+from backend.application.data_analysis.service import DataAnalystService
 from backend.services.event_metric_service import EventMetricService
 
 
@@ -119,7 +119,7 @@ class TestDBQueryToolExceptionHandling:
 
     @pytest.mark.asyncio
     async def test_db_query_exception_returns_error_string(self):
-        from backend.ia.tools.unified.db import create_db_query_tool
+        from backend.ia.tools.db import create_db_query_tool
         from unittest.mock import patch
 
         # Mock DatabaseConnectionService and the get_session contexts
@@ -131,11 +131,11 @@ class TestDBQueryToolExceptionHandling:
         mock_service.list_connections = AsyncMock(return_value=[mock_conn])
         mock_service.execute_query = AsyncMock(side_effect=Exception("Database error details"))
 
-        # Mock the get_session context manager in backend.ia.tools.unified._session
+        # Mock the get_session context manager in backend.ia.tools._session
         mock_session_context = AsyncMock()
 
-        with patch("backend.ia.tools.unified.db.get_session", return_value=mock_session_context), \
-             patch("backend.ia.tools.unified.db.DatabaseConnectionService", return_value=mock_service):
+        with patch("backend.ia.tools.db.get_session", return_value=mock_session_context), \
+             patch("backend.ia.tools.db.DatabaseConnectionService", return_value=mock_service):
             tool = create_db_query_tool(user_id=1, context="chat")
             result = await tool.ainvoke({"connection_name": "test_db", "sql_query": "SELECT * FROM invalid_table;"})
 
@@ -148,7 +148,7 @@ class TestDataAnalystExecuteWithRetry:
     @pytest.mark.asyncio
     async def test_execute_with_retry_passes_user_id(self):
         from unittest.mock import patch, AsyncMock
-        from backend.services.data_analyst_service import DataAnalystService
+        from backend.application.data_analysis.service import DataAnalystService
 
         session = AsyncMock()
         mock_db_service = MagicMock()
@@ -175,7 +175,7 @@ class TestSubagentTokenFiltering:
     """Verify that _extract_chunk_payload filters out subagent tokens and routes them as thoughts."""
 
     def test_extract_chunk_payload_orchestrator_token(self):
-        from backend.services.chat_orchestrator import _extract_chunk_payload
+        from backend.application.chat.orchestrator import _extract_chunk_payload
         from langchain_core.messages import AIMessageChunk
 
         token = AIMessageChunk(content="Hello from orchestrator")
@@ -194,7 +194,7 @@ class TestSubagentTokenFiltering:
         assert not events
 
     def test_extract_chunk_payload_subagent_token(self):
-        from backend.services.chat_orchestrator import _extract_chunk_payload
+        from backend.application.chat.orchestrator import _extract_chunk_payload
         from backend.core.config import settings
         from langchain_core.messages import AIMessageChunk
 
@@ -227,13 +227,13 @@ class TestRAGToolRetrieval:
     @pytest.mark.asyncio
     async def test_rag_tool_retrieve_calls_pipeline_retrieve(self):
         from unittest.mock import patch, AsyncMock
-        from backend.ia.tools.unified.rag import _rag_retrieve_impl
+        from backend.ia.tools.rag import _rag_retrieve_impl
 
         # Mock the RetrievalPipeline
         mock_pipeline_instance = MagicMock()
         mock_pipeline_instance.retrieve = AsyncMock()
 
-        with patch("backend.services.retrieval_pipeline.RetrievalPipeline", return_value=mock_pipeline_instance):
+        with patch("backend.application.knowledge.rag.RetrievalPipeline", return_value=mock_pipeline_instance):
             await _rag_retrieve_impl(
                 knowledge_base_ids=["kb_1"],
                 query="test query",

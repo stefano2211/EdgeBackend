@@ -11,10 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import settings
 from backend.core.exceptions import NotFoundError
 from backend.core.logging import logging
-from backend.persistencia.models.document import Document
-from backend.persistencia.repositories.document_repository import DocumentRepository
-from backend.persistencia.storage.storage_port import StoragePort
-from backend.services._helpers import commit_and_refresh
+from backend.domain.models.document import Document
+from backend.infrastructure.persistence.document_repository import DocumentRepository
+from backend.infrastructure.storage.storage_port import StoragePort
+from backend.core._helpers import commit_and_refresh
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class DocumentService:
 
     def _get_knowledge_service(self):
         if self._knowledge_service is None:
-            from backend.services.knowledge_service import KnowledgeService
+            from backend.application.knowledge.service import KnowledgeService
             self._knowledge_service = KnowledgeService(self.session)
         return self._knowledge_service
 

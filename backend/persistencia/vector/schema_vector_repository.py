@@ -17,12 +17,12 @@ from qdrant_client.models import PointStruct, SearchParams
 
 from backend.core.config import settings
 from backend.core.logging import logging
-from backend.persistencia.vector.qdrant_client import (
+from backend.infrastructure.vector.qdrant_client import (
     get_qdrant_client,
     ensure_collection,
     collection_name,
 )
-from backend.persistencia.vector.vector_store_port import SparseVector
+from backend.infrastructure.vector.vector_store_port import SparseVector
 
 logger = logging.getLogger(__name__)
 

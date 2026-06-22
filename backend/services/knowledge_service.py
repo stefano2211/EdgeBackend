@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.v1.schemas.knowledge import KnowledgeBaseCreate, KnowledgeBaseUpdate
+from backend.presentation.schemas.knowledge import KnowledgeBaseCreate, KnowledgeBaseUpdate
 from backend.core.exceptions import NotFoundError
 from backend.core.logging import logging
-from backend.persistencia.models.knowledge_base import KnowledgeBase
-from backend.persistencia.repositories.knowledge_repository import KnowledgeRepository
-from backend.persistencia.storage.storage_port import StoragePort
+from backend.domain.models.knowledge_base import KnowledgeBase
+from backend.infrastructure.persistence.knowledge_repository import KnowledgeRepository
+from backend.infrastructure.storage.storage_port import StoragePort
 from backend.persistencia.vector import VectorRepository
-from backend.persistencia.vector.vector_store_port import VectorStorePort
-from backend.services._helpers import commit_and_refresh, apply_patch
+from backend.infrastructure.vector.vector_store_port import VectorStorePort
+from backend.core._helpers import commit_and_refresh, apply_patch
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,7 @@ class TestSynthesisFallback:
     """Verify _parse_reactive_output handles JSON from orchestrator output."""
 
     def test_parse_json_from_markdown_fence(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
 
         raw = (
             '```json\n'
@@ -32,7 +32,7 @@ class TestSynthesisFallback:
         assert "Detener equipo" in result.plan
 
     def test_parse_plain_json(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
 
         raw = (
             '{"analysis": "Root cause is bearing failure.",'
@@ -45,7 +45,7 @@ class TestSynthesisFallback:
         assert "bearing" in result.analysis
 
     def test_parse_invalid_returns_none(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
 
         raw = "This is just markdown text, not JSON at all."
         orch = ReactiveOrchestrator(broadcaster=MagicMock())
@@ -53,7 +53,7 @@ class TestSynthesisFallback:
         assert result is None
 
     def test_parse_json_with_preamble_before_fence(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
 
         raw = (
             "Here is my analysis:\n\n"
@@ -157,7 +157,7 @@ class TestEventQueryTruncation:
     """Verify event body is truncated in the query sent to the orchestrator."""
 
     def test_large_payload_is_truncated(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
 
         orch = ReactiveOrchestrator(broadcaster=MagicMock())
         event = MagicMock()
@@ -177,7 +177,7 @@ class TestEventQueryTruncation:
         assert len(query) < 12000
 
     def test_small_payload_not_truncated(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
 
         orch = ReactiveOrchestrator(broadcaster=MagicMock())
         event = MagicMock()
@@ -234,20 +234,20 @@ class TestDeadCodeRemoved:
     """Verify dead methods were removed from ReactiveOrchestrator."""
 
     def test_execute_method_does_not_exist(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
         assert not hasattr(ReactiveOrchestrator, "execute"), (
             "ReactiveOrchestrator.execute() should have been removed."
         )
 
     def test_send_analysis_email_does_not_exist(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
         assert not hasattr(ReactiveOrchestrator, "_send_analysis_email"), (
             "_send_analysis_email() should have been removed. "
             "Email is now handled by the orchestrator via mcp-agent in Phase 3."
         )
 
     def test_format_email_body_does_not_exist(self):
-        from backend.services.reactive_orchestrator import ReactiveOrchestrator
+        from backend.application.events.reactive import ReactiveOrchestrator
         assert not hasattr(ReactiveOrchestrator, "_format_email_body"), (
             "_format_email_body() should have been removed."
         )
@@ -272,7 +272,7 @@ class TestHistoricalAgentRemoved:
         assert not os.path.exists("backend/ia/prompts/templates/subagent_historical.md")
 
     def test_historical_plugin_not_registered(self):
-        from backend.ia.subagents.plugin_registry import SubagentRegistry
+        from backend.ia.agents.plugin_registry import SubagentRegistry
         assert SubagentRegistry.get_plugin("historical") is None
 
     def test_historical_not_in_proactive_defaults(self):
@@ -289,7 +289,7 @@ class TestQueryResourceData:
     """Verify the fast path tool is registered and helpers work correctly."""
 
     def test_query_resource_data_tool_registered(self):
-        from backend.ia.tools.unified.data_analyst import create_data_analyst_tools
+        from backend.ia.tools.data_analyst import create_data_analyst_tools
         tools = create_data_analyst_tools(user_id=1, context="reactive")
         tool_names = [t.name for t in tools]
         assert "query_resource_data" in tool_names
@@ -298,18 +298,18 @@ class TestQueryResourceData:
         )
 
     def test_safe_str_escapes_quotes(self):
-        from backend.ia.tools.unified.data_analyst import _safe_str
+        from backend.ia.tools.data_analyst import _safe_str
         assert _safe_str("test'value") == "test''value"
         assert _safe_str("normal") == "normal"
 
     def test_safe_ident_quotes_identifier(self):
-        from backend.ia.tools.unified.data_analyst import _safe_ident
+        from backend.ia.tools.data_analyst import _safe_ident
         assert _safe_ident("measurements") == '"measurements"'
         assert _safe_ident("measurements", "postgresql") == '"measurements"'
         assert _safe_ident("measurements", "mysql") == "`measurements`"
 
     def test_time_interval_sql_by_dialect(self):
-        from backend.ia.tools.unified.data_analyst import _time_interval_sql
+        from backend.ia.tools.data_analyst import _time_interval_sql
         pg = _time_interval_sql(6, "ts", "postgresql")
         assert "INTERVAL '6 hours'" in pg
         my = _time_interval_sql(6, "ts", "mysql")
@@ -318,7 +318,7 @@ class TestQueryResourceData:
         assert "datetime(" in sl
 
     def test_is_time_column_name(self):
-        from backend.ia.tools.unified.data_analyst import _is_time_column_name
+        from backend.ia.tools.data_analyst import _is_time_column_name
         assert _is_time_column_name("created_at")
         assert _is_time_column_name("timestamp")
         assert _is_time_column_name("logged_date")
@@ -326,7 +326,7 @@ class TestQueryResourceData:
         assert not _is_time_column_name("status")
 
     def test_is_entity_column_name(self):
-        from backend.ia.tools.unified.data_analyst import _is_entity_column_name
+        from backend.ia.tools.data_analyst import _is_entity_column_name
         assert _is_entity_column_name("equipment")
         assert _is_entity_column_name("service_name")
         assert _is_entity_column_name("host")

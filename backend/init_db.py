@@ -5,14 +5,14 @@ import logging
 import sys
 
 from backend.core.database import engine
-from backend.persistencia.models import Base  # noqa: F401  (registers all models)
-from backend.integrations.models import (  # noqa: F401  (registers integration models)
+from backend.domain.models import Base  # noqa: F401  (registers all models)
+from backend.domain.models.integration_instance import (  # noqa: F401  (registers integration models)
     IntegrationInstance,
     IntegrationCredential,
 )
-from backend.integrations.credential_audit import CredentialAuditLog  # noqa: F401
-from backend.database_connector.models import DatabaseConnection  # noqa: F401
-from backend.database_connector.credential_model import DbConnectionCredential  # noqa: F401
+from backend.application.integrations.audit import CredentialAuditLog  # noqa: F401
+from backend.domain.models.db_source import DatabaseConnection  # noqa: F401
+from backend.domain.models.db_credential import DbConnectionCredential  # noqa: F401
 
 
 async def _create_tables() -> None:

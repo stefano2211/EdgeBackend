@@ -11,7 +11,7 @@ import asyncio
 import logging
 
 from backend.core.database import AsyncSessionLocal
-from backend.services.correlation_engine import CorrelationEngine
+from backend.application.events.correlation import CorrelationEngine
 
 logger = logging.getLogger(__name__)
 

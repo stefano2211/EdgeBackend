@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from langchain_core.tools import StructuredTool
 
-from backend.database_connector.service import DatabaseConnectionService
-from backend.database_connector.schemas import QueryResult
-from backend.ia.tools.unified._session import get_session
+from backend.application.data_analysis.connector import DatabaseConnectionService
+from backend.application.data_analysis.connector_schemas import QueryResult
+from backend.ia.tools._session import get_session
 
 
 def create_db_query_tool(user_id: int, context: str = "chat") -> StructuredTool:

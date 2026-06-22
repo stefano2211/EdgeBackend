@@ -5,7 +5,7 @@ Follows the same pattern as persistencia/vector/:
 - MinioStorageRepository: concrete MinIO implementation
 """
 
-from backend.persistencia.storage.storage_port import StoragePort
-from backend.persistencia.storage.minio_repository import MinioStorageRepository
+from backend.infrastructure.storage.storage_port import StoragePort
+from backend.infrastructure.storage.minio_repository import MinioStorageRepository
 
 __all__ = ["StoragePort", "MinioStorageRepository"]

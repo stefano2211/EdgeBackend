@@ -10,9 +10,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from backend.services.webhook_mapping_engine import WebhookMappingEngine
-from backend.services.event_metric_service import EventMetricService
-from backend.services.domain_config_service import DomainConfigService
+from backend.application.events.mapping import WebhookMappingEngine
+from backend.application.events.metrics import EventMetricService
+from backend.application.domain_config.service import DomainConfigService
 
 
 class TestWebhookMappingEngine:
@@ -129,7 +129,7 @@ class TestIntegrationSecurity:
     @pytest.mark.asyncio
     async def test_integration_ownership_query(self):
         from sqlalchemy import select
-        from backend.integrations.models import IntegrationInstance
+        from backend.domain.models.integration_instance import IntegrationInstance
 
         # Verify that querying filters by user_id
         stmt = select(IntegrationInstance).where(
@@ -145,7 +145,7 @@ class TestDynamicCatalogServices:
 
     @pytest.mark.asyncio
     async def test_tool_registry_empty_or_mock(self):
-        from backend.services.tool_registry_service import ToolRegistryService
+        from backend.application.integrations.registry import ToolRegistryService
         session = AsyncMock()
         service = ToolRegistryService(session)
 
@@ -160,7 +160,7 @@ class TestDynamicCatalogServices:
 
     @pytest.mark.asyncio
     async def test_reactive_config_list_tools(self):
-        from backend.services.reactive_config_service import ReactiveConfigService
+        from backend.application.events.config import ReactiveConfigService
         session = AsyncMock()
         service = ReactiveConfigService(session)
 
@@ -175,7 +175,7 @@ class TestDynamicCatalogServices:
 
     @pytest.mark.asyncio
     async def test_notification_service_gmail_client_resolution(self):
-        from backend.services.notification_service import NotificationService
+        from backend.application.events.notification import NotificationService
         session = AsyncMock()
         service = NotificationService(session)
 
@@ -194,8 +194,8 @@ class TestMessageServiceHistory:
 
     @pytest.mark.asyncio
     async def test_no_double_append_when_already_in_history(self):
-        from backend.services.message_service import MessageService
-        from backend.api.v1.schemas.chat import ChatRequest
+        from backend.application.chat.message import MessageService
+        from backend.presentation.schemas.chat import ChatRequest
 
         session = AsyncMock()
         msg_repo = AsyncMock()
@@ -220,8 +220,8 @@ class TestMessageServiceHistory:
 
     @pytest.mark.asyncio
     async def test_append_when_not_in_history(self):
-        from backend.services.message_service import MessageService
-        from backend.api.v1.schemas.chat import ChatRequest
+        from backend.application.chat.message import MessageService
+        from backend.presentation.schemas.chat import ChatRequest
 
         session = AsyncMock()
         msg_repo = AsyncMock()
@@ -246,7 +246,7 @@ class TestUserPropagationAndNaming:
     """Verify that user_id is passed to builders and the analyst agent name is correct."""
 
     def test_db_analyst_agent_spelling_and_propagation(self):
-        from backend.ia.subagents.plugin_registry import SubagentRegistry
+        from backend.ia.agents.plugin_registry import SubagentRegistry
         
         # Build all with a mock user_id
         subagents = SubagentRegistry.build_all(
@@ -273,7 +273,7 @@ class TestOAuthCallbackXssPrevention:
 
     @pytest.mark.asyncio
     async def test_reflected_xss_is_escaped(self):
-        from backend.integrations.routers import oauth_callback
+        from backend.presentation.routers.integrations import oauth_callback
         
         # Simulate request object
         req = MagicMock()
@@ -297,8 +297,8 @@ class TestOAuthOriginResolution:
 
     @pytest.mark.asyncio
     async def test_callback_peeks_origin_from_state(self):
-        from backend.integrations.routers import oauth_callback
-        from backend.integrations.oauth.state_manager import get_state_manager
+        from backend.presentation.routers.integrations import oauth_callback
+        from backend.application.integrations.oauth import get_state_manager
         from unittest.mock import patch
 
         # Mock state manager's peek to return a payload with custom frontend_origin
@@ -310,7 +310,7 @@ class TestOAuthOriginResolution:
         
         with patch.object(state_mgr, "peek", mock_peek):
             # Also mock the database/service calls to avoid real Redis/DB hits
-            with patch("backend.integrations.routers.IntegrationService") as MockService:
+            with patch("backend.presentation.routers.integrations.IntegrationService") as MockService:
                 mock_service_inst = MockService.return_value
                 mock_service_inst.complete_oauth = AsyncMock()
 
@@ -332,9 +332,9 @@ class TestSyncInstanceCredentialsGuard:
 
     @pytest.mark.asyncio
     async def test_sync_raises_value_error_without_credentials(self):
-        from backend.integrations.integration_service import IntegrationService
-        from backend.integrations.models import IntegrationInstance
-        from backend.integrations.catalog import IntegrationCatalogConfig
+        from backend.application.integrations.service import IntegrationService
+        from backend.domain.models.integration_instance import IntegrationInstance
+        from backend.application.integrations.catalog_seed import IntegrationCatalogConfig
         
         session = AsyncMock()
         service = IntegrationService(session)
@@ -360,9 +360,9 @@ class TestSyncInstanceCredentialsGuard:
             
     @pytest.mark.asyncio
     async def test_discover_tools_returns_empty_without_credentials(self):
-        from backend.integrations.integration_service import IntegrationService
-        from backend.integrations.models import IntegrationInstance
-        from backend.integrations.catalog import IntegrationCatalogConfig
+        from backend.application.integrations.service import IntegrationService
+        from backend.domain.models.integration_instance import IntegrationInstance
+        from backend.application.integrations.catalog_seed import IntegrationCatalogConfig
         
         session = AsyncMock()
         service = IntegrationService(session)
@@ -384,7 +384,7 @@ class TestIntegrationInstanceMcpSourceProperties:
     """Verify that IntegrationInstance returns correctly computed mcp_source_id properties."""
 
     def test_mcp_source_id_properties_when_running(self):
-        from backend.integrations.models import IntegrationInstance
+        from backend.domain.models.integration_instance import IntegrationInstance
 
         instance = IntegrationInstance()
         instance.id = 7
@@ -395,7 +395,7 @@ class TestIntegrationInstanceMcpSourceProperties:
         assert instance.reactive_mcp_source_id == 7
 
     def test_mcp_source_id_properties_when_stopped(self):
-        from backend.integrations.models import IntegrationInstance
+        from backend.domain.models.integration_instance import IntegrationInstance
 
         instance = IntegrationInstance()
         instance.id = 7
@@ -406,7 +406,7 @@ class TestIntegrationInstanceMcpSourceProperties:
         assert instance.reactive_mcp_source_id is None
 
     def test_mcp_source_id_properties_when_disabled(self):
-        from backend.integrations.models import IntegrationInstance
+        from backend.domain.models.integration_instance import IntegrationInstance
 
         instance = IntegrationInstance()
         instance.id = 7

@@ -17,7 +17,7 @@ from functools import partial
 
 from backend.core.config import settings
 from backend.core.logging import logging
-from backend.persistencia.vector.vector_store_port import SparseVector
+from backend.infrastructure.vector.vector_store_port import SparseVector
 
 logger = logging.getLogger(__name__)
 

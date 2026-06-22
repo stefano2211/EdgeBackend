@@ -19,7 +19,7 @@ from typing import Any
 
 from backend.core.config import settings
 from backend.core.logging import logging
-from backend.services.retrieval_metrics import RetrievalMetrics, StageTimer
+from backend.application.knowledge.retrieval_metrics import RetrievalMetrics, StageTimer
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,9 @@ class RetrievalPipeline:
     def __init__(self) -> None:
         # Lazy imports to avoid circular dependencies and allow toggling
         from backend.persistencia.vector import VectorRepository
-        from backend.services.embedding_service import embed_texts
-        from backend.services.reranking_service import get_reranker
-        from backend.services.query_enhancer import get_query_enhancer
+        from backend.infrastructure.embeddings.dense import embed_texts
+        from backend.infrastructure.embeddings.reranker import get_reranker
+        from backend.application.knowledge.query_enhancer import get_query_enhancer
 
         self._vector_repo = VectorRepository()
         self._embed_texts = embed_texts
@@ -60,7 +60,7 @@ class RetrievalPipeline:
         self._sparse_embed_texts = None
         if settings.HYBRID_SEARCH_ENABLED:
             try:
-                from backend.services.sparse_embedding_service import embed_sparse_texts
+                from backend.infrastructure.embeddings.sparse import embed_sparse_texts
                 self._sparse_embed_texts = embed_sparse_texts
             except ImportError:
                 logger.warning(

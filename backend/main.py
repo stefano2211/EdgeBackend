@@ -10,9 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.core.config import settings
 from backend.core.logging import configure_logging
-from backend.ia.llm_client import init_llm_client
-from backend.ia.memory import init_memory
-from backend.services.event_broadcast import get_event_broadcast
+from backend.infrastructure.llm.client import init_llm_client
+from backend.application.chat.memory import init_memory
+from backend.application.events.broadcast import get_event_broadcast
 
 
 @asynccontextmanager
@@ -31,8 +31,8 @@ async def lifespan(app: FastAPI):
         logger.warning("Memory layer not available: %s", exc)
     # Initialize durable job tracker for reactive event pipeline
     try:
-        from backend.services.event_job_tracker import init_job_tracker, get_job_tracker
-        from backend.services.event_service import (
+        from backend.application.events.job_tracker import init_job_tracker, get_job_tracker
+        from backend.application.events.service import (
             _build_analysis_coro,
             _build_execution_coro,
         )
@@ -80,12 +80,12 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     try:
-        from backend.integrations.oauth.state_manager import get_state_manager
+        from backend.application.integrations.oauth import get_state_manager
         await get_state_manager().close()
     except Exception:
         pass
     try:
-        from backend.persistencia.vector.qdrant_client import close_qdrant_client
+        from backend.infrastructure.vector.qdrant_client import close_qdrant_client
         await close_qdrant_client()
     except Exception:
         pass
@@ -123,8 +123,8 @@ def create_app() -> FastAPI:
     async def health_check():
         return {"status": "ok"}
 
-    from backend.api.v1.router import router as api_v1_router
-    from backend.api.v1.routers.webhooks import public_router as webhook_public_router
+    from backend.presentation.router import router as api_v1_router
+    from backend.presentation.routers.webhooks import public_router as webhook_public_router
     app.include_router(api_v1_router)
     app.include_router(webhook_public_router)
 

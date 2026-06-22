@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OAuth Callback</title>
+  <style>
+    body {
+      background: #0a0a0a;
+      color: #ececec;
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+    }
+    .icon { font-size: 48px; margin-bottom: 16px; }
+    .title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .subtitle { font-size: 14px; color: #7a7a7a; }
+  </style>
+</head>
+<body>
+  <div class="icon">{{icon}}</div>
+  <div class="title">{{title}}</div>
+  <div class="subtitle">{{message}}</div>
+  <script>
+    (function() {
+      const payload = {{payload_json}};
+      if (window.opener) {
+        window.opener.postMessage(payload, '{{origin}}');
+      }
+      // Auto-close after a short delay so the user sees the success/error message
+      setTimeout(function() {
+        window.close();
+      }, 800);
+    })();
+  </script>
+</body>
+</html>
