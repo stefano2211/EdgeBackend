@@ -11,3 +11,4 @@ wheels/
 .env
 .opencode
 graphify-out
+.codegraph
