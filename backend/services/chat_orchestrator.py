@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.v1.schemas.chat import ChatRequest
+from backend.core.config import settings
 
 
 def _detect_agent_name(chunk: dict, metadata: dict) -> str:
@@ -103,13 +104,13 @@ def _extract_chunk_payload(
             text = raw_text
             reasoning_text = raw_reasoning
         else:
-            if raw_text:
+            if raw_text and settings.SHOW_REASONING_IN_CHAT:
                 events.append({
                     "type": "thought",
                     "agent": agent_name,
                     "content": raw_text,
                 })
-            if raw_reasoning:
+            if raw_reasoning and settings.SHOW_REASONING_IN_CHAT:
                 events.append({
                     "type": "thought",
                     "agent": agent_name,
@@ -328,7 +329,7 @@ class ChatOrchestrator:
                     if text:
                         full_content += text
                         yield {"type": "token", "content": text, "agent": agent_name}
-                    if reasoning:
+                    if reasoning and settings.SHOW_REASONING_IN_CHAT:
                         reasoning_content += reasoning
                         yield {"type": "reasoning", "content": reasoning, "agent": agent_name}
                     for ev in events:

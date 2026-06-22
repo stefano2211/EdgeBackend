@@ -14,6 +14,9 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
+echo "Pre-downloading embedding and reranker models..."
+python -m backend.pre_download
+
 echo "Creating database tables..."
 python -m backend.init_db
 

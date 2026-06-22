@@ -87,17 +87,22 @@ def build_orchestrator_prompt(
         )
 
     routing_rules += (
-        "[IF] The user asks about data, tables, metrics, analytics, or anything related to their connected databases,\n"
-        "     OR asks a business question in natural language that requires database analysis\n"
-        "     (e.g., 'how many', 'top 5', 'average', 'compare', 'trends', 'list customers who...')\n"
-        "     → [DELEGATE] to db_analyst-agent via task()\n"
-        "     → The db_analyst-agent will inspect schemas, execute SQL queries, and return insights.\n\n"
+        "[MANDATORY] If the user asks about data, tables, metrics, measurements, readings,\n"
+        "     analytics, or anything related to their connected databases\n"
+        "     (e.g., 'how many', 'top 5', 'average', 'compare', 'trends', 'show me',\n"
+        "     'what is the value', 'temperature', 'vibration', 'pressure', 'records')\n"
+        "     → You MUST delegate to db_analyst-agent via task() as your FIRST action.\n"
+        "     → You CANNOT answer data questions from memory — you have NO tools to query data.\n"
+        "     → The db_analyst-agent will query the real database and return actual results.\n\n"
 
         "[IF] Query is pure reasoning (math, unit conversions, general explanations)\n"
         "     → [ANSWER] directly without any tools or delegation\n\n"
 
-        "[IF] Query spans multiple domains (live + documents + database)\n"
-        "     → [DELEGATE] to MULTIPLE sub-agents in parallel, then synthesize"
+        "[MANDATORY] If query spans multiple domains (DB + documents, DB + live data,\n"
+        "     documents + live data, or all three)\n"
+        "     → dispatch ALL needed sub-agents in a SINGLE response using PARALLEL task() calls.\n"
+        "     → NEVER call them sequentially (one, wait, then another).\n"
+        "     → After receiving ALL results, synthesize a single coherent answer."
     )
 
     routing_examples += (

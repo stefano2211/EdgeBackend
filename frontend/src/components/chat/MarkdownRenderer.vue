@@ -64,8 +64,8 @@ const parsedContent = computed(() => {
       
       <!-- Bloque de Pensamiento -->
       <div v-if="block.type === 'think'" class="think-block my-4">
-        <details class="think-details group" :open="block.isStreaming || true">
-          <summary class="think-summary animate-in fade-in duration-300">
+        <details class="think-details group" :open="false">
+          <summary class="think-summary">
             <svg class="think-caret transform transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             <div class="flex items-center gap-2">
               <svg v-if="block.isStreaming" class="w-3.5 h-3.5 animate-spin text-[#8b5cf6]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>

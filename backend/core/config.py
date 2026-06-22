@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     EMBEDDINGS_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     SPARSE_EMBEDDINGS_MODEL: str = "Qdrant/bm25"
 
+    # ── Chat UI ──
+    SHOW_REASONING_IN_CHAT: bool = False
+
     # ── RAG Pipeline ──
     HYBRID_SEARCH_ENABLED: bool = True
     RAG_PREFETCH_LIMIT: int = 50

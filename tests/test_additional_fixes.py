@@ -195,7 +195,10 @@ class TestSubagentTokenFiltering:
 
     def test_extract_chunk_payload_subagent_token(self):
         from backend.services.chat_orchestrator import _extract_chunk_payload
+        from backend.core.config import settings
         from langchain_core.messages import AIMessageChunk
+
+        settings.SHOW_REASONING_IN_CHAT = True
 
         token = AIMessageChunk(content="Thinking by subagent")
         chunk = {
