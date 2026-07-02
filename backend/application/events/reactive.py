@@ -488,6 +488,7 @@ class ReactiveOrchestrator:
             stmt = select(IntegrationInstance).where(
                 IntegrationInstance.user_id == event.triggered_by_user_id,
                 IntegrationInstance.is_enabled.is_(True),
+                IntegrationInstance.available_in_reactive.is_(True),
             )
             result = await session.execute(stmt)
             instances = result.scalars().all()
