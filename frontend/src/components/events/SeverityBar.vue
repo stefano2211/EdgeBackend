@@ -19,10 +19,10 @@ function getColorClass(num: number): string {
 }
 
 function getLabel(num: number): string {
-  if (num <= 4) return 'TRACE'
-  if (num <= 8) return 'DEBUG'
+  if (num <= 4) return 'TRAZA'
+  if (num <= 8) return 'DEPURACIÓN'
   if (num <= 12) return 'INFO'
-  if (num <= 16) return 'WARN'
+  if (num <= 16) return 'AVISO'
   if (num <= 20) return 'ERROR'
   return 'FATAL'
 }

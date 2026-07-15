@@ -24,7 +24,7 @@
             </h2>
             <div v-if="loading && !kb" class="h-4 w-48 bg-white/5 rounded-lg animate-pulse"></div>
             <p v-else class="text-[13px] text-[#7a7a7a] font-medium">
-              {{ kb?.description || 'Curated repository for event automation analysis.' }}
+              {{ kb?.description || 'Repositorio seleccionado para análisis de automatización de eventos.' }}
             </p>
           </div>
         </div>
@@ -45,7 +45,7 @@
         >
           <svg v-if="uploading" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
           <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-          Add Document
+          Añadir documento
         </button>
       </div>
     </header>
@@ -64,13 +64,13 @@
           <div class="w-24 h-24 rounded-full bg-emerald-500/5 border border-emerald-500/10 flex items-center justify-center mb-6 animate-float">
             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500/20"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18h.01"/><path d="M12 12V8"/></svg>
           </div>
-          <h3 class="text-xl font-bold text-white mb-2">Knowledge is empty</h3>
-          <p class="text-[14px] text-[#7a7a7a] mb-8 max-w-sm leading-relaxed">This collection has no documents yet. Upload SOPs, manuals, or logs to empower the reactive AI with context.</p>
+          <h3 class="text-xl font-bold text-white mb-2">Conocimiento vacío</h3>
+          <p class="text-[14px] text-[#7a7a7a] mb-8 max-w-sm leading-relaxed">Esta colección no tiene documentos aún. Sube SOPs, manuales o registros para potenciar la AI reactiva con contexto.</p>
           <button 
             @click="triggerFileInput"
             class="text-[13px] font-bold bg-white/5 hover:bg-white/10 text-white border border-white/10 px-8 py-3 rounded-xl transition-all active:scale-95"
           >
-            Start Uploading
+            Empezar a subir
           </button>
         </div>
 
@@ -79,9 +79,9 @@
           <table class="w-full text-left border-collapse">
             <thead class="sticky top-0 z-10">
               <tr class="bg-[#121212]/80 backdrop-blur-md">
-                <th class="px-8 py-5 text-[11px] font-bold text-[#4a4a4a] uppercase tracking-widest border-b border-white/[0.03]">Filename</th>
-                <th class="px-8 py-5 text-[11px] font-bold text-[#4a4a4a] uppercase tracking-widest border-b border-white/[0.03]">Status</th>
-                <th class="px-8 py-5 text-[11px] font-bold text-[#4a4a4a] uppercase tracking-widest border-b border-white/[0.03]">Added</th>
+                <th class="px-8 py-5 text-[11px] font-bold text-[#4a4a4a] uppercase tracking-widest border-b border-white/[0.03]">Nombre de archivo</th>
+                <th class="px-8 py-5 text-[11px] font-bold text-[#4a4a4a] uppercase tracking-widest border-b border-white/[0.03]">Estado</th>
+                <th class="px-8 py-5 text-[11px] font-bold text-[#4a4a4a] uppercase tracking-widest border-b border-white/[0.03]">Añadido</th>
                 <th class="px-8 py-5 text-right border-b border-white/[0.03]"></th>
               </tr>
             </thead>
@@ -106,7 +106,7 @@
                   <div class="flex items-center gap-2">
                     <div class="w-1.5 h-1.5 rounded-full" :class="doc.status === 'indexed' || doc.status === 'completed' ? 'bg-emerald-400' : 'bg-yellow-400 animate-pulse'"></div>
                     <span class="text-[12px] font-medium" :class="doc.status === 'indexed' || doc.status === 'completed' ? 'text-emerald-400/80' : 'text-yellow-400/80'">
-                      {{ doc.status || 'Processing' }}
+                      {{ doc.status || 'Procesando' }}
                     </span>
                   </div>
                 </td>
@@ -140,7 +140,7 @@
               <svg class="animate-spin w-8 h-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
             </div>
             <h3 class="text-2xl font-bold text-white mb-2">{{ uploadStatusText }}</h3>
-            <p class="text-[14px] text-[#7a7a7a] mb-8 leading-relaxed">Transforming raw data into neural insights for event processing...</p>
+            <p class="text-[14px] text-[#7a7a7a] mb-8 leading-relaxed">Transformando datos en información para procesamiento de eventos...</p>
             
             <div class="w-full bg-white/5 rounded-full h-3 overflow-hidden border border-white/5 p-0.5">
               <div 
@@ -148,7 +148,7 @@
                 :style="{ width: `${uploadProgress}%` }"
               ></div>
             </div>
-            <div class="mt-3 text-[11px] font-bold text-emerald-500/50 uppercase tracking-widest">{{ uploadProgress }}% Synchronized</div>
+            <div class="mt-3 text-[11px] font-bold text-emerald-500/50 uppercase tracking-widest">{{ uploadProgress }}% Sincronizado</div>
           </div>
         </div>
       </Transition>

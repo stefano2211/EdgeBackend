@@ -13,12 +13,12 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    label: 'Dashboard',
+    label: 'Panel',
     path: '/dashboard',
     icon: 'M3 3h18v18H3V3zm2 2v14h14V5H5zm2 2h4v4H7V7zm6 0h4v4h-4V7zM7 13h4v4H7v-4zm6 0h4v4h-4v-4z'
   },
   {
-    label: 'Operations',
+    label: 'Operaciones',
     path: '/operations',
     icon: 'M13 2 3 14h9l-1 8 10-12h-9l1-8z'
   },
@@ -28,12 +28,12 @@ const navItems: NavItem[] = [
     icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'
   },
   {
-    label: 'Connections',
+    label: 'Conexiones',
     path: '/connections',
     icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5l0 6m0-6l-2-2m2 2l2 2'
   },
   {
-    label: 'Knowledge',
+    label: 'Conocimiento',
     path: '/resources/knowledge',
     icon: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20'
   },
@@ -97,7 +97,7 @@ function isActive(path: string): boolean {
       <button
         @click="router.push('/chat')"
         class="w-10 h-10 rounded-lg flex items-center justify-center text-[#666] hover:text-white hover:bg-white/5 transition-all group relative"
-        title="Open Chat"
+        title="Abrir Chat"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         <div class="absolute left-full ml-2 px-2 py-1 bg-[#1c1c1c] border border-white/[0.08] rounded-md text-[11px] text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">

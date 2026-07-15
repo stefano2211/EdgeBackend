@@ -85,7 +85,7 @@ async function createWebhook() {
     resetCreateForm()
     await loadWebhooks()
   } catch (err: any) {
-    createError.value = err.response?.data?.detail || 'Failed to create webhook'
+    createError.value = err.response?.data?.detail || 'Error al crear el webhook'
   } finally {
     isCreating.value = false
   }
@@ -119,7 +119,7 @@ async function saveEdit() {
     showEditModal.value = false
     await loadWebhooks()
   } catch (err: any) {
-    editError.value = err.response?.data?.detail || 'Failed to update webhook'
+    editError.value = err.response?.data?.detail || 'Error al actualizar el webhook'
   } finally {
     isSaving.value = false
   }
@@ -127,13 +127,13 @@ async function saveEdit() {
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 async function deleteWebhook(webhook: WebhookSource) {
-  if (!confirm(`Delete webhook "${webhook.name}"? This cannot be undone.`)) return
+  if (!confirm(`¿Eliminar el webhook "${webhook.name}"? Esta acción no se puede deshacer.`)) return
   try {
     await webhookService.delete(webhook.slug)
     await loadWebhooks()
   } catch (err) {
     console.error('Failed to delete webhook', err)
-    alert('Failed to delete webhook')
+    alert('Error al eliminar el webhook')
   }
 }
 
@@ -164,12 +164,12 @@ async function runTest() {
     try {
       payload = JSON.parse(testPayload.value)
     } catch {
-      testError.value = 'Invalid JSON in payload'
+      testError.value = 'JSON inválido en el payload'
       return
     }
     testResult.value = await webhookService.test(selectedWebhook.value.slug, payload)
   } catch (err: any) {
-    testError.value = err.response?.data?.detail || 'Test failed'
+    testError.value = err.response?.data?.detail || 'Prueba fallida'
   } finally {
     isTesting.value = false
   }
@@ -196,7 +196,7 @@ async function copyUrl(slug: string) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatDate(d: string | null) {
-  if (!d) return 'Never'
+  if (!d) return 'Nunca'
   return new Date(d).toLocaleString('es', {
     day: '2-digit',
     month: 'short',
@@ -224,7 +224,7 @@ onMounted(() => {
       <div>
         <h1 class="text-[18px] font-semibold text-white">Webhooks</h1>
         <p class="text-[13px] text-[#7a7a7a] mt-0.5">
-          Configure inbound webhooks to receive events from any external system.
+          Configura webhooks entrantes para recibir eventos de cualquier sistema externo.
         </p>
       </div>
       <button
@@ -232,21 +232,21 @@ onMounted(() => {
         class="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-[13px] font-medium transition-colors flex items-center gap-2"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-        New Webhook
+        Nuevo webhook
       </button>
     </div>
 
     <!-- Loading -->
     <div v-if="isLoading && webhooks.length === 0" class="flex items-center justify-center h-64 text-[#7a7a7a]">
       <svg class="animate-spin mr-2" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-      Loading webhooks...
+      Cargando webhooks...
     </div>
 
     <!-- Empty state -->
     <div v-else-if="webhooks.length === 0" class="flex flex-col items-center justify-center h-64 text-[#7a7a7a] gap-3">
       <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      <p class="text-sm">No webhooks configured yet</p>
-      <button @click="showCreateModal = true" class="text-violet-400 hover:text-violet-300 text-[13px]">Create your first webhook</button>
+      <p class="text-sm">No hay webhooks configurados aún</p>
+      <button @click="showCreateModal = true" class="text-violet-400 hover:text-violet-300 text-[13px]">Crea tu primer webhook</button>
     </div>
 
     <!-- List -->
@@ -267,22 +267,22 @@ onMounted(() => {
                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                   : 'bg-white/5 text-[#555] border-white/10'"
               >
-                {{ wh.is_enabled ? 'Enabled' : 'Disabled' }}
+                {{ wh.is_enabled ? 'Activado' : 'Desactivado' }}
               </span>
               <span v-if="wh.auto_discovered" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border bg-purple-500/10 text-purple-400 border-purple-500/20">
-                Auto-discovered
+Auto-descubierto
               </span>
               <span
                 v-if="wh.domain"
                 class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border bg-blue-500/10 text-blue-400 border-blue-500/20"
-                :title="wh.domain ? `Domain: ${wh.domain}` : 'Domain will be auto-detected from first event'"
+                :title="wh.domain ? `Dominio: ${wh.domain}` : 'El dominio se auto-detectará del primer evento'"
               >
                 {{ wh.domain }}
               </span>
               <span
                 v-else
                 class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border bg-white/5 text-[#555] border-white/10"
-                title="Domain will be auto-detected from the first event received"
+                title="El dominio se auto-detectará del primer evento"
               >
                 Auto
               </span>
@@ -298,7 +298,7 @@ onMounted(() => {
               <button
                 @click="copyUrl(wh.slug)"
                 class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#7a7a7a] hover:text-white shrink-0"
-                :title="copiedSlug === wh.slug ? 'Copied!' : 'Copy URL'"
+                :title="copiedSlug === wh.slug ? '¡Copiado!' : 'Copiar URL'"
               >
                 <svg v-if="copiedSlug === wh.slug" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-400"><path d="M20 6L9 17l-5-5"/></svg>
                 <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -307,9 +307,9 @@ onMounted(() => {
 
             <!-- Stats -->
             <div class="flex items-center gap-4 text-[11px] text-[#7a7a7a]">
-              <span>Received: <span class="text-[#ececec]">{{ wh.total_received.toLocaleString() }}</span></span>
-              <span>Rate limit: <span class="text-[#ececec]">{{ wh.rate_limit_rpm }}</span>/min</span>
-              <span>Last: <span class="text-[#ececec]">{{ formatDate(wh.last_received_at) }}</span></span>
+              <span>Recibidos: <span class="text-[#ececec]">{{ wh.total_received.toLocaleString() }}</span></span>
+              <span>Límite de tasa: <span class="text-[#ececec]">{{ wh.rate_limit_rpm }}</span>/min</span>
+              <span>Último: <span class="text-[#ececec]">{{ formatDate(wh.last_received_at) }}</span></span>
             </div>
           </div>
 
@@ -318,21 +318,21 @@ onMounted(() => {
             <button
               @click="openTest(wh)"
               class="p-2 hover:bg-white/8 rounded-lg transition-colors text-[#7a7a7a] hover:text-white"
-              title="Test mapping"
+              title="Probar mapeo"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
             </button>
             <button
               @click="openEdit(wh)"
               class="p-2 hover:bg-white/8 rounded-lg transition-colors text-[#7a7a7a] hover:text-white"
-              title="Edit"
+              title="Editar"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
             </button>
             <button
               @click="deleteWebhook(wh)"
               class="p-2 hover:bg-red-500/10 rounded-lg transition-colors text-[#7a7a7a] hover:text-red-400"
-              title="Delete"
+              title="Eliminar"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
             </button>
@@ -348,7 +348,7 @@ onMounted(() => {
           <div class="px-6 pt-5 pb-0">
             <h3 class="text-[16px] font-semibold text-white mb-4 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-violet-400"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-              New Webhook
+Nuevo webhook
             </h3>
           </div>
           <div class="px-6 py-4 space-y-3">
@@ -358,30 +358,30 @@ onMounted(() => {
                 v-model="createForm.name"
                 @input="onNameInput"
                 type="text"
-                placeholder="e.g. SCADA Plant A"
+                placeholder="ej. SCADA Planta A"
                 class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[14px] text-[#ececec] placeholder-[#555] focus:outline-none focus:border-violet-500/50"
               />
             </div>
             <div>
-              <label class="text-[12px] text-[#7a7a7a] mb-1 block">Slug * <span class="text-[#555]">(URL-safe identifier)</span></label>
+              <label class="text-[12px] text-[#7a7a7a] mb-1 block">Slug * <span class="text-[#555]">(identificador seguro para URL)</span></label>
               <input
                 v-model="createForm.slug"
                 type="text"
-                placeholder="e.g. scada-plant-a"
+                placeholder="ej. scada-planta-a"
                 class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[14px] text-[#ececec] placeholder-[#555] focus:outline-none focus:border-violet-500/50 font-mono"
               />
             </div>
             <div>
-              <label class="text-[12px] text-[#7a7a7a] mb-1 block">Description</label>
+              <label class="text-[12px] text-[#7a7a7a] mb-1 block">Descripción</label>
               <textarea
                 v-model="createForm.description"
                 rows="2"
-                placeholder="Optional description..."
+                placeholder="Descripción opcional..."
                 class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[14px] text-[#ececec] placeholder-[#555] focus:outline-none focus:border-violet-500/50 resize-none"
               />
             </div>
             <div>
-              <label class="text-[12px] text-[#7a7a7a] mb-1 block">Rate Limit (requests/min)</label>
+              <label class="text-[12px] text-[#7a7a7a] mb-1 block">Límite de tasa (solicitudes/min)</label>
               <input
                 v-model.number="createForm.rate_limit_rpm"
                 type="number"
@@ -393,14 +393,14 @@ onMounted(() => {
             <p v-if="createError" class="text-[12px] text-red-400 bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/20">{{ createError }}</p>
           </div>
           <div class="px-6 py-4 bg-white/[0.02] border-t border-white/[0.06] flex justify-end gap-2">
-            <button @click="showCreateModal = false" class="px-4 py-2 text-[13px] text-[#7a7a7a] hover:text-white transition-colors">Cancel</button>
+            <button @click="showCreateModal = false" class="px-4 py-2 text-[13px] text-[#7a7a7a] hover:text-white transition-colors">Cancelar</button>
             <button
               @click="createWebhook"
               :disabled="isCreating || !createForm.name.trim() || !createForm.slug.trim()"
               class="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-[13px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg v-if="isCreating" class="animate-spin inline mr-1" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-              Create Webhook
+              Crear webhook
             </button>
           </div>
         </div>
@@ -414,28 +414,28 @@ onMounted(() => {
           <div class="px-6 pt-5 pb-0 shrink-0">
             <h3 class="text-[16px] font-semibold text-white mb-1 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-violet-400"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-              Edit Webhook
+              Editar webhook
             </h3>
             <p class="text-[12px] text-[#555] mb-4">{{ selectedWebhook?.slug }}</p>
           </div>
           <div class="px-6 py-4 space-y-3 overflow-y-auto flex-1">
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="text-[12px] text-[#7a7a7a] mb-1 block">Name</label>
+                <label class="text-[12px] text-[#7a7a7a] mb-1 block">Nombre</label>
                 <input v-model="editForm.name" type="text" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[14px] text-[#ececec] focus:outline-none focus:border-violet-500/50" />
               </div>
               <div>
-                <label class="text-[12px] text-[#7a7a7a] mb-1 block">Rate Limit (req/min)</label>
+                <label class="text-[12px] text-[#7a7a7a] mb-1 block">Límite de tasa (req/min)</label>
                 <input v-model.number="editForm.rate_limit_rpm" type="number" min="1" max="10000" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[14px] text-[#ececec] focus:outline-none focus:border-violet-500/50" />
               </div>
             </div>
             <div>
-              <label class="text-[12px] text-[#7a7a7a] mb-1 block">Description</label>
+              <label class="text-[12px] text-[#7a7a7a] mb-1 block">Descripción</label>
               <textarea v-model="editForm.description" rows="2" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[14px] text-[#ececec] focus:outline-none focus:border-violet-500/50 resize-none" />
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div class="flex items-center gap-2">
-                <label class="text-[12px] text-[#7a7a7a]">Enabled</label>
+                <label class="text-[12px] text-[#7a7a7a]">Activado</label>
                 <button
                   @click="editForm.is_enabled = !editForm.is_enabled"
                   class="relative w-9 h-5 rounded-full transition-colors"
@@ -445,27 +445,27 @@ onMounted(() => {
                 </button>
               </div>
               <div>
-                <label class="text-[12px] text-[#7a7a7a] mb-1 block">Domain</label>
+                <label class="text-[12px] text-[#7a7a7a] mb-1 block">Dominio</label>
                 <select
                   v-model="editForm.domain"
                   class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[14px] text-[#ececec] focus:outline-none focus:border-violet-500/50"
                 >
-                  <option :value="null">Auto-detect</option>
-                  <option value="manufacturing">Manufacturing</option>
-                  <option value="healthcare">Healthcare</option>
-                  <option value="logistics">Logistics</option>
-                  <option value="energy">Energy</option>
-                  <option value="it_operations">IT Operations</option>
-                  <option value="finance">Finance</option>
-                  <option value="generic">Generic</option>
+                  <option :value="null">Auto-detectar</option>
+                  <option value="manufacturing">Manufactura</option>
+                  <option value="healthcare">Salud</option>
+                  <option value="logistics">Logística</option>
+                  <option value="energy">Energía</option>
+                  <option value="it_operations">Operaciones IT</option>
+                  <option value="finance">Finanzas</option>
+                  <option value="generic">Genérico</option>
                 </select>
-                <p class="text-[10px] text-[#555] mt-1">Auto-detect: learned from first event</p>
+                <p class="text-[10px] text-[#555] mt-1">Auto-detectar: aprendido del primer evento</p>
               </div>
             </div>
             <div>
               <label class="text-[12px] text-[#7a7a7a] mb-1 block flex items-center justify-between">
-                <span>Mapping Config (JSON)</span>
-                <span class="text-[10px] text-[#555]">Leave empty for auto-discovery</span>
+                <span>Configuración de mapeo (JSON)</span>
+                <span class="text-[10px] text-[#555]">Dejar vacío para auto-descubrimiento</span>
               </label>
               <textarea
                 v-model="editForm.mapping_config"
@@ -475,20 +475,20 @@ onMounted(() => {
                 class="w-full bg-[#0a0a0a] border border-white/10 rounded-xl px-3 py-2 text-[11px] text-[#ececec] font-mono focus:outline-none focus:border-violet-500/50 resize-none"
               />
               <p v-if="editForm.mapping_config && typeof editForm.mapping_config === 'string'" class="text-[10px] text-amber-400 mt-1">
-                Warning: Invalid JSON will be ignored on save.
+                Aviso: JSON inválido será ignorado al guardar.
               </p>
             </div>
             <p v-if="editError" class="text-[12px] text-red-400 bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/20">{{ editError }}</p>
           </div>
           <div class="px-6 py-4 bg-white/[0.02] border-t border-white/[0.06] flex justify-end gap-2 shrink-0">
-            <button @click="showEditModal = false" class="px-4 py-2 text-[13px] text-[#7a7a7a] hover:text-white transition-colors">Cancel</button>
+            <button @click="showEditModal = false" class="px-4 py-2 text-[13px] text-[#7a7a7a] hover:text-white transition-colors">Cancelar</button>
             <button
               @click="saveEdit"
               :disabled="isSaving"
               class="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-[13px] font-medium transition-colors disabled:opacity-40"
             >
               <svg v-if="isSaving" class="animate-spin inline mr-1" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-              Save Changes
+              Guardar cambios
             </button>
           </div>
         </div>
@@ -502,7 +502,7 @@ onMounted(() => {
           <div class="px-6 pt-5 pb-0 shrink-0">
             <h3 class="text-[16px] font-semibold text-white mb-1 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-400"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
-              Test Mapping
+              Probar mapeo
             </h3>
             <p class="text-[12px] text-[#555] mb-4">{{ selectedWebhook?.name }}</p>
           </div>
@@ -513,7 +513,7 @@ onMounted(() => {
               <textarea
                 v-model="testPayload"
                 class="flex-1 bg-[#0a0a0a] border border-white/10 rounded-xl px-3 py-2 text-[11px] text-[#ececec] font-mono focus:outline-none focus:border-violet-500/50 resize-none"
-                placeholder="Paste any JSON payload here..."
+                placeholder="Pega cualquier payload JSON aquí..."
               />
               <div class="flex gap-2 mt-2">
                 <button @click="testPayload = JSON.stringify({alert:{title:'Sobrepresion de Caldera',body:'PT-4401 reporta 327 PSI',priority:'critical',type:'sensor_alert',timestamp:new Date().toISOString()}},null,2)" class="px-2 py-1 rounded text-[10px] bg-white/5 hover:bg-white/10 border border-white/10 text-[#7a7a7a]">Boiler</button>
@@ -525,26 +525,26 @@ onMounted(() => {
             <!-- Right: Results -->
             <div class="flex-1 flex flex-col min-w-0 bg-[#0a0a0a] border border-white/[0.06] rounded-xl overflow-hidden">
               <div class="px-3 py-2 bg-white/[0.02] border-b border-white/[0.06] flex items-center justify-between">
-                <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Result</span>
+                <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Resultado</span>
                 <button
                   @click="runTest"
                   :disabled="isTesting"
                   class="px-3 py-1 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-[11px] font-medium transition-colors disabled:opacity-40"
                 >
                   <svg v-if="isTesting" class="animate-spin inline mr-1" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                  Run Test
+Ejecutar prueba
                 </button>
               </div>
               <div class="flex-1 overflow-y-auto p-3">
                 <div v-if="testError" class="text-[12px] text-red-400 bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/20">{{ testError }}</div>
                 <div v-else-if="testResult" class="space-y-3">
                   <div class="flex items-center gap-2">
-                    <span class="text-[11px] text-[#7a7a7a]">Auto-discovered:</span>
-                    <span class="text-[11px]" :class="testResult.auto_discovered ? 'text-purple-400' : 'text-[#555]'">{{ testResult.auto_discovered ? 'Yes' : 'No' }}</span>
+                    <span class="text-[11px] text-[#7a7a7a]">Auto-descubierto:</span>
+                    <span class="text-[11px]" :class="testResult.auto_discovered ? 'text-purple-400' : 'text-[#555]'">{{ testResult.auto_discovered ? 'Sí' : 'No' }}</span>
                   </div>
                   <div class="bg-[#111] rounded-lg border border-white/[0.06] overflow-hidden">
                     <div class="px-3 py-1.5 bg-white/[0.02] border-b border-white/[0.06]">
-                      <span class="text-[10px] font-bold text-[#7a7a7a] uppercase">Extracted Fields</span>
+                      <span class="text-[10px] font-bold text-[#7a7a7a] uppercase">Campos extraídos</span>
                     </div>
                     <div class="px-3 py-2 space-y-1">
                       <div v-for="(value, key) in testResult.extracted_fields" :key="key" class="flex justify-between text-[11px]">
@@ -555,20 +555,20 @@ onMounted(() => {
                   </div>
                   <div class="bg-[#111] rounded-lg border border-white/[0.06] overflow-hidden">
                     <div class="px-3 py-1.5 bg-white/[0.02] border-b border-white/[0.06]">
-                      <span class="text-[10px] font-bold text-[#7a7a7a] uppercase">Body Preview</span>
+                      <span class="text-[10px] font-bold text-[#7a7a7a] uppercase">Vista previa del body</span>
                     </div>
                     <pre class="px-3 py-2 text-[10px] text-[#888] font-mono overflow-x-auto">{{ JSON.stringify(testResult.body_preview, null, 2) }}</pre>
                   </div>
                 </div>
                 <div v-else class="flex flex-col items-center justify-center h-full text-[#555] text-[12px]">
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="mb-2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                  Click "Run Test" to see results
+                  Haz clic en "Ejecutar prueba" para ver resultados
                 </div>
               </div>
             </div>
           </div>
           <div class="px-6 py-4 bg-white/[0.02] border-t border-white/[0.06] flex justify-end shrink-0">
-            <button @click="showTestModal = false" class="px-4 py-2 text-[13px] text-[#7a7a7a] hover:text-white transition-colors">Close</button>
+            <button @click="showTestModal = false" class="px-4 py-2 text-[13px] text-[#7a7a7a] hover:text-white transition-colors">Cerrar</button>
           </div>
         </div>
       </div>

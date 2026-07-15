@@ -145,7 +145,7 @@ watch([prompts, searchQuery], () => {
         class="bg-white text-black px-4 py-2 rounded-xl font-semibold hover:bg-gray-200 transition-colors flex items-center gap-2 text-[13px]"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-        New Prompt
+        Nuevo prompt
       </button>
     </div>
 
@@ -154,12 +154,12 @@ watch([prompts, searchQuery], () => {
       <div class="relative group">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute left-4 top-1/2 -translate-y-1/2 text-[#7a7a7a] group-focus-within:text-white transition-colors"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <div class="absolute left-11 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
-          <button class="bg-[#2f2f2f] text-[11px] text-[#7a7a7a] px-2 py-0.5 rounded cursor-default border border-white/5 pointer-events-auto hover:text-white">All Prompts</button>
+          <button class="bg-[#2f2f2f] text-[11px] text-[#7a7a7a] px-2 py-0.5 rounded cursor-default border border-white/5 pointer-events-auto hover:text-white">Todos los prompts</button>
         </div>
         <input 
           v-model="searchQuery"
           type="text" 
-          placeholder="Search Prompts" 
+          placeholder="Buscar prompts" 
           class="w-full bg-[#2f2f2f]/30 border border-white/[0.06] rounded-xl pl-[112px] pr-4 py-3 text-[14px] text-[#ececec] placeholder-[#7a7a7a] focus:outline-none focus:border-white/10 focus:bg-[#2f2f2f]/50 transition-all"
         >
       </div>
@@ -175,16 +175,16 @@ watch([prompts, searchQuery], () => {
       <!-- Empty -->
       <div v-else-if="filteredPrompts.length === 0" class="flex flex-col items-center justify-center py-32 text-center">
         <div class="text-4xl mb-4">🧐</div>
-        <h3 class="text-lg font-medium text-white mb-2">{{ searchQuery ? 'No results found' : 'No prompts found' }}</h3>
+        <h3 class="text-lg font-medium text-white mb-2">{{ searchQuery ? 'Sin resultados' : 'No se encontraron prompts' }}</h3>
         <p class="text-[14px] text-[#7a7a7a] mb-8 max-w-sm">
-          {{ searchQuery ? 'Try adjusting your search to find the prompt you need.' : 'Create your first prompt to help users get standard responses quickly.' }}
+          {{ searchQuery ? 'Ajusta tu búsqueda para encontrar el prompt que necesitas.' : 'Crea tu primer prompt para ayudar a los usuarios a obtener respuestas estándar rápidamente.' }}
         </p>
         <button 
           v-if="!searchQuery"
           @click="openCreateModal"
           class="text-[13px] font-bold bg-white/5 hover:bg-white/10 text-white border border-white/10 px-6 py-2.5 rounded-xl transition-all"
         >
-          New Prompt
+          Nuevo prompt
         </button>
       </div>
 
@@ -205,7 +205,7 @@ watch([prompts, searchQuery], () => {
             :class="prompt.is_enabled ? 'bg-green-500/15 text-green-400' : 'bg-white/5 text-[#7a7a7a]'"
             class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
           >
-            {{ prompt.is_enabled ? 'On' : 'Off' }}
+            {{ prompt.is_enabled ? 'Activado' : 'Desactivado' }}
           </button>
         </div>
         <p class="text-[13px] text-[#7a7a7a] line-clamp-2 mb-4 flex-grow">{{ prompt.description }}</p>
@@ -231,28 +231,28 @@ watch([prompts, searchQuery], () => {
       <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" @click="isModalOpen = false"></div>
       <div class="bg-[#2f2f2f] border border-white/10 rounded-2xl w-full max-w-md relative z-10 overflow-hidden shadow-2xl">
         <div class="p-6 border-b border-white/[0.06]">
-          <h2 class="text-lg font-semibold text-white">{{ isEditing ? 'Edit Prompt' : 'New Prompt' }}</h2>
+          <h2 class="text-lg font-semibold text-white">{{ isEditing ? 'Editar prompt' : 'Nuevo prompt' }}</h2>
         </div>
         <div class="p-6 space-y-4">
           <div>
-            <label class="block text-[12px] font-medium text-[#7a7a7a] mb-1.5 ml-0.5">Title</label>
+            <label class="block text-[12px] font-medium text-[#7a7a7a] mb-1.5 ml-0.5">Título</label>
             <input 
               v-model="newPrompt.title"
               type="text" 
-              placeholder="e.g. Summarize document"
+              placeholder="ej. Resumir documento"
               class="w-full bg-[#212121] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white focus:outline-none focus:border-white/20 transition-all placeholder:text-[#7a7a7a]"
             >
           </div>
           <div>
-            <label class="block text-[12px] font-medium text-[#7a7a7a] mb-1.5 ml-0.5">Description</label>
+            <label class="block text-[12px] font-medium text-[#7a7a7a] mb-1.5 ml-0.5">Descripción</label>
             <textarea 
               v-model="newPrompt.description"
-              placeholder="Brief explanation of what the prompt does"
+              placeholder="Breve explicación de lo que hace el prompt"
               class="w-full bg-[#212121] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white focus:outline-none focus:border-white/20 transition-all placeholder:text-[#7a7a7a] h-20 resize-none"
             ></textarea>
           </div>
           <div>
-            <label class="block text-[12px] font-medium text-[#7a7a7a] mb-1.5 ml-0.5">Query (LLM Question)</label>
+            <label class="block text-[12px] font-medium text-[#7a7a7a] mb-1.5 ml-0.5">Consulta (pregunta LLM)</label>
             <div class="relative">
               <VariableAutocomplete 
                 :sources="availableSources"
@@ -267,15 +267,15 @@ watch([prompts, searchQuery], () => {
                 id="prompt-query-input"
                 v-model="newPrompt.query"
                 @cursor-update="cursorPos = $event"
-                placeholder="e.g. Make a detailed summary of this PDF"
+                placeholder="ej. Haz un resumen detallado de este PDF"
                 class="w-full bg-[#212121] border border-white/[0.08] rounded-xl px-4 py-2.5 text-[14px] text-white focus:outline-none focus:border-white/20 transition-all placeholder:text-[#7a7a7a] min-h-[44px]"
               />
             </div>
           </div>
         </div>
         <div class="p-6 bg-white/[0.02] flex items-center justify-end gap-3">
-          <button @click="isModalOpen = false" class="px-4 py-2 text-[14px] font-medium text-[#b4b4b4] hover:text-white transition-colors">Cancel</button>
-          <button @click="savePrompt" class="px-6 py-2 bg-white text-black rounded-xl text-[13px] font-semibold hover:bg-gray-200 transition-colors">Save</button>
+          <button @click="isModalOpen = false" class="px-4 py-2 text-[14px] font-medium text-[#b4b4b4] hover:text-white transition-colors">Cancelar</button>
+          <button @click="savePrompt" class="px-6 py-2 bg-white text-black rounded-xl text-[13px] font-semibold hover:bg-gray-200 transition-colors">Guardar</button>
         </div>
       </div>
     </div>

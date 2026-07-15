@@ -83,7 +83,7 @@ function getInitials(name: string): string {
           class="flex items-center gap-2.5 px-2.5 py-2 w-full text-left text-[13px] font-medium text-[#b4b4b4] hover:bg-white/[0.04] hover:text-[#ececec] rounded-lg transition-colors"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-[#7a7a7a]"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          New Chat
+          Nuevo chat
         </button>
 
 
@@ -93,7 +93,7 @@ function getInitials(name: string): string {
           active-class="bg-white/[0.06] !text-white"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 text-[#7a7a7a]"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
-          Dashboard
+          Panel
         </router-link>
 
         <router-link
@@ -123,7 +123,7 @@ function getInitials(name: string): string {
             <button
               @click.stop="emit('archive-conversation', conv.thread_id)"
               class="shrink-0 opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded-md transition-all text-[#555] hover:text-white"
-              title="Archive"
+              title="Archivar"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
             </button>
@@ -133,7 +133,7 @@ function getInitials(name: string): string {
 
       <!-- Empty state -->
       <div v-if="conversations.length === 0" class="text-center text-[#555] text-[12px] mt-6 px-4">
-        No conversations yet. Start a new chat!
+        Sin conversaciones. ¡Empieza un nuevo chat!
       </div>
     </div>
 
@@ -152,10 +152,10 @@ function getInitials(name: string): string {
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               </div>
               <div>
-                <div class="text-[14px] font-semibold text-white">{{ userName || 'User' }}</div>
+                <div class="text-[14px] font-semibold text-white">{{ userName || 'Usuario' }}</div>
                 <div class="flex items-center gap-1.5 text-[12px] text-green-400">
                   <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  Online
+                  En línea
                 </div>
               </div>
             </div>
@@ -168,14 +168,14 @@ function getInitials(name: string): string {
               class="flex items-center gap-3 w-full px-4 py-2.5 text-[13px] text-[#ececec] hover:bg-white/5 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-              Settings
+              Configuración
             </button>
             <button 
               @click="showProfileMenu = false; $emit('archive-action')"
               class="flex items-center gap-3 w-full px-4 py-2.5 text-[13px] text-[#ececec] hover:bg-white/5 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-              Archived Chats
+              Chats archivados
             </button>
           </div>
 
@@ -186,7 +186,7 @@ function getInitials(name: string): string {
               class="flex items-center gap-3 w-full px-4 py-2.5 text-[13px] text-[#ececec] hover:bg-white/5 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-              Sign Out
+              Cerrar sesión
             </button>
           </div>
         </div>
@@ -200,7 +200,7 @@ function getInitials(name: string): string {
         <div class="w-7 h-7 shrink-0 bg-white/10 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
           {{ getInitials(userName) }}
         </div>
-        <span class="font-medium truncate">{{ userName || 'User' }}</span>
+        <span class="font-medium truncate">{{ userName || 'Usuario' }}</span>
       </button>
     </div>
   </aside>

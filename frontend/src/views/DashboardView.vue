@@ -39,7 +39,7 @@ onMounted(load)
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-[18px] font-semibold text-white tracking-tight">Dashboard</h1>
+          <h1 class="text-[18px] font-semibold text-white tracking-tight">Panel</h1>
           <p class="text-[12px] text-[#7a7a7a] mt-0.5">
             Resumen operativo de Aura AI
           </p>

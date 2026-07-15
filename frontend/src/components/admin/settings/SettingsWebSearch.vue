@@ -19,7 +19,7 @@ const youtubeLanguage = ref('en')
 const youtubeProxyUrl = ref('')
 
 function save() {
-  alert('Web Search settings saved!')
+  alert('¡Configuración de búsqueda web guardada!')
 }
 </script>
 
@@ -32,31 +32,31 @@ function save() {
       
       <div class="space-y-1">
         <SettingToggle 
-          label="Web Search" 
+          label="Búsqueda web" 
           v-model="webSearch" 
         />
 
         <div class="flex items-center justify-between py-2">
-          <div class="text-[13px] font-medium text-white">Web Search Engine</div>
+          <div class="text-[13px] font-medium text-white">Motor de búsqueda web</div>
           <select v-model="searchEngine" class="bg-transparent border-none text-[13px] text-[#7a7a7a] focus:outline-none cursor-pointer text-right">
-            <option value="Select a engine" class="bg-[#2f2f2f]">Select a engine</option>
+            <option value="Select a engine" class="bg-[#2f2f2f]">Selecciona un motor</option>
             <option value="duckduckgo" class="bg-[#2f2f2f] text-white">DuckDuckGo</option>
             <option value="google" class="bg-[#2f2f2f] text-white">Google</option>
           </select>
         </div>
 
         <SettingToggle 
-          label="Bypass Embedding and Retrieval" 
+          label="Omitir embedding y recuperación" 
           v-model="bypassEmbedding" 
         />
         
         <SettingToggle 
-          label="Bypass Web Loader" 
+          label="Omitir cargador web" 
           v-model="bypassWebLoader" 
         />
 
         <SettingToggle 
-          label="Trust Proxy Environment" 
+          label="Confiar en entorno proxy" 
           v-model="trustProxy" 
         />
       </div>
@@ -64,13 +64,13 @@ function save() {
 
     <!-- Loader -->
     <div>
-      <h3 class="text-[15px] font-semibold text-white mb-4">Loader</h3>
+      <h3 class="text-[15px] font-semibold text-white mb-4">Cargador</h3>
       
       <div class="space-y-1">
         <div class="flex items-center justify-between py-2">
-          <div class="text-[13px] font-medium text-white">Web Loader Engine</div>
+          <div class="text-[13px] font-medium text-white">Motor del cargador web</div>
           <select v-model="loaderEngine" class="bg-transparent border-none text-[13px] text-white focus:outline-none cursor-pointer text-right">
-            <option value="Default" class="bg-[#2f2f2f]">Default</option>
+            <option value="Default" class="bg-[#2f2f2f]">Por defecto</option>
           </select>
         </div>
 
@@ -87,25 +87,25 @@ function save() {
         </div>
 
         <SettingToggle 
-          label="Verify SSL Certificate" 
+          label="Verificar certificado SSL" 
           v-model="verifySSL" 
         />
 
         <SettingInput 
           v-model="concurrentRequests"
-          label="Concurrent Requests"
+          label="Solicitudes concurrentes"
           type="number"
         />
 
         <div class="flex items-center justify-between py-2 mt-4">
-          <div class="text-[13px] font-medium text-white">Youtube Language</div>
+          <div class="text-[13px] font-medium text-white">Idioma de YouTube</div>
           <div class="text-[13px] text-white">{{ youtubeLanguage }}</div>
         </div>
 
         <SettingInput 
           v-model="youtubeProxyUrl"
-          label="Youtube Proxy URL"
-          placeholder="Enter proxy URL (e.g. https://user:password@host:port)"
+          label="URL del proxy de YouTube"
+          placeholder="Ingresa URL del proxy (ej. https://usuario:contraseña@host:puerto)"
         />
       </div>
     </div>
@@ -116,7 +116,7 @@ function save() {
         @click="save"
         class="bg-white hover:bg-white/90 text-black text-[14px] font-semibold px-6 py-3 rounded-full shadow-lg transition-transform hover:scale-105"
       >
-        Save
+        Guardar
       </button>
     </div>
   </div>

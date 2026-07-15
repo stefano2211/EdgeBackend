@@ -47,13 +47,13 @@ async function handleRegister() {
       <div class="w-14 h-14 bg-white text-black font-bold rounded-xl flex items-center justify-center text-2xl mb-6 shadow-lg shadow-white/5">
         OI
       </div>
-      <h1 class="text-3xl font-bold text-white">Create Account</h1>
-      <p class="text-gray-400 text-sm mt-3 text-center tracking-wide">Join the AI Workspace</p>
+      <h1 class="text-3xl font-bold text-white">Crear cuenta</h1>
+      <p class="text-gray-400 text-sm mt-3 text-center tracking-wide">Únete al espacio AI</p>
     </div>
 
     <form @submit.prevent="handleRegister" class="space-y-5">
       <div class="space-y-1.5">
-        <label class="block text-sm font-medium text-gray-300 ml-1" for="name">Full Name</label>
+        <label class="block text-sm font-medium text-gray-300 ml-1" for="name">Nombre completo</label>
         <input
           v-model="name"
           id="name"
@@ -65,7 +65,7 @@ async function handleRegister() {
       </div>
 
       <div class="space-y-1.5">
-        <label class="block text-sm font-medium text-gray-300 ml-1" for="email">Email</label>
+        <label class="block text-sm font-medium text-gray-300 ml-1" for="email">Correo electrónico</label>
         <input
           v-model="email"
           id="email"
@@ -77,7 +77,7 @@ async function handleRegister() {
       </div>
       
       <div class="space-y-1.5">
-        <label class="block text-sm font-medium text-gray-300 ml-1" for="password">Password</label>
+        <label class="block text-sm font-medium text-gray-300 ml-1" for="password">Contraseña</label>
         <input
           v-model="password"
           id="password"
@@ -97,7 +97,7 @@ async function handleRegister() {
         :disabled="isLoading"
         class="w-full mt-8 rounded-xl bg-white text-black font-semibold text-[15px] px-4 py-3.5 hover:bg-gray-200 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
       >
-        <span v-if="!isLoading">Sign Up</span>
+        <span v-if="!isLoading">Registrarse</span>
         <svg v-else class="animate-spin h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -106,8 +106,8 @@ async function handleRegister() {
     </form>
 
     <p class="mt-8 text-center text-sm text-gray-400">
-      Already have an account? 
-      <RouterLink to="/login" class="text-white hover:text-emerald-400 transition-colors font-medium">Sign in</RouterLink>
+      ¿Ya tienes cuenta? 
+      <RouterLink to="/login" class="text-white hover:text-emerald-400 transition-colors font-medium">Inicia sesión</RouterLink>
     </p>
   </div>
 </template>

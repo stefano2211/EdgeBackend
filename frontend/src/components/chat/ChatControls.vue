@@ -97,7 +97,7 @@ function resetAll() {
 }
 
 function formatValue(val: number | null): string {
-  return val === null ? 'Default' : String(val)
+  return val === null ? 'Por defecto' : String(val)
 }
 
 function onPresetChange(e: Event) {
@@ -144,8 +144,8 @@ function onSeedInput(e: Event) {
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div class="flex items-center gap-2">
-            <span class="px-3 py-1 bg-white/10 text-white text-[13px] font-medium rounded-lg">Controls</span>
-            <span class="text-[13px] text-[#7a7a7a] cursor-pointer hover:text-white px-2 py-1 rounded-lg hover:bg-white/5 transition-colors">Overview</span>
+            <span class="px-3 py-1 bg-white/10 text-white text-[13px] font-medium rounded-lg">Controles</span>
+            <span class="text-[13px] text-[#7a7a7a] cursor-pointer hover:text-white px-2 py-1 rounded-lg hover:bg-white/5 transition-colors">Resumen</span>
           </div>
           <button @click="emit('close')" class="p-1.5 text-[#7a7a7a] hover:text-white hover:bg-white/5 rounded-lg transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -157,14 +157,14 @@ function onSeedInput(e: Event) {
 
           <!-- Presets -->
           <div class="space-y-2">
-            <h3 class="text-[14px] font-semibold text-white">Presets</h3>
+            <h3 class="text-[14px] font-semibold text-white">Preajustes</h3>
             <div class="flex gap-2">
               <select 
                 v-model="selectedPromptId"
                 @change="onPresetChange"
                 class="flex-1 bg-[#212121] border border-white/[0.08] rounded-xl px-3 py-2 text-[13px] text-white focus:outline-none focus:border-white/20 transition-colors"
               >
-                <option value="">Manual Configuration</option>
+                <option value="">Configuración manual</option>
                 <option v-for="prompt in savedPrompts" :key="prompt.id" :value="prompt.id">
                   {{ prompt.title }}
                 </option>
@@ -172,7 +172,7 @@ function onSeedInput(e: Event) {
               <button 
                 @click="fetchPrompts"
                 class="p-2 text-[#7a7a7a] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                title="Refresh presets"
+                title="Actualizar preajustes"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
               </button>
@@ -181,7 +181,7 @@ function onSeedInput(e: Event) {
             <div class="flex gap-2 pt-1">
               <input 
                 v-model="presetName"
-                placeholder="New preset name"
+                placeholder="Nombre del nuevo preajuste"
                 class="flex-1 bg-transparent border border-white/[0.08] rounded-lg px-2 py-1 text-[12px] text-white placeholder-[#5a5a5a] focus:outline-none focus:border-white/20"
                 @keyup.enter="saveAsPreset"
               />
@@ -190,7 +190,7 @@ function onSeedInput(e: Event) {
                 :disabled="!presetName.trim() || isSaving"
                 class="px-2 py-1 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white text-[11px] font-medium rounded-lg transition-colors"
               >
-                {{ isSaving ? 'Saving...' : 'Save Current' }}
+                {{ isSaving ? 'Guardando...' : 'Guardar actual' }}
               </button>
             </div>
           </div>
@@ -199,10 +199,10 @@ function onSeedInput(e: Event) {
 
           <!-- System Prompt -->
           <div class="space-y-2">
-            <h3 class="text-[14px] font-semibold text-white">System Prompt</h3>
+            <h3 class="text-[14px] font-semibold text-white">Prompt del sistema</h3>
             <textarea 
               v-model="params.system_prompt"
-              placeholder="Enter system prompt"
+              placeholder="Ingresa el prompt del sistema"
               rows="3"
               class="w-full bg-[#212121] border border-white/[0.08] rounded-xl px-4 py-3 text-[13px] text-white placeholder-[#7a7a7a] resize-none focus:outline-none focus:border-white/20 transition-colors"
             ></textarea>
@@ -212,12 +212,12 @@ function onSeedInput(e: Event) {
 
           <!-- Advanced Params -->
           <div>
-            <h3 class="text-[14px] font-semibold text-white mb-4">Advanced Params</h3>
+            <h3 class="text-[14px] font-semibold text-white mb-4">Parámetros avanzados</h3>
             <div class="space-y-4">
               
               <!-- Temperature -->
               <div class="flex items-center justify-between">
-                <label class="text-[13px] text-[#b4b4b4]">Temperature</label>
+                <label class="text-[13px] text-[#b4b4b4]">Temperatura</label>
                 <div class="flex items-center gap-2">
                   <input 
                     type="range" 
@@ -244,7 +244,7 @@ function onSeedInput(e: Event) {
                   min="1" max="128000"
                   :value="params.max_tokens ?? ''"
                   @input="onMaxTokensInput"
-                  placeholder="Default"
+                  placeholder="Por defecto"
                   class="number-input"
                 />
               </div>
@@ -278,31 +278,31 @@ function onSeedInput(e: Event) {
                   min="1" max="100"
                   :value="params.top_k ?? ''"
                   @input="onTopKInput"
-                  placeholder="Default"
+                  placeholder="Por defecto"
                   class="number-input"
                 />
               </div>
 
               <!-- Seed -->
               <div class="flex items-center justify-between">
-                <label class="text-[13px] text-[#b4b4b4]">Seed</label>
+                <label class="text-[13px] text-[#b4b4b4]">Semilla</label>
                 <input 
                   type="number" 
                   min="0"
                   :value="params.seed ?? ''"
                   @input="onSeedInput"
-                  placeholder="Default"
+                  placeholder="Por defecto"
                   class="number-input"
                 />
               </div>
 
               <!-- Stop Sequence -->
               <div class="flex items-center justify-between">
-                <label class="text-[13px] text-[#b4b4b4]">Stop Sequence</label>
+                <label class="text-[13px] text-[#b4b4b4]">Secuencia de parada</label>
                 <input 
                   type="text"
                   v-model="params.stop_sequence"
-                  placeholder="Default"
+                  placeholder="Por defecto"
                   class="number-input"
                 />
               </div>
@@ -317,7 +317,7 @@ function onSeedInput(e: Event) {
             @click="resetAll"
             class="w-full text-[13px] font-medium text-[#7a7a7a] hover:text-white py-2 hover:bg-white/5 rounded-xl transition-colors"
           >
-            Reset to Defaults
+            Restablecer valores por defecto
           </button>
         </div>
       </div>

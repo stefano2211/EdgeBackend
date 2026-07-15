@@ -220,7 +220,7 @@ function removeSelectedFile() {
             v-model="chatInput"
             @enter="handleSend"
             @cursor-update="cursorPos = $event"
-            placeholder="How can I help you today?"
+            placeholder="¿En qué puedo ayudarte hoy?"
             :disabled="disabled || isUploading"
             class="min-h-[44px]"
           />
@@ -496,7 +496,7 @@ function removeSelectedFile() {
       </div>
       
       <div class="text-center mt-3 text-[11px] text-[#7a7a7a] tracking-wide">
-        Aura AI Agent can make mistakes. Consider verifying important information.
+        Aura AI Agent puede cometer errores. Considera verificar la información importante.
       </div>
     </div>
   </div>

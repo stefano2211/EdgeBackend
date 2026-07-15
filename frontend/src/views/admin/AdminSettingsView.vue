@@ -8,9 +8,9 @@ import SettingsWebSearch from '@/components/admin/settings/SettingsWebSearch.vue
 
 const settingsTabs = [
   { id: 'general', label: 'General', icon: 'settings', component: SettingsGeneral },
-  { id: 'providers', label: 'Providers', icon: 'cpu', component: SettingsProviders },
-  { id: 'documents', label: 'Documents', icon: 'file', component: SettingsDocuments },
-  { id: 'web-search', label: 'Web Search', icon: 'globe', component: SettingsWebSearch },
+  { id: 'providers', label: 'Proveedores', icon: 'cpu', component: SettingsProviders },
+  { id: 'documents', label: 'Documentos', icon: 'file', component: SettingsDocuments },
+  { id: 'web-search', label: 'Búsqueda web', icon: 'globe', component: SettingsWebSearch },
 ]
 
 const activeSettingsTabId = ref('general')
@@ -46,7 +46,7 @@ const activeSettingsTab = computed(() => settingsTabs.find(t => t.id === activeS
 
       <!-- Settings Content Pane -->
       <div class="flex-1 p-6 overflow-y-auto no-scrollbar pb-16">
-        <h3 class="text-sm font-semibold text-white mb-4 border-b border-white/[0.04] pb-2">{{ activeSettingsTab?.label }} Configuration</h3>
+        <h3 class="text-sm font-semibold text-white mb-4 border-b border-white/[0.04] pb-2">{{ activeSettingsTab?.label }} Configuración</h3>
         <component 
           v-if="activeSettingsTab"
           :is="activeSettingsTab.component" 

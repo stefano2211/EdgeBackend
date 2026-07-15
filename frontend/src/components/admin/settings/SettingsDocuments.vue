@@ -36,10 +36,10 @@ async function save() {
     }
     
     await adminService.updateSettings(payload)
-    alert('Document settings saved successfully')
+    alert('Configuración de documentos guardada exitosamente')
   } catch (error) {
     console.error('Failed to save settings:', error)
-    alert('Failed to save Document settings')
+    alert('Error al guardar la configuración de documentos')
   } finally {
     isSaving.value = false
   }
@@ -55,21 +55,21 @@ async function save() {
 
     <!-- General -->
     <div>
-      <h3 class="text-[15px] font-semibold text-white mb-4">Ingestion Configuration</h3>
+      <h3 class="text-[15px] font-semibold text-white mb-4">Configuración de ingesta</h3>
       
       <div class="space-y-1">
         <div class="grid grid-cols-2 gap-4">
           <SettingInput 
             v-model="chunkSize"
-            label="Chunk Size"
+            label="Tamaño de fragmento"
             type="number"
-            description="Number of characters per split when processing documents."
+            description="Número de caracteres por división al procesar documentos."
           />
           <SettingInput 
             v-model="chunkOverlap"
-            label="Chunk Overlap"
+            label="Solapamiento de fragmentos"
             type="number"
-            description="Number of overlapping characters between chunks."
+            description="Número de caracteres solapados entre fragmentos."
           />
         </div>
       </div>
@@ -77,14 +77,14 @@ async function save() {
 
     <!-- Retrieval -->
     <div>
-      <h3 class="text-[15px] font-semibold text-white mb-4">Retrieval Configuration</h3>
+      <h3 class="text-[15px] font-semibold text-white mb-4">Configuración de recuperación</h3>
       
       <div class="space-y-1">
         <SettingInput 
           v-model="searchResults"
-          label="Search Limit (Top-K)"
+          label="Límite de búsqueda (Top-K)"
           type="number"
-          description="How many chunks to retrieve per search query for the Agent's context."
+          description="Cuántos fragmentos recuperar por consulta para el contexto del agente."
         />
       </div>
     </div>
@@ -92,8 +92,8 @@ async function save() {
     <!-- Additional Information -->
     <div class="text-[#7a7a7a] text-[13px] py-6 border border-dashed border-white/[0.08] rounded-2xl flex flex-col items-center justify-center text-center px-6">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-3 opacity-50"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-      These settings affect all future document uploads and agent queries.<br/> 
-      Modifying chunk sizes will not restrospectively re-chunk already uploaded documents.
+      Estos ajustes afectan todas las subidas futuras de documentos y consultas del agente.<br/> 
+      Modificar el tamaño de fragmentos no re-fragmentará retroactivamente los documentos ya subidos.
     </div>
 
     <!-- Save Button Floating -->
@@ -104,7 +104,7 @@ async function save() {
         class="bg-white hover:bg-white/90 text-black text-[14px] font-semibold px-6 py-3 rounded-full shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
       >
         <span v-if="isSaving" class="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin inline-block"></span>
-        {{ isSaving ? 'Saving...' : 'Save' }}
+        {{ isSaving ? 'Guardando...' : 'Guardar' }}
       </button>
     </div>
   </div>

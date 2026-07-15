@@ -43,10 +43,10 @@ async function save() {
     }
     
     await adminService.updateGeneralSettings(payload as any)
-    alert('Provider settings saved successfully')
+    alert('Configuración de proveedores guardada exitosamente')
   } catch (error) {
     console.error('Failed to save settings:', error)
-    alert('Failed to save Provider settings')
+    alert('Error al guardar la configuración de proveedores')
   } finally {
     isSaving.value = false
   }
@@ -69,7 +69,7 @@ async function save() {
           </div>
           <div>
             <h3 class="text-[15px] font-semibold text-white">Ollama</h3>
-            <p class="text-[12px] text-[#7a7a7a]">Local LLM runner integration</p>
+            <p class="text-[12px] text-[#7a7a7a]">Integración local de LLM</p>
           </div>
         </div>
         <SettingToggle v-model="ollamaEnabled" />
@@ -97,7 +97,7 @@ async function save() {
           </div>
           <div>
             <h3 class="text-[15px] font-semibold text-white">OpenRouter</h3>
-            <p class="text-[12px] text-[#7a7a7a]">Unified API for broad LLM access</p>
+            <p class="text-[12px] text-[#7a7a7a]">API unificada para acceso amplio a LLM</p>
           </div>
         </div>
         <SettingToggle v-model="openrouterEnabled" />
@@ -133,7 +133,7 @@ async function save() {
         class="bg-white hover:bg-white/90 text-black text-[14px] font-semibold px-6 py-3 rounded-full shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
       >
         <span v-if="isSaving" class="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin inline-block"></span>
-        {{ isSaving ? 'Saving...' : 'Save' }}
+        {{ isSaving ? 'Guardando...' : 'Guardar' }}
       </button>
     </div>
   </div>

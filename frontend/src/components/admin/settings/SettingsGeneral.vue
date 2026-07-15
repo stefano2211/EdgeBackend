@@ -44,10 +44,10 @@ async function save() {
     }
     
     await adminService.updateGeneralSettings(payload)
-    alert('General settings saved successfully')
+    alert('Configuración general guardada exitosamente')
   } catch (error) {
     console.error('Failed to save settings:', error)
-    alert('Failed to save General settings')
+    alert('Error al guardar la configuración general')
   } finally {
     isSaving.value = false
   }
@@ -64,30 +64,30 @@ async function save() {
     <!-- Version & Help -->
     <div class="grid grid-cols-[200px_1fr] gap-4">
       <div>
-        <div class="text-[14px] font-semibold text-white mb-1">Version</div>
+        <div class="text-[14px] font-semibold text-white mb-1">Versión</div>
         <div class="text-[13px] text-[#b4b4b4]">v0.8.8 (v0.8.10 available!)</div>
-        <a href="#" class="text-[12px] text-[#7a7a7a] hover:text-white underline underline-offset-2">See what's new</a>
+        <a href="#" class="text-[12px] text-[#7a7a7a] hover:text-white underline underline-offset-2">Ver novedades</a>
       </div>
       <div class="flex justify-end items-start mt-2">
         <button class="bg-[#2f2f2f] hover:bg-[#3f3f3f] text-white text-[13px] font-medium px-4 py-2 rounded-xl transition-colors border border-white/[0.06]">
-          Check for updates
+          Buscar actualizaciones
         </button>
       </div>
     </div>
 
     <!-- General Settings -->
     <div>
-      <h3 class="text-[15px] font-semibold text-white mb-4">Authentication Configuration</h3>
+      <h3 class="text-[15px] font-semibold text-white mb-4">Configuración de autenticación</h3>
       <div class="space-y-1">
         <SettingToggle 
-          label="Enable New Sign Ups" 
+          label="Permitir nuevos registros" 
           v-model="enableSignUps" 
         />
         <div class="flex items-center justify-between py-2">
-          <div class="text-[13px] font-medium text-white">Default User Role</div>
+          <div class="text-[13px] font-medium text-white">Rol de usuario por defecto</div>
           <select v-model="defaultUserRole" class="bg-transparent border-none text-[13px] text-white focus:outline-none cursor-pointer text-right">
-            <option value="pending" class="bg-[#2f2f2f]">Pending</option>
-            <option value="user" class="bg-[#2f2f2f]">User</option>
+            <option value="pending" class="bg-[#2f2f2f]">Pendiente</option>
+            <option value="user" class="bg-[#2f2f2f]">Usuario</option>
             <option value="admin" class="bg-[#2f2f2f]">Admin</option>
           </select>
         </div>
@@ -96,23 +96,23 @@ async function save() {
 
     <!-- Features Settings -->
     <div>
-      <h3 class="text-[15px] font-semibold text-white mb-4">Global Features</h3>
+      <h3 class="text-[15px] font-semibold text-white mb-4">Funciones globales</h3>
       <div class="space-y-1">
         <SettingToggle 
-          label="Enable API Keys" 
+          label="Habilitar API Keys" 
           v-model="enableApiKeys" 
         />
         <SettingToggle 
-          label="Enable Community Sharing" 
+          label="Habilitar uso compartido" 
           v-model="enableCommunitySharing" 
         />
         <div class="flex items-center justify-between py-2 mt-4">
-          <div class="text-[13px] font-medium text-white">JWT Expiration</div>
+          <div class="text-[13px] font-medium text-white">Expiración JWT</div>
           <select v-model="jwtExpiration" class="bg-transparent border-none text-[13px] text-white focus:outline-none cursor-pointer text-right">
-            <option value="1h" class="bg-[#2f2f2f]">1 Hour</option>
-            <option value="1d" class="bg-[#2f2f2f]">1 Day</option>
-            <option value="1w" class="bg-[#2f2f2f]">1 Week</option>
-            <option value="4w" class="bg-[#2f2f2f]">4 Weeks</option>
+            <option value="1h" class="bg-[#2f2f2f]">1 hora</option>
+            <option value="1d" class="bg-[#2f2f2f]">1 día</option>
+            <option value="1w" class="bg-[#2f2f2f]">1 semana</option>
+            <option value="4w" class="bg-[#2f2f2f]">4 semanas</option>
           </select>
         </div>
       </div>
@@ -121,8 +121,8 @@ async function save() {
     <!-- Additional Information -->
     <div class="text-[#7a7a7a] text-[13px] py-6 border border-dashed border-white/[0.08] rounded-2xl flex flex-col items-center justify-center text-center px-6">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mb-3 opacity-50"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      These settings affect global authentication and availability features.<br/>
-      Disabling Sign Ups immediately blocks any new user registration except manually created ones.
+      Estos ajustes afectan las funciones globales de autenticación y disponibilidad.<br/>
+      Desactivar los registros bloquea inmediatamente cualquier nuevo registro excepto los creados manualmente.
     </div>
 
     <!-- Save Button -->
@@ -133,7 +133,7 @@ async function save() {
         class="bg-white hover:bg-white/90 text-black text-[14px] font-semibold px-6 py-3 rounded-full shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
       >
         <span v-if="isSaving" class="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin inline-block"></span>
-        {{ isSaving ? 'Saving...' : 'Save' }}
+        {{ isSaving ? 'Guardando...' : 'Guardar' }}
       </button>
     </div>
   </div>

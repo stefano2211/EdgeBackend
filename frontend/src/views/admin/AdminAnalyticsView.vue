@@ -7,9 +7,9 @@ const isAnalyticsLoading = ref(true)
 const selectedDays = ref(7)
 
 const daysOptions = [
-  { label: 'Last 7 days', value: 7 },
-  { label: 'Last 30 days', value: 30 },
-  { label: 'Last 90 days', value: 90 },
+  { label: 'Últimos 7 días', value: 7 },
+  { label: 'Últimos 30 días', value: 30 },
+  { label: 'Últimos 90 días', value: 90 },
 ]
 
 function getMockAnalytics(days: number): AnalyticsData {
@@ -152,19 +152,19 @@ onMounted(() => {
     <!-- Loading -->
     <div v-if="isAnalyticsLoading" class="flex items-center justify-center py-20 text-[#7a7a7a] text-sm">
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin mr-2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-      Loading analytics...
+      Cargando analíticas...
     </div>
 
     <template v-else-if="analyticsData">
       <!-- Header Row -->
       <div class="flex items-start justify-between mb-4">
         <div>
-          <h3 class="text-sm font-semibold text-white">System Usage Summary</h3>
+          <h3 class="text-sm font-semibold text-white">Resumen de uso del sistema</h3>
           <div class="flex items-center gap-4 mt-1 text-[12px] text-[#7a7a7a]">
-            <span><strong class="text-white font-medium">{{ analyticsData.total_messages }}</strong> messages</span>
+            <span><strong class="text-white font-medium">{{ analyticsData.total_messages }}</strong> mensajes</span>
             <span><strong class="text-white font-medium">{{ formatTokens(analyticsData.total_tokens) }}</strong> tokens</span>
             <span><strong class="text-white font-medium">{{ analyticsData.total_chats }}</strong> chats</span>
-            <span><strong class="text-white font-medium">{{ analyticsData.total_users }}</strong> users</span>
+            <span><strong class="text-white font-medium">{{ analyticsData.total_users }}</strong> usuarios</span>
           </div>
         </div>
 
@@ -179,7 +179,7 @@ onMounted(() => {
       </div>
 
       <!-- Daily Messages Chart -->
-      <div class="text-[11px] text-[#7a7a7a] mb-2 uppercase tracking-wider">Daily Message Frequency</div>
+      <div class="text-[11px] text-[#7a7a7a] mb-2 uppercase tracking-wider">Frecuencia diaria de mensajes</div>
       <div class="bg-white/[0.02] rounded-2xl border border-white/[0.04] p-4 mb-6 overflow-hidden">
         <svg :viewBox="`0 0 ${chartWidth} ${chartHeight + 20}`" class="w-full h-44" preserveAspectRatio="none">
           <!-- Grid Lines -->
@@ -250,12 +250,12 @@ onMounted(() => {
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Model Usage -->
         <div>
-          <h3 class="text-[13px] font-semibold text-white mb-2.5">Model Usage</h3>
+          <h3 class="text-[13px] font-semibold text-white mb-2.5">Uso de modelos</h3>
           <div class="bg-white/[0.02] rounded-xl border border-white/[0.06] overflow-hidden">
             <div class="grid grid-cols-[30px_1fr_80px_70px_50px] gap-2 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] border-b border-white/[0.06]">
               <div>#</div>
-              <div>Model</div>
-              <div class="text-right">Messages</div>
+              <div>Modelo</div>
+              <div class="text-right">Mensajes</div>
               <div class="text-right">Tokens</div>
               <div class="text-right">%</div>
             </div>
@@ -271,19 +271,19 @@ onMounted(() => {
               <div class="text-[12px] text-[#b4b4b4] text-right">{{ item.percentage.toFixed(1) }}%</div>
             </div>
             <div v-if="analyticsData.model_usage.length === 0" class="px-4 py-8 text-center text-[#7a7a7a] text-[12px]">
-              No model usage data yet.
+              Sin datos de uso de modelos aún.
             </div>
           </div>
         </div>
 
         <!-- User Activity -->
         <div>
-          <h3 class="text-[13px] font-semibold text-white mb-2.5">User Activity</h3>
+          <h3 class="text-[13px] font-semibold text-white mb-2.5">Actividad de usuarios</h3>
           <div class="bg-white/[0.02] rounded-xl border border-white/[0.06] overflow-hidden">
             <div class="grid grid-cols-[30px_1fr_80px_70px] gap-2 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] border-b border-white/[0.06]">
               <div>#</div>
-              <div>User</div>
-              <div class="text-right">Messages</div>
+              <div>Usuario</div>
+              <div class="text-right">Mensajes</div>
               <div class="text-right">Tokens</div>
             </div>
             <div
@@ -297,7 +297,7 @@ onMounted(() => {
               <div class="text-[12px] text-[#b4b4b4] text-right">{{ formatTokens(item.tokens) }}</div>
             </div>
             <div v-if="analyticsData.user_activity.length === 0" class="px-4 py-8 text-center text-[#7a7a7a] text-[12px]">
-              No user activity yet.
+              Sin actividad de usuarios aún.
             </div>
           </div>
         </div>

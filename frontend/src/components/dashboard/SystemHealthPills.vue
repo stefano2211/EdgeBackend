@@ -20,7 +20,7 @@ defineProps<Props>()
         : 'bg-amber-500/10 text-amber-400 border-amber-500/20'"
     >
       <span class="w-1.5 h-1.5 rounded-full" :class="llmStatus === 'healthy' ? 'bg-emerald-400' : 'bg-amber-400'"></span>
-      {{ llmStatus === 'healthy' ? 'LLM Online' : 'LLM Offline' }}
+      {{ llmStatus === 'healthy' ? 'LLM en línea' : 'LLM sin conexión' }}
     </div>
 
     <!-- System -->

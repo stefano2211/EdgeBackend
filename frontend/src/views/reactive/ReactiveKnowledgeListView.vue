@@ -7,8 +7,8 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
         </div>
         <div>
-          <h2 class="text-2xl font-bold text-white tracking-tight">Knowledge</h2>
-          <p class="text-[13px] text-[#7a7a7a] font-medium mt-0.5">Manage knowledge bases for chat and reactive pipelines.</p>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Conocimiento</h2>
+          <p class="text-[13px] text-[#7a7a7a] font-medium mt-0.5">Gestiona bases de conocimiento para chat y pipelines reactivos.</p>
         </div>
       </div>
 
@@ -17,7 +17,7 @@
         class="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white border border-white/10 font-semibold px-5 py-2.5 rounded-xl transition-all shrink-0 text-[13px]"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-        Create Collection
+        Crear colección
       </button>
     </header>
 
@@ -28,12 +28,12 @@
         <input 
           v-model="searchQuery"
           type="text" 
-          placeholder="Filter collections..." 
+          placeholder="Filtrar colecciones..." 
           class="w-full bg-[#1a1a1a]/50 border border-white/[0.05] rounded-2xl pl-12 pr-4 py-3.5 text-[14px] text-[#ececec] placeholder-[#4a4a4a] focus:outline-none focus:border-emerald-500/30 focus:bg-[#1a1a1a] transition-all backdrop-blur-sm"
         >
       </div>
       <div class="hidden md:flex items-center gap-2 px-4 py-3.5 bg-white/[0.02] border border-white/[0.05] rounded-2xl">
-        <span class="text-[11px] font-bold text-[#4a4a4a] uppercase tracking-widest">Active for Reactive:</span>
+        <span class="text-[11px] font-bold text-[#4a4a4a] uppercase tracking-widest">Activo para Reactiva:</span>
         <span class="text-[13px] font-mono text-emerald-400">{{ activeCount }}</span>
       </div>
     </div>
@@ -55,16 +55,16 @@
         <div class="w-24 h-24 rounded-full bg-emerald-500/5 border border-emerald-500/10 flex items-center justify-center mb-6 animate-float">
           <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500/20"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/><path d="M8 15h6"/></svg>
         </div>
-        <h3 class="text-xl font-bold text-white mb-2">{{ searchQuery ? 'No matching collections' : 'No Knowledge Bases' }}</h3>
+        <h3 class="text-xl font-bold text-white mb-2">{{ searchQuery ? 'Sin colecciones coincidentes' : 'Sin bases de conocimiento' }}</h3>
         <p class="text-[14px] text-[#7a7a7a] mb-8 leading-relaxed">
-          {{ searchQuery ? 'Try adjusting your search criteria.' : 'Create your first knowledge collection to group documents and use them in chat or reactive pipelines.' }}
+          {{ searchQuery ? 'Ajusta tus criterios de búsqueda.' : 'Crea tu primera colección para agrupar documentos y usarlos en chat o pipelines reactivos.' }}
         </p>
         <button 
           v-if="!searchQuery"
           @click="showCreateModal = true"
           class="text-[13px] font-bold bg-white text-black px-8 py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-xl shadow-white/5"
         >
-          Create Collection
+          Crear colección
         </button>
       </div>
 
@@ -95,7 +95,7 @@
             class="relative z-10"
           >
             <h3 class="font-bold text-[17px] text-white mb-1 leading-tight truncate tracking-tight group-hover:text-emerald-400 transition-colors">{{ kb.name }}</h3>
-            <p class="text-[#7a7a7a] text-[13px] line-clamp-2 mb-4 flex-grow leading-relaxed">{{ kb.description || 'No description provided.' }}</p>
+            <p class="text-[#7a7a7a] text-[13px] line-clamp-2 mb-4 flex-grow leading-relaxed">{{ kb.description || 'Sin descripción.' }}</p>
           </router-link>
           
           <!-- Context Toggles -->
@@ -105,7 +105,7 @@
                 @click="toggleChat(kb)"
                 class="relative w-8 h-4 rounded-full transition-all cursor-pointer border"
                 :class="kb.is_enabled_chat ? 'bg-blue-500/20 border-blue-500/40' : 'bg-white/5 border-white/10'"
-                :title="kb.is_enabled_chat ? 'Active for Chat' : 'Inactive for Chat'"
+                :title="kb.is_enabled_chat ? 'Activo para Chat' : 'Inactivo para Chat'"
               >
                 <div class="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full transition-all"
                   :class="kb.is_enabled_chat ? 'left-5 bg-blue-400' : 'left-1 bg-[#4a4a4a]'"
@@ -118,13 +118,13 @@
                 @click="toggleReactive(kb)"
                 class="relative w-8 h-4 rounded-full transition-all cursor-pointer border"
                 :class="kb.is_enabled_reactive ? 'bg-emerald-500/20 border-emerald-500/40' : 'bg-white/5 border-white/10'"
-                :title="kb.is_enabled_reactive ? 'Active for Reactive' : 'Inactive for Reactive'"
+                :title="kb.is_enabled_reactive ? 'Activo para Reactiva' : 'Inactivo para Reactiva'"
               >
                 <div class="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full transition-all"
                   :class="kb.is_enabled_reactive ? 'left-5 bg-emerald-400' : 'left-1 bg-[#4a4a4a]'"
                 ></div>
               </button>
-              <span class="text-[9px] font-bold uppercase tracking-wider" :class="kb.is_enabled_reactive ? 'text-emerald-400' : 'text-[#4a4a4a]'">Reactive</span>
+              <span class="text-[9px] font-bold uppercase tracking-wider" :class="kb.is_enabled_reactive ? 'text-emerald-400' : 'text-[#4a4a4a]'">Reactiva</span>
             </div>
           </div>
         </div>
@@ -139,16 +139,16 @@
         class="bg-[#1c1c1c] border border-white/[0.08] rounded-2xl w-full max-w-[420px] shadow-2xl p-6 relative overflow-hidden"
         @click.stop
       >
-        <h3 class="text-lg font-semibold text-white mb-1">Create new collection</h3>
-        <p class="text-[13px] text-[#7a7a7a] mb-6">Group your documents and retrieve them together</p>
+        <h3 class="text-lg font-semibold text-white mb-1">Crear nueva colección</h3>
+        <p class="text-[13px] text-[#7a7a7a] mb-6">Agrupa tus documentos y recupéralos juntos</p>
         
         <div class="space-y-4 mb-6">
           <div>
-            <label class="block text-[12px] font-medium text-[#b4b4b4] mb-1.5 ml-0.5">Name</label>
+            <label class="block text-[12px] font-medium text-[#b4b4b4] mb-1.5 ml-0.5">Nombre</label>
             <input
               v-model="newKb.name"
               type="text"
-              placeholder="e.g. OSHA Regulations 2026"
+              placeholder="ej. Normas OSHA 2026"
               class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-[14px] focus:outline-none focus:border-white/20 transition-all placeholder:text-[#7a7a7a]"
               @keyup.enter="createKb"
               autofocus
@@ -156,18 +156,18 @@
           </div>
           
           <div>
-            <label class="block text-[12px] font-medium text-[#b4b4b4] mb-1.5 ml-0.5">Description <span class="text-[#7a7a7a]">(Optional)</span></label>
+            <label class="block text-[12px] font-medium text-[#b4b4b4] mb-1.5 ml-0.5">Descripción <span class="text-[#7a7a7a]">(Opcional)</span></label>
             <textarea
               v-model="newKb.description"
               rows="3"
-              placeholder="What types of documents will this include?"
+              placeholder="¿Qué tipos de documentos incluirá?"
               class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-[14px] focus:outline-none focus:border-white/20 transition-all placeholder:text-[#7a7a7a] resize-none"
             ></textarea>
           </div>
 
           <!-- Context Toggles in Create Modal -->
           <div class="space-y-3 pt-2">
-            <label class="block text-[12px] font-medium text-[#b4b4b4] ml-0.5">Available In</label>
+            <label class="block text-[12px] font-medium text-[#b4b4b4] ml-0.5">Disponible en</label>
             <div class="flex items-center gap-4">
               <label class="flex items-center gap-2.5 cursor-pointer group">
                 <div class="relative w-10 h-5 rounded-full transition-all border"
@@ -191,7 +191,7 @@
                     :class="newKb.is_enabled_reactive ? 'left-6 bg-emerald-400' : 'left-1 bg-[#4a4a4a]'"
                   ></button>
                 </div>
-                <span class="text-[13px] text-[#b4b4b4] group-hover:text-white transition-colors">Reactive</span>
+                <span class="text-[13px] text-[#b4b4b4] group-hover:text-white transition-colors">Reactiva</span>
               </label>
             </div>
           </div>
@@ -202,7 +202,7 @@
             @click="showCreateModal = false"
             class="px-4 py-2 text-[14px] font-medium text-[#b4b4b4] hover:text-white hover:bg-white/5 rounded-xl transition-all"
           >
-            Cancel
+            Cancelar
           </button>
           <button
             @click="createKb"
@@ -210,7 +210,7 @@
             class="px-6 py-2 text-[14px] font-medium bg-white/5 border border-white/10 text-white hover:bg-white/10 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <svg v-if="creating" class="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            <span v-else>Create</span>
+            <span v-else>Crear</span>
           </button>
         </div>
       </div>

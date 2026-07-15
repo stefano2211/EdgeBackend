@@ -289,7 +289,7 @@ async function createWebhookEvent() {
         extraData = JSON.parse(customDataJson.value)
       }
     } catch {
-      alert('Invalid JSON in custom data field')
+      alert('JSON inválido en el campo de datos personalizados')
       return
     }
     await sendToWebhook({
@@ -507,12 +507,12 @@ function formatTime(d: string) {
       <!-- Header -->
       <div class="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
-          <span class="font-semibold text-[15px] text-white tracking-tight">Operations Center</span>
+          <span class="font-semibold text-[15px] text-white tracking-tight">Centro de operaciones</span>
         </div>
         <div class="flex items-center gap-2">
-          <div class="flex items-center gap-1.5" :title="sseConnected ? 'Live' : 'Reconnecting…'">
+          <div class="flex items-center gap-1.5" :title="sseConnected ? 'En vivo' : 'Reconectando…'">
             <div class="w-1.5 h-1.5 rounded-full" :class="sseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'"></div>
-            <span class="text-[10px] text-[#666] uppercase tracking-wider">{{ sseConnected ? 'LIVE' : 'OFFLINE' }}</span>
+            <span class="text-[10px] text-[#666] uppercase tracking-wider">{{ sseConnected ? 'EN VIVO' : 'SIN CONEXIÓN' }}</span>
           </div>
           <button @click="showCreateModal = true" class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#b4b4b4] hover:text-white" title="Nuevo evento manual">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
@@ -538,9 +538,7 @@ function formatTime(d: string) {
             class="flex items-center gap-2 text-[12px] bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[#ececec] hover:bg-white/10 hover:border-white/20 transition-all font-medium focus:outline-none focus:border-white/20"
             :class="{ '!border-white/20 bg-white/10': openFilterDropdown === def.key }"
           >
-            <span>
-              {{ activeFilters[def.key] ? (def.labelMap?.[activeFilters[def.key]] ?? activeFilters[def.key]) : def.label }}
-            </span>
+            <span>{{ activeFilters[def.key] ? (def.labelMap?.[activeFilters[def.key]] ?? activeFilters[def.key]) : def.label }}</span>
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
               width="12" 
@@ -697,9 +695,9 @@ function formatTime(d: string) {
           <div class="px-6 pt-4 flex gap-1 border-b border-white/[0.06]">
             <button
               v-for="tab in [
-                { key: 'overview', label: 'Overview', icon: 'M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5' },
-                { key: 'evidence', label: 'Evidence', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8' },
-                { key: 'pipeline', label: 'Pipeline Log', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
+                { key: 'overview', label: 'Resumen', icon: 'M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5' },
+                { key: 'evidence', label: 'Evidencia', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8' },
+                { key: 'pipeline', label: 'Registro del pipeline', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' },
               ]"
               :key="tab.key"
               @click="activeTab = tab.key as any"
@@ -721,7 +719,7 @@ function formatTime(d: string) {
               <div v-if="selectedEvent?.agent_analysis" class="bg-[#111] rounded-xl border border-blue-500/20 overflow-hidden">
                 <div class="px-4 py-2.5 bg-gradient-to-r from-blue-500/10 to-transparent border-b border-blue-500/15 flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-blue-400"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                  <span class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">Analysis</span>
+                  <span class="text-[11px] font-bold text-blue-400 uppercase tracking-wider">ANÁLISIS</span>
                   <ConfidenceBadge :text="selectedEvent?.agent_analysis" class="ml-auto" />
                 </div>
                 <div class="px-5 py-4 text-[13px] text-[#d8d8d8] leading-relaxed whitespace-pre-wrap">{{ selectedEvent?.agent_analysis }}</div>
@@ -731,7 +729,7 @@ function formatTime(d: string) {
               <div v-if="selectedEvent?.agent_diagnosis" class="bg-[#111] rounded-xl border border-purple-500/20 overflow-hidden">
                 <div class="px-4 py-2.5 bg-gradient-to-r from-purple-500/10 to-transparent border-b border-purple-500/15 flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-400"><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/></svg>
-                  <span class="text-[11px] font-bold text-purple-400 uppercase tracking-wider">Diagnosis</span>
+                  <span class="text-[11px] font-bold text-purple-400 uppercase tracking-wider">DIAGNÓSTICO</span>
                 </div>
                 <div class="px-5 py-4 text-[13px] text-[#d8d8d8] leading-relaxed whitespace-pre-wrap">{{ selectedEvent?.agent_diagnosis }}</div>
               </div>
@@ -740,15 +738,15 @@ function formatTime(d: string) {
               <div v-if="selectedEvent?.agent_plan" class="bg-[#111] rounded-xl border border-emerald-500/20 overflow-hidden">
                 <div class="px-4 py-2.5 bg-gradient-to-r from-emerald-500/10 to-transparent border-b border-emerald-500/15 flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-400"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                  <span class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Remediation Plan</span>
+                  <span class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">PLAN DE REMEDIACIÓN</span>
                 </div>
                 <div class="px-5 py-4 text-[13px] text-[#d8d8d8] leading-relaxed whitespace-pre-wrap">{{ selectedEvent?.agent_plan }}</div>
               </div>
 
               <!-- Meta -->
               <div class="flex items-center gap-4 flex-wrap px-4 py-2.5 bg-[#111] border border-white/[0.06] rounded-xl text-[11px] text-[#7a7a7a]">
-                <div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-white/20"></span>Created: <span class="text-[#ececec]">{{ formatDate(selectedEvent.created_at) }}</span></div>
-                <div v-if="selectedEvent.resolved_at" class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></span>Resolved: <span class="text-[#ececec]">{{ formatDate(selectedEvent.resolved_at) }}</span></div>
+                <div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-white/20"></span>Creado: <span class="text-[#ececec]">{{ formatDate(selectedEvent.created_at) }}</span></div>
+                <div v-if="selectedEvent.resolved_at" class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500/50"></span>Resuelto: <span class="text-[#ececec]">{{ formatDate(selectedEvent.resolved_at) }}</span></div>
               </div>
             </template>
 
@@ -757,7 +755,7 @@ function formatTime(d: string) {
 
               <!-- Dynamic Metric Cards -->
               <div v-if="selectedEvent.body && Object.keys(selectedEvent.body).length > 0">
-                <div class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider mb-2">Payload Metrics</div>
+                <div class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider mb-2">MÉTRICAS DEL PAYLOAD</div>
                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                   <DynamicMetricCard
                     v-for="(value, key) in selectedEvent.body"
@@ -772,31 +770,31 @@ function formatTime(d: string) {
               <!-- Metadata Table -->
               <div class="bg-[#111] rounded-xl border border-white/[0.08] overflow-hidden">
                 <div class="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.06]">
-                  <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Event Metadata</span>
+                  <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">METADATOS DEL EVENTO</span>
                 </div>
                 <div class="divide-y divide-white/[0.04]">
                   <div class="px-4 py-2 flex justify-between text-[12px]">
-                    <span class="text-[#7a7a7a]">Event ID</span>
+                    <span class="text-[#7a7a7a]">ID del evento</span>
                     <span class="text-[#ececec] font-mono">{{ selectedEvent.event_id }}</span>
                   </div>
                   <div class="px-4 py-2 flex justify-between text-[12px]">
-                    <span class="text-[#7a7a7a]">Source</span>
+                    <span class="text-[#7a7a7a]">Fuente</span>
                     <span class="text-[#ececec]">{{ selectedEvent.source }}</span>
                   </div>
                   <div class="px-4 py-2 flex justify-between text-[12px]">
-                    <span class="text-[#7a7a7a]">Type</span>
+                    <span class="text-[#7a7a7a]">Tipo</span>
                     <span class="text-[#ececec]">{{ selectedEvent.event_type }}</span>
                   </div>
                   <div class="px-4 py-2 flex justify-between text-[12px]">
-                    <span class="text-[#7a7a7a]">Timestamp</span>
+                    <span class="text-[#7a7a7a]">Fecha</span>
                     <span class="text-[#ececec]">{{ formatDate(selectedEvent.timestamp) }}</span>
                   </div>
                   <div class="px-4 py-2 flex justify-between text-[12px]">
-                    <span class="text-[#7a7a7a]">Dedup Key</span>
+                    <span class="text-[#7a7a7a]">Clave dedup</span>
                     <span class="text-[#a0a0a0] font-mono text-[10px]">{{ selectedEvent.dedup_key || '—' }}</span>
                   </div>
                   <div v-if="selectedEvent.correlation_group_id" class="px-4 py-2 flex justify-between text-[12px]">
-                    <span class="text-[#7a7a7a]">Correlation Group</span>
+                    <span class="text-[#7a7a7a]">Grupo de correlación</span>
                     <span class="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] border border-blue-500/20">#{{ selectedEvent.correlation_group_id }}</span>
                   </div>
                 </div>
@@ -809,7 +807,7 @@ function formatTime(d: string) {
               <!-- Log Timeline -->
               <div v-if="eventLogs.length > 0" class="bg-[#0c0c0c] rounded-xl border border-white/[0.08] overflow-hidden">
                 <div class="px-4 py-2.5 bg-white/[0.02] border-b border-white/[0.06]">
-                  <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Pipeline Logs</span>
+                  <span class="text-[11px] font-bold text-[#7a7a7a] uppercase tracking-wider">Registros del pipeline</span>
                 </div>
                 <div class="px-4 py-3 space-y-1 max-h-[400px] overflow-y-auto font-mono text-[11px] leading-relaxed">
                   <div v-for="(log, idx) in eventLogs" :key="idx" class="flex gap-2">
@@ -825,32 +823,32 @@ function formatTime(d: string) {
             <!-- Feedback -->
           <div v-if="selectedEvent.status === 'completed' || selectedEvent.status === 'failed'" class="shrink-0 px-6 py-4 border-t border-white/[0.06]">
             <div v-if="!feedbackSubmitted" class="flex items-center gap-3">
-              <span class="text-[12px] text-[#7a7a7a]">Was this analysis correct?</span>
+              <span class="text-[12px] text-[#7a7a7a]">¿Fue correcto este análisis?</span>
               <button
                 @click="submitFeedback('false_positive')"
                 :disabled="feedbackSubmitting"
                 class="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
               >
-                False Positive
+                Falso positivo
               </button>
               <button
                 @click="submitFeedback('wrong_severity')"
                 :disabled="feedbackSubmitting"
                 class="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-amber-500/20 text-amber-400 hover:bg-amber-500/10 transition-colors disabled:opacity-50"
               >
-                Wrong Severity
+                Severidad incorrecta
               </button>
               <button
                 @click="submitFeedback('other')"
                 :disabled="feedbackSubmitting"
                 class="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/10 text-[#a0a0a0] hover:bg-white/5 transition-colors disabled:opacity-50"
               >
-                Other Issue
+                Otro problema
               </button>
             </div>
             <div v-else class="text-[12px] text-emerald-400 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
-              Feedback recorded. Thank you!
+              Comentario registrado. ¡Gracias!
             </div>
           </div>
 

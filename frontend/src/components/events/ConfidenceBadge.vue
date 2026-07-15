@@ -36,6 +36,17 @@ function extractConfidence(text: string | null | undefined): { level: string; co
 }
 
 const confidence = extractConfidence(props.text)
+
+const labelMap: Record<string, string> = {
+  Alto: 'Confianza alta',
+  Medio: 'Confianza media',
+  Bajo: 'Confianza baja',
+  High: 'Confianza alta',
+  Medium: 'Confianza media',
+  Low: 'Confianza baja',
+}
+
+const confidenceLabel = confidence ? (labelMap[confidence.level] ?? confidence.level) : null
 </script>
 
 <template>
@@ -44,6 +55,6 @@ const confidence = extractConfidence(props.text)
     class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border"
     :class="confidence.color"
   >
-    {{ confidence.level }} Confidence
+    {{ confidenceLabel }}
   </span>
 </template>

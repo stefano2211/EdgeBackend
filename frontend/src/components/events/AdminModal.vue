@@ -18,9 +18,9 @@ const activeTab = ref<'users' | 'analytics' | 'settings'>('users')
 // Settings Tab Sidebar
 const settingsTabs = [
   { id: 'general', label: 'General', icon: 'settings', component: SettingsGeneral },
-  { id: 'providers', label: 'Providers', icon: 'cpu', component: SettingsProviders },
-  { id: 'documents', label: 'Documents', icon: 'file', component: SettingsDocuments },
-  { id: 'web-search', label: 'Web Search', icon: 'globe', component: SettingsWebSearch },
+  { id: 'providers', label: 'Proveedores', icon: 'cpu', component: SettingsProviders },
+  { id: 'documents', label: 'Documentos', icon: 'file', component: SettingsDocuments },
+  { id: 'web-search', label: 'Búsqueda web', icon: 'globe', component: SettingsWebSearch },
 ]
 const activeSettingsTabId = ref('general')
 const activeSettingsTab = computed(() => settingsTabs.find(t => t.id === activeSettingsTabId.value) || settingsTabs[0])
@@ -81,12 +81,12 @@ async function toggleRole(user: AdminUser) {
 }
 
 async function deleteUser(user: AdminUser) {
-  if (!confirm(`Are you sure you want to delete ${user.username}?`)) return
+  if (!confirm(`¿Estás seguro de eliminar a ${user.username}?`)) return
   try {
     await adminService.deleteUser(user.id)
     users.value = users.value.filter(u => u.id !== user.id)
   } catch (e: any) {
-    alert(e?.response?.data?.detail || 'Failed to delete user')
+    alert(e?.response?.data?.detail || 'Error al eliminar usuario')
   }
 }
 
@@ -111,9 +111,9 @@ const isAnalyticsLoading = ref(true)
 const selectedDays = ref(7)
 
 const daysOptions = [
-  { label: 'Last 7 days', value: 7 },
-  { label: 'Last 30 days', value: 30 },
-  { label: 'Last 90 days', value: 90 },
+  { label: 'Últimos 7 días', value: 7 },
+  { label: 'Últimos 30 días', value: 30 },
+  { label: 'Últimos 90 días', value: 90 },
 ]
 
 function getMockAnalytics(days: number): AnalyticsData {
@@ -283,8 +283,8 @@ onMounted(() => {
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
           <div>
-            <h2 class="text-[16px] font-semibold text-white tracking-tight">Admin Control Center</h2>
-            <p class="text-[12px] text-[#7a7a7a] mt-0.5">Manage users, view system analytics, and edit configurations</p>
+            <h2 class="text-[16px] font-semibold text-white tracking-tight">Centro de control de administración</h2>
+            <p class="text-[12px] text-[#7a7a7a] mt-0.5">Gestiona usuarios, consulta analíticas y edita configuraciones</p>
           </div>
         </div>
 
@@ -292,9 +292,9 @@ onMounted(() => {
         <div class="flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/[0.06]">
           <button
             v-for="t in [
-              { key: 'users', label: 'Users', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75' },
-              { key: 'analytics', label: 'Analytics', icon: 'M18 20V10 M12 20V4 M6 20v-6' },
-              { key: 'settings', label: 'Settings', icon: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0' },
+              { key: 'users', label: 'Usuarios', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75' },
+              { key: 'analytics', label: 'Analíticas', icon: 'M18 20V10 M12 20V4 M6 20v-6' },
+              { key: 'settings', label: 'Configuración', icon: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0' },
             ]"
             :key="t.key"
             @click="activeTab = t.key as any"
@@ -310,7 +310,7 @@ onMounted(() => {
         <button 
           @click="closeModal" 
           class="p-1.5 hover:bg-white/8 rounded-lg transition-colors text-[#888] hover:text-white"
-          title="Close Modal"
+          title="Cerrar"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -323,7 +323,7 @@ onMounted(() => {
         <div v-if="activeTab === 'users'" class="p-6">
           <div class="flex items-center justify-between mb-6">
             <h2 class="text-base font-semibold text-white">
-              Users <span class="text-[#7a7a7a] font-normal text-sm ml-1">{{ users.length }}</span>
+              Usuarios <span class="text-[#7a7a7a] font-normal text-sm ml-1">{{ users.length }}</span>
             </h2>
             <!-- Search -->
             <div class="relative">
@@ -331,7 +331,7 @@ onMounted(() => {
               <input
                 v-model="userSearchQuery"
                 type="text"
-                placeholder="Search users..."
+                placeholder="Buscar usuarios..."
                 class="bg-white/5 border border-white/[0.06] rounded-xl pl-9 pr-4 py-1.5 text-[12px] text-white placeholder-[#7a7a7a] w-56 focus:outline-none focus:border-white/20 transition-colors"
               >
             </div>
@@ -340,18 +340,18 @@ onMounted(() => {
           <!-- Loading -->
           <div v-if="isUsersLoading" class="flex items-center justify-center py-20 text-[#7a7a7a] text-sm">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin mr-2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-            Loading users...
+            Cargando usuarios...
           </div>
 
           <!-- Users Table -->
           <div v-else class="bg-white/[0.02] rounded-2xl border border-white/[0.06] overflow-hidden">
             <!-- Table Header -->
             <div class="grid grid-cols-[110px_1fr_1.2fr_130px_130px_50px] gap-4 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#7a7a7a] border-b border-white/[0.06]">
-              <div>Role</div>
-              <div>Name</div>
-              <div>Email</div>
-              <div>Last Active</div>
-              <div>Created At</div>
+              <div>Rol</div>
+              <div>Nombre</div>
+              <div>Correo electrónico</div>
+              <div>Última actividad</div>
+              <div>Creado</div>
               <div></div>
             </div>
 
@@ -370,9 +370,9 @@ onMounted(() => {
                     :class="user.is_superuser 
                       ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20' 
                       : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'"
-                    title="Click to toggle role"
+                    title="Clic para cambiar rol"
                   >
-                    {{ user.is_superuser ? 'ADMIN' : 'USER' }}
+                    {{ user.is_superuser ? 'ADMIN' : 'USUARIO' }}
                   </button>
                 </div>
 
@@ -382,7 +382,7 @@ onMounted(() => {
                     {{ user.username[0] }}
                   </div>
                   <span class="text-[13px] text-white font-medium truncate">{{ user.username }}</span>
-                  <div v-if="user.is_active" class="w-1.5 h-1.5 bg-green-500 rounded-full shrink-0" title="Active"></div>
+                  <div v-if="user.is_active" class="w-1.5 h-1.5 bg-green-500 rounded-full shrink-0" title="Activo"></div>
                 </div>
 
                 <!-- Email -->
@@ -399,7 +399,7 @@ onMounted(() => {
                   <button
                     @click="deleteUser(user)"
                     class="p-1 text-[#7a7a7a] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                    title="Delete User"
+                    title="Eliminar usuario"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                   </button>
@@ -409,11 +409,11 @@ onMounted(() => {
 
             <!-- Empty state -->
             <div v-else class="px-5 py-12 text-center text-[#7a7a7a] text-[13px]">
-              No users found.
+              No se encontraron usuarios.
             </div>
           </div>
           <p class="text-[11px] text-[#555] mt-3 text-center">
-            ⓘ Click on a user's role badge to toggle their permissions.
+            ⓘ Haz clic en el rol de un usuario para cambiar sus permisos.
           </p>
         </div>
 
@@ -422,19 +422,19 @@ onMounted(() => {
           <!-- Loading -->
           <div v-if="isAnalyticsLoading" class="flex items-center justify-center py-20 text-[#7a7a7a] text-sm">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin mr-2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-            Loading analytics...
+            Cargando analíticas...
           </div>
 
           <template v-else-if="analyticsData">
             <!-- Header Row -->
             <div class="flex items-start justify-between mb-4">
               <div>
-                <h3 class="text-sm font-semibold text-white">System Usage Summary</h3>
+                <h3 class="text-sm font-semibold text-white">Resumen de uso del sistema</h3>
                 <div class="flex items-center gap-4 mt-1 text-[12px] text-[#7a7a7a]">
-                  <span><strong class="text-white font-medium">{{ analyticsData.total_messages }}</strong> messages</span>
+                  <span><strong class="text-white font-medium">{{ analyticsData.total_messages }}</strong> mensajes</span>
                   <span><strong class="text-white font-medium">{{ formatTokens(analyticsData.total_tokens) }}</strong> tokens</span>
                   <span><strong class="text-white font-medium">{{ analyticsData.total_chats }}</strong> chats</span>
-                  <span><strong class="text-white font-medium">{{ analyticsData.total_users }}</strong> users</span>
+                  <span><strong class="text-white font-medium">{{ analyticsData.total_users }}</strong> usuarios</span>
                 </div>
               </div>
 
@@ -449,7 +449,7 @@ onMounted(() => {
             </div>
 
             <!-- Daily Messages Chart -->
-            <div class="text-[11px] text-[#7a7a7a] mb-2 uppercase tracking-wider">Daily Message Frequency</div>
+            <div class="text-[11px] text-[#7a7a7a] mb-2 uppercase tracking-wider">Frecuencia diaria de mensajes</div>
             <div class="bg-white/[0.02] rounded-2xl border border-white/[0.04] p-4 mb-6 overflow-hidden">
               <svg :viewBox="`0 0 ${chartWidth} ${chartHeight + 20}`" class="w-full h-44" preserveAspectRatio="none">
                 <!-- Grid Lines -->
@@ -520,12 +520,12 @@ onMounted(() => {
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <!-- Model Usage -->
               <div>
-                <h3 class="text-[13px] font-semibold text-white mb-2.5">Model Usage</h3>
+                <h3 class="text-[13px] font-semibold text-white mb-2.5">Uso de modelos</h3>
                 <div class="bg-white/[0.02] rounded-xl border border-white/[0.06] overflow-hidden">
                   <div class="grid grid-cols-[30px_1fr_80px_70px_50px] gap-2 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] border-b border-white/[0.06]">
                     <div>#</div>
-                    <div>Model</div>
-                    <div class="text-right">Messages</div>
+                    <div>Modelo</div>
+                    <div class="text-right">Mensajes</div>
                     <div class="text-right">Tokens</div>
                     <div class="text-right">%</div>
                   </div>
@@ -541,19 +541,19 @@ onMounted(() => {
                     <div class="text-[12px] text-[#b4b4b4] text-right">{{ item.percentage.toFixed(1) }}%</div>
                   </div>
                   <div v-if="analyticsData.model_usage.length === 0" class="px-4 py-8 text-center text-[#7a7a7a] text-[12px]">
-                    No model usage data yet.
+                    Sin datos de uso de modelos aún.
                   </div>
                 </div>
               </div>
 
               <!-- User Activity -->
               <div>
-                <h3 class="text-[13px] font-semibold text-white mb-2.5">User Activity</h3>
+                <h3 class="text-[13px] font-semibold text-white mb-2.5">Actividad de usuarios</h3>
                 <div class="bg-white/[0.02] rounded-xl border border-white/[0.06] overflow-hidden">
                   <div class="grid grid-cols-[30px_1fr_80px_70px] gap-2 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-[#7a7a7a] border-b border-white/[0.06]">
                     <div>#</div>
-                    <div>User</div>
-                    <div class="text-right">Messages</div>
+                    <div>Usuario</div>
+                    <div class="text-right">Mensajes</div>
                     <div class="text-right">Tokens</div>
                   </div>
                   <div
@@ -567,7 +567,7 @@ onMounted(() => {
                     <div class="text-[12px] text-[#b4b4b4] text-right">{{ formatTokens(item.tokens) }}</div>
                   </div>
                   <div v-if="analyticsData.user_activity.length === 0" class="px-4 py-8 text-center text-[#7a7a7a] text-[12px]">
-                    No user activity yet.
+                    Sin actividad de usuarios aún.
                   </div>
                 </div>
               </div>
@@ -604,7 +604,7 @@ onMounted(() => {
 
             <!-- Settings Content Pane -->
             <div class="flex-1 p-6 overflow-y-auto no-scrollbar pb-16">
-              <h3 class="text-sm font-semibold text-white mb-4 border-b border-white/[0.04] pb-2">{{ activeSettingsTab?.label }} Configuration</h3>
+              <h3 class="text-sm font-semibold text-white mb-4 border-b border-white/[0.04] pb-2">{{ activeSettingsTab?.label }} Configuración</h3>
               <component 
                 v-if="activeSettingsTab"
                 :is="activeSettingsTab.component" 

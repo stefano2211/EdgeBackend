@@ -3,7 +3,7 @@
     <!-- Section Header -->
     <header class="px-8 mb-6 flex items-center justify-between shrink-0">
       <div class="flex items-center gap-3">
-        <h2 class="text-xl font-semibold text-white">Knowledge</h2>
+        <h2 class="text-xl font-semibold text-white">Conocimiento</h2>
         <span class="text-[14px] text-[#7a7a7a] font-medium">{{ filteredCollections.length }}</span>
       </div>
 
@@ -12,7 +12,7 @@
         class="flex items-center gap-2 bg-white text-black hover:bg-gray-200 font-semibold px-4 py-2 rounded-xl transition-colors shrink-0 text-[13px]"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-        Create Collection
+        Crear colección
       </button>
     </header>
 
@@ -21,12 +21,12 @@
       <div class="relative group">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute left-4 top-1/2 -translate-y-1/2 text-[#7a7a7a] group-focus-within:text-white transition-colors"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <div class="absolute left-11 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
-          <button class="bg-[#2f2f2f] text-[11px] text-[#7a7a7a] px-2 py-0.5 rounded cursor-default border border-white/5 pointer-events-auto hover:text-white">All Documents</button>
+          <button class="bg-[#2f2f2f] text-[11px] text-[#7a7a7a] px-2 py-0.5 rounded cursor-default border border-white/5 pointer-events-auto hover:text-white">Todos los documentos</button>
         </div>
         <input 
           v-model="searchQuery"
           type="text" 
-          placeholder="Search Knowledge" 
+          placeholder="Buscar conocimiento" 
           class="w-full bg-[#2f2f2f]/30 border border-white/[0.06] rounded-xl pl-[124px] pr-4 py-3 text-[14px] text-[#ececec] placeholder-[#7a7a7a] focus:outline-none focus:border-white/10 focus:bg-[#2f2f2f]/50 transition-all"
         >
       </div>
@@ -42,17 +42,16 @@
       <!-- Empty / No results -->
       <div v-else-if="filteredCollections.length === 0" class="flex flex-col items-center justify-center py-32 text-center">
         <div class="text-4xl mb-4">🧐</div>
-        <h3 class="text-lg font-medium text-white mb-2">{{ searchQuery ? 'No results found' : 'No knowledge found' }}</h3>
+        <h3 class="text-lg font-medium text-white mb-2">{{ searchQuery ? 'Sin resultados' : 'No se encontró conocimiento' }}</h3>
         <p class="text-[14px] text-[#7a7a7a] mb-8 max-w-sm">
-          {{ searchQuery ? 'Try adjusting your search or filter to find what you are looking for.' : 'Create your first knowledge collection to group documents and retrieve them in your chats.' }}
+          {{ searchQuery ? 'Ajusta tu búsqueda o filtro para encontrar lo que buscas.' : 'Crea tu primera colección para agrupar documentos y recuperarlos en tus chats.' }}
         </p>
         <button 
           v-if="!searchQuery"
           @click="showCreateModal = true"
           class="text-[13px] font-bold bg-white/5 hover:bg-white/10 text-white border border-white/10 px-6 py-2.5 rounded-xl transition-all"
         >
-          New Collection
-        </button>
+          Nueva colección
       </div>
 
       <!-- Grid -->
@@ -73,7 +72,7 @@
           </div>
           
           <h3 class="font-semibold text-[15px] text-white mb-1 leading-tight truncate tracking-tight">{{ kb.name }}</h3>
-          <p class="text-[#7a7a7a] text-[13px] line-clamp-2 mb-3 flex-grow leading-relaxed">{{ kb.description || 'No description provided for this collection.' }}</p>
+          <p class="text-[#7a7a7a] text-[13px] line-clamp-2 mb-3 flex-grow leading-relaxed">          {{ kb.description || 'Sin descripción para esta colección.' }}</p>
           
           <!-- Context Toggles -->
           <div class="flex items-center gap-3 mt-auto pt-3 border-t border-white/[0.04]">
@@ -82,7 +81,7 @@
                 @click.prevent="toggleChat(kb)"
                 class="relative w-8 h-4 rounded-full transition-all cursor-pointer border"
                 :class="kb.is_enabled_chat ? 'bg-blue-500/20 border-blue-500/40' : 'bg-white/5 border-white/10'"
-                :title="kb.is_enabled_chat ? 'Active for Chat' : 'Inactive for Chat'"
+                :title="kb.is_enabled_chat ? 'Activo para Chat' : 'Inactivo para Chat'"
               >
                 <div class="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full transition-all"
                   :class="kb.is_enabled_chat ? 'left-5 bg-blue-400' : 'left-1 bg-[#4a4a4a]'"
@@ -95,13 +94,13 @@
                 @click.prevent="toggleReactive(kb)"
                 class="relative w-8 h-4 rounded-full transition-all cursor-pointer border"
                 :class="kb.is_enabled_reactive ? 'bg-emerald-500/20 border-emerald-500/40' : 'bg-white/5 border-white/10'"
-                :title="kb.is_enabled_reactive ? 'Active for Reactive' : 'Inactive for Reactive'"
+                :title="kb.is_enabled_reactive ? 'Activo para Reactiva' : 'Inactivo para Reactiva'"
               >
                 <div class="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full transition-all"
                   :class="kb.is_enabled_reactive ? 'left-5 bg-emerald-400' : 'left-1 bg-[#4a4a4a]'"
                 ></div>
               </button>
-              <span class="text-[9px] font-bold uppercase tracking-wider" :class="kb.is_enabled_reactive ? 'text-emerald-400' : 'text-[#4a4a4a]'">Reactive</span>
+              <span               class="text-[9px] font-bold uppercase tracking-wider" :class="kb.is_enabled_reactive ? 'text-emerald-400' : 'text-[#4a4a4a]'">Reactiva</span>
             </div>
           </div>
           
@@ -121,16 +120,16 @@
         class="bg-[#1c1c1c] border border-white/[0.08] rounded-2xl w-full max-w-[420px] shadow-2xl p-6 relative overflow-hidden"
         @click.stop
       >
-        <h3 class="text-lg font-semibold text-white mb-1">Create new collection</h3>
-        <p class="text-[13px] text-[#7a7a7a] mb-6">Group your documents and retrieve them together</p>
+        <h3 class="text-lg font-semibold text-white mb-1">Crear nueva colección</h3>
+        <p class="text-[13px] text-[#7a7a7a] mb-6">Agrupa tus documentos y recupéralos juntos</p>
         
         <div class="space-y-4 mb-6">
           <div>
-            <label class="block text-[12px] font-medium text-[#b4b4b4] mb-1.5 ml-0.5">Name</label>
+            <label class="block text-[12px] font-medium text-[#b4b4b4] mb-1.5 ml-0.5">Nombre</label>
             <input
               v-model="newKb.name"
               type="text"
-              placeholder="e.g. OSHA Regulations 2026"
+              placeholder="ej. Normas OSHA 2026"
               class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-[14px] focus:outline-none focus:border-white/20 transition-all placeholder:text-[#7a7a7a]"
               @keyup.enter="createKb"
               autofocus
@@ -138,18 +137,18 @@
           </div>
           
           <div>
-            <label class="block text-[12px] font-medium text-[#b4b4b4] mb-1.5 ml-0.5">Description <span class="text-[#7a7a7a]">(Optional)</span></label>
+            <label class="block text-[12px] font-medium text-[#b4b4b4] mb-1.5 ml-0.5">Descripción <span class="text-[#7a7a7a]">(Opcional)</span></label>
             <textarea
               v-model="newKb.description"
               rows="3"
-              placeholder="What types of documents will this include?"
+              placeholder="¿Qué tipos de documentos incluirá?"
               class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-[14px] focus:outline-none focus:border-white/20 transition-all placeholder:text-[#7a7a7a] resize-none"
             ></textarea>
           </div>
 
           <!-- Context Toggles in Create Modal -->
           <div class="space-y-3 pt-2">
-            <label class="block text-[12px] font-medium text-[#b4b4b4] ml-0.5">Available In</label>
+            <label class="block text-[12px] font-medium text-[#b4b4b4] ml-0.5">Disponible en</label>
             <div class="flex items-center gap-4">
               <label class="flex items-center gap-2.5 cursor-pointer group">
                 <div class="relative w-10 h-5 rounded-full transition-all border"
@@ -173,7 +172,7 @@
                     :class="newKb.is_enabled_reactive ? 'left-6 bg-emerald-400' : 'left-1 bg-[#4a4a4a]'"
                   ></button>
                 </div>
-                <span class="text-[13px] text-[#b4b4b4] group-hover:text-white transition-colors">Reactive</span>
+                <span class="text-[13px] text-[#b4b4b4] group-hover:text-white transition-colors">Reactiva</span>
               </label>
             </div>
           </div>
@@ -184,7 +183,7 @@
             @click="showCreateModal = false"
             class="px-4 py-2 text-[14px] font-medium text-[#b4b4b4] hover:text-white hover:bg-white/5 rounded-xl transition-all"
           >
-            Cancel
+            Cancelar
           </button>
           <button
             @click="createKb"
@@ -192,7 +191,7 @@
             class="px-6 py-2 text-[14px] font-medium bg-white/5 border border-white/10 text-white hover:bg-white/10 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <svg v-if="creating" class="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            <span v-else>Create</span>
+            <span v-else>Crear</span>
           </button>
         </div>
       </div>

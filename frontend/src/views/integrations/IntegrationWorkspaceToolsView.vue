@@ -94,15 +94,15 @@ onMounted(loadData)
     <template v-if="!isViewingDetail">
       <div class="flex items-center justify-between mb-8">
         <div>
-          <h2 class="text-2xl font-bold text-white tracking-tight">MCP Sources</h2>
-          <p class="text-[#7a7a7a] text-sm mt-1">Manage industrial APIs and their curated toolsets.</p>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Fuentes MCP</h2>
+          <p class="text-[#7a7a7a] text-sm mt-1">Gestiona APIs industriales y sus conjuntos de herramientas.</p>
         </div>
         <button 
           @click="isAddingSource = !isAddingSource"
           class="px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-violet-600/20"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-          Add Source
+          Añadir fuente
         </button>
       </div>
 
@@ -116,18 +116,18 @@ onMounted(loadData)
         leave-to-class="transform -translate-y-4 opacity-0"
       >
         <div v-if="isAddingSource" class="bg-[#2f2f2f]/30 border border-violet-500/20 rounded-3xl p-6 mb-8 backdrop-blur-sm">
-          <h3 class="text-lg font-semibold text-white mb-4">New MCP Source</h3>
+          <h3 class="text-lg font-semibold text-white mb-4">Nueva fuente MCP</h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div class="space-y-1.5">
-              <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Name</label>
-              <input v-model="newSource.name" type="text" placeholder="e.g. PLC Factory A" class="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-violet-500/50 outline-none">
+              <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Nombre</label>
+              <input v-model="newSource.name" type="text" placeholder="ej. PLC Fábrica A" class="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-violet-500/50 outline-none">
             </div>
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Base URL</label>
               <input v-model="newSource.url" type="text" placeholder="https://api.factory.com/v1" class="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-violet-500/50 outline-none">
             </div>
             <div class="space-y-1.5 md:col-span-2">
-              <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Type</label>
+              <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Tipo</label>
               <select v-model="newSource.type" class="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-violet-500/50 outline-none appearance-none">
                 <option value="rest">REST API (Auto-Bridge)</option>
                 <option value="sse">MCP SSE Server</option>
@@ -136,8 +136,8 @@ onMounted(loadData)
             </div>
           </div>
           <div class="flex justify-end gap-3">
-            <button @click="isAddingSource = false" class="px-5 py-2 text-[#7a7a7a] hover:text-white transition-colors">Cancel</button>
-            <button @click="createSource" :disabled="!newSource.name || !newSource.url" class="px-6 py-2 bg-white text-black font-bold rounded-xl hover:bg-white/90 disabled:opacity-50 transition-all">Create Source</button>
+            <button @click="isAddingSource = false" class="px-5 py-2 text-[#7a7a7a] hover:text-white transition-colors">Cancelar</button>
+            <button @click="createSource" :disabled="!newSource.name || !newSource.url" class="px-6 py-2 bg-white text-black font-bold rounded-xl hover:bg-white/90 disabled:opacity-50 transition-all">Crear fuente</button>
           </div>
         </div>
       </transition>
@@ -146,7 +146,7 @@ onMounted(loadData)
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div v-if="isLoading" class="col-span-full py-20 text-center">
           <svg class="animate-spin w-8 h-8 text-violet-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-          <p class="text-[#7a7a7a]">Loading sources...</p>
+          <p class="text-[#7a7a7a]">Cargando fuentes...</p>
         </div>
 
         <div 
@@ -184,8 +184,8 @@ onMounted(loadData)
 
         <!-- Empty State -->
         <div v-if="!isLoading && sources.length === 0" class="col-span-full py-20 bg-white/[0.02] border border-dashed border-white/10 rounded-3xl text-center">
-          <p class="text-[#7a7a7a] mb-4">No sources defined yet.</p>
-          <button @click="isAddingSource = true" class="text-violet-400 font-medium hover:text-violet-300 transition-colors">Create your first MCP Source &rarr;</button>
+          <p class="text-[#7a7a7a] mb-4">No hay fuentes definidas aún.</p>
+          <button @click="isAddingSource = true" class="text-violet-400 font-medium hover:text-violet-300 transition-colors">Crea tu primera fuente MCP &rarr;</button>
         </div>
       </div>
     </template>
@@ -209,7 +209,7 @@ onMounted(loadData)
         <button 
           @click="deleteSource(selectedSource!.id)"
           class="p-2.5 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-xl transition-all"
-          title="Delete Source"
+          title="Eliminar fuente"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
         </button>
@@ -219,7 +219,7 @@ onMounted(loadData)
           
           <!-- Current Registered Tools -->
           <section>
-            <h3 class="text-[#7a7a7a] text-[11px] font-bold uppercase tracking-widest mb-5 ml-1">Configured Tools ({{ sourceTools.length }})</h3>
+            <h3 class="text-[#7a7a7a] text-[11px] font-bold uppercase tracking-widest mb-5 ml-1">Herramientas configuradas ({{ sourceTools.length }})</h3>
             <div class="grid grid-cols-1 gap-4">
               <div 
                 v-for="tool in sourceTools" 
@@ -240,7 +240,7 @@ onMounted(loadData)
                 </button>
               </div>
               <div v-if="sourceTools.length === 0" class="text-center py-10 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl">
-                <p class="text-[#4a4a4a] text-sm">No tool registered for this source yet.</p>
+                <p class="text-[#4a4a4a] text-sm">No hay herramientas registradas para esta fuente aún.</p>
               </div>
             </div>
           </section>

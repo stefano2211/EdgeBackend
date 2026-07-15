@@ -29,7 +29,7 @@ function inferUnit(key: string): string {
 
 function formatValue(value: any): string {
   if (value === null || value === undefined) return '—'
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'boolean') return value ? 'Sí' : 'No'
   if (typeof value === 'number') {
     if (Number.isInteger(value)) return value.toString()
     return value.toFixed(2)
@@ -43,8 +43,8 @@ function formatValue(value: any): string {
     return value
   }
   if (Array.isArray(value)) {
-    if (value.length === 0) return 'Empty'
-    return `${value.length} items`
+    if (value.length === 0) return 'Vacío'
+    return `${value.length} elementos`
   }
   return JSON.stringify(value)
 }

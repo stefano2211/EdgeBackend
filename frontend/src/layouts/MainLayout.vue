@@ -33,7 +33,7 @@ const isLoadingArchived = ref(false)
 // Models state
 const availableModels = ref<any[]>([])
 const activeModelId = ref<string | undefined>(undefined)
-const activeModelName = ref('Select Model')
+const activeModelName = ref('Seleccionar modelo')
 const showModelDropdown = ref(false)
 
 // Chat params (controlled by ChatControls drawer)
@@ -81,10 +81,10 @@ async function pollPendingEvents() {
 async function loadUserInfo() {
   try {
     const response = await api.get('/api/v1/auth/me')
-    userName.value = response.data.username || response.data.email?.split('@')[0] || 'User'
+    userName.value = response.data.username || response.data.email?.split('@')[0] || 'Usuario'
   } catch (error) {
     console.error('Failed to load user info', error)
-    userName.value = 'User'
+    userName.value = 'Usuario'
   }
 }
 
@@ -378,7 +378,7 @@ onUnmounted(() => {
             <Transition name="dropdown">
               <div v-if="showModelDropdown" class="fixed top-14 left-auto right-20 w-64 bg-[#1c1c1c] rounded-xl shadow-2xl border border-white/[0.08] z-[10000] overflow-hidden">
                 <div class="p-2 space-y-1 max-h-[400px] overflow-y-auto">
-                  <div class="px-3 py-1.5 text-[11px] font-semibold text-[#555] uppercase tracking-wider">Available Models</div>
+                  <div class="px-3 py-1.5 text-[11px] font-semibold text-[#555] uppercase tracking-wider">Modelos disponibles</div>
                   <button
                     v-for="model in availableModels"
                     :key="model.id"
@@ -406,7 +406,7 @@ onUnmounted(() => {
             @click="isControlsOpen = !isControlsOpen"
             class="p-2 hover:bg-white/5 rounded-lg transition-colors"
             :class="isControlsOpen ? 'text-white bg-white/5' : 'text-[#7a7a7a] hover:text-white'"
-            title="Model Controls"
+            title="Controles del modelo"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>
           </button>
@@ -426,27 +426,27 @@ onUnmounted(() => {
                   <div class="py-1.5">
                     <button @click="isHeaderMenuOpen = false; router.push('/admin/settings')" class="flex items-center gap-3 w-full px-4 py-2.5 text-[13px] text-[#ececec] hover:bg-white/5 transition-colors">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-                      Settings
+                      Configuración
                     </button>
                     <button @click="handleOpenArchived" class="flex items-center gap-3 w-full px-4 py-2.5 text-[13px] text-[#ececec] hover:bg-white/5 transition-colors">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
-                      Archived Chats
+                      Chats archivados
                     </button>
                     <button @click="isHeaderMenuOpen = false; router.push('/admin/users')" class="flex items-center gap-3 w-full px-4 py-2.5 text-[13px] text-[#ececec] hover:bg-white/5 transition-colors">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                      Admin Panel
+                      Panel de administración
                     </button>
                   </div>
                   <div class="border-t border-white/[0.06] py-1.5">
                     <button @click="isHeaderMenuOpen = false; handleLogout()" class="flex items-center gap-3 w-full px-4 py-2.5 text-[13px] text-[#ececec] hover:bg-white/5 transition-colors">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-                      Sign Out
+                      Cerrar sesión
                     </button>
                   </div>
                   <div class="border-t border-white/[0.06] px-4 py-2.5">
                     <div class="flex items-center gap-2 text-[12px] text-[#7a7a7a]">
                       <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                      Active Users: {{ activeUsers }}
+                       Usuarios activos: {{ activeUsers }}
                     </div>
                   </div>
                 </div>
@@ -479,7 +479,7 @@ onUnmounted(() => {
       <div v-if="showArchivedModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
         <div class="bg-[#2f2f2f] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6">
           <div class="flex items-center justify-between mb-6">
-            <h3 class="text-lg font-semibold text-white">Archived Chats</h3>
+            <h3 class="text-lg font-semibold text-white">Chats archivados</h3>
             <button @click="showArchivedModal = false" class="text-[#7a7a7a] hover:text-white transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
@@ -490,7 +490,7 @@ onUnmounted(() => {
               <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-white"></div>
             </div>
             <div v-else-if="archivedConversations.length === 0" class="py-12 text-center text-[#7a7a7a]">
-              No archived chats found.
+              No se encontraron chats archivados.
             </div>
             <div
               v-for="conv in archivedConversations"
@@ -504,7 +504,7 @@ onUnmounted(() => {
               <button
                 @click="handleUnarchive(conv.thread_id)"
                 class="shrink-0 p-2 text-[#7a7a7a] hover:text-white hover:bg-white/5 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                title="Unarchive"
+                title="Desarchivar"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"/><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
               </button>

@@ -181,7 +181,7 @@ onMounted(loadData)
     <template v-if="!isViewingDetail">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h2 class="text-2xl font-bold text-white tracking-tight">Custom MCP</h2>
+          <h2 class="text-2xl font-bold text-white tracking-tight">MCP personalizado</h2>
           <p class="text-[#7a7a7a] text-sm mt-1">Gestiona tus MCP Sources para Chat y Reactive.</p>
         </div>
         <button
@@ -189,7 +189,7 @@ onMounted(loadData)
           class="px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-violet-600/20"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-          Add Source
+          Añadir fuente
         </button>
       </div>
 
@@ -220,7 +220,7 @@ onMounted(loadData)
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Nombre</label>
-              <input v-model="newSource.name" type="text" placeholder="e.g. Factory API" class="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-violet-500/50 outline-none">
+              <input v-model="newSource.name" type="text" placeholder="ej. API de fábrica" class="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-violet-500/50 outline-none">
             </div>
             <div class="space-y-1.5">
               <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Base URL</label>
@@ -235,7 +235,7 @@ onMounted(loadData)
               </select>
             </div>
             <div class="space-y-1.5">
-              <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Scope</label>
+              <label class="text-[12px] font-bold text-[#7a7a7a] uppercase ml-1">Ámbito</label>
               <select v-model="newSource.scope" class="w-full bg-[#1a1a1a] border border-white/10 rounded-xl px-4 py-2.5 text-white focus:border-violet-500/50 outline-none appearance-none">
                 <option value="chat">Chat</option>
                 <option value="reactive">Reactive</option>
@@ -321,7 +321,7 @@ onMounted(loadData)
         <button
           @click="deleteSource(selectedSource)"
           class="p-2.5 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-xl transition-all"
-          title="Delete Source"
+          title="Eliminar fuente"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
         </button>
@@ -330,7 +330,7 @@ onMounted(loadData)
       <div class="max-w-3xl mx-auto space-y-6">
           <!-- Registered Tools -->
           <section>
-            <h3 class="text-[#7a7a7a] text-[11px] font-bold uppercase tracking-widest mb-4 ml-1">Tools registrados ({{ sourceTools.length }})</h3>
+            <h3 class="text-[#7a7a7a] text-[11px] font-bold uppercase tracking-widest mb-4 ml-1">Herramientas registradas ({{ sourceTools.length }})</h3>
             <div class="space-y-2">
               <div
                 v-for="tool in sourceTools"
@@ -351,7 +351,7 @@ onMounted(loadData)
                 </button>
               </div>
               <div v-if="sourceTools.length === 0" class="text-center py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-xl">
-                <p class="text-[#4a4a4a] text-sm">No hay tools registrados.</p>
+                <p class="text-[#4a4a4a] text-sm">No hay herramientas registradas.</p>
               </div>
             </div>
           </section>
